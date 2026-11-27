@@ -25,10 +25,29 @@ pub use backend::{Error, Event, EventKind, RecursiveMode};
 /// What a watcher hands its handler: an event, or the reason the platform lost some.
 pub type Delivery = Result<Event, Error>;
 
+/// HS2-2HZN2C: the most directories one watcher can leave out at the source
+/// ([`PathWatcher::start_excluding`]); the limit of macOS `FSEventStreamSetExclusionPaths`.
+pub const MAX_EXCLUDED_PATHS: usize = 8;
+
 /// A platform file watcher over a fixed set of paths, started once.
 pub struct PathWatcher {
-    watcher: backend::RecommendedWatcher,
+    watcher: Inner,
     starts: usize,
+}
+
+#[cfg(target_os = "macos")]
+type SharedHandler = std::sync::Arc<std::sync::Mutex<dyn FnMut(Delivery) + Send>>;
+
+enum Inner {
+    Notify(backend::RecommendedWatcher),
+    /// HS2-2HZN2C: a macOS stream with exclusion paths, which `notify` cannot set.
+    #[cfg(target_os = "macos")]
+    Excluding {
+        stream: crate::fsevent_stream::ExcludingStream,
+        paths: Vec<(std::path::PathBuf, RecursiveMode)>,
+        excluded: Vec<std::path::PathBuf>,
+        handler: SharedHandler,
+    },
 }
 
 impl std::fmt::Debug for PathWatcher {
@@ -58,15 +77,54 @@ impl PathWatcher {
             }
         })?;
         register(&mut watcher, paths)?;
-        Ok(Self { watcher, starts: 1 })
+        Ok(Self {
+            watcher: Inner::Notify(watcher),
+            starts: 1,
+        })
+    }
+
+    /// HS2-2HZN2C: [`PathWatcher::start`], except that nothing inside `excluded` (at most
+    /// [`MAX_EXCLUDED_PATHS`] directories) is reported. On macOS the file-event service
+    /// drops those events itself, so a busy ignored build tree costs neither `fseventsd`'s
+    /// routing to this process nor its callback. Elsewhere the platform has no such filter
+    /// and this is [`PathWatcher::start`]: consumers still filter excluded paths themselves.
+    pub fn start_excluding<F>(
+        paths: &[(&Path, RecursiveMode)],
+        excluded: &[&Path],
+        handler: F,
+    ) -> Result<Self, Error>
+    where
+        F: FnMut(Delivery) + Send + 'static,
+    {
+        if excluded.len() > MAX_EXCLUDED_PATHS {
+            return Err(Error::generic("more than 8 excluded paths"));
+        }
+        #[cfg(target_os = "macos")]
+        if !excluded.is_empty() {
+            let handler: SharedHandler = std::sync::Arc::new(std::sync::Mutex::new(handler));
+            let paths: Vec<_> = paths
+                .iter()
+                .map(|(path, mode)| (path.to_path_buf(), *mode))
+                .collect();
+            let excluded: Vec<_> = excluded.iter().map(|path| path.to_path_buf()).collect();
+            let stream = start_excluding_stream(&paths, &excluded, &handler)?;
+            return Ok(Self {
+                watcher: Inner::Excluding {
+                    stream,
+                    paths,
+                    excluded,
+                    handler,
+                },
+                starts: 1,
+            });
+        }
+        Self::start(paths, handler)
     }
 
     /// Watch one more path. On macOS this restarts the event stream once, so pass
     /// every path known at the start to [`PathWatcher::start`] instead.
     pub fn add(&mut self, path: &Path, mode: RecursiveMode) -> Result<(), Error> {
-        register(&mut self.watcher, &[(path, mode)])?;
-        self.starts += 1;
-        Ok(())
+        self.change(&[], &[(path, mode)])
     }
 
     /// HS2-654VBY: stop watching `removed` and start watching `added` in one change. On
@@ -80,7 +138,27 @@ impl PathWatcher {
         if removed.is_empty() && added.is_empty() {
             return Ok(());
         }
-        reregister(&mut self.watcher, removed, added)?;
+        match &mut self.watcher {
+            Inner::Notify(watcher) => reregister(watcher, removed, added)?,
+            #[cfg(target_os = "macos")]
+            Inner::Excluding {
+                stream,
+                paths,
+                excluded,
+                handler,
+            } => {
+                let mut wanted = paths.clone();
+                wanted.retain(|(path, _)| !removed.contains(&path.as_path()));
+                wanted.extend(added.iter().map(|(path, mode)| (path.to_path_buf(), *mode)));
+                // A stream's paths are fixed: stop it, then start one over the new set.
+                drop(std::mem::replace(
+                    stream,
+                    crate::fsevent_stream::ExcludingStream::stopped(),
+                ));
+                *stream = start_excluding_stream(&wanted, excluded, handler)?;
+                *paths = wanted;
+            }
+        }
         self.starts += 1;
         Ok(())
     }
@@ -91,6 +169,31 @@ impl PathWatcher {
     pub fn starts(&self) -> usize {
         self.starts
     }
+}
+
+#[cfg(target_os = "macos")]
+fn start_excluding_stream(
+    paths: &[(std::path::PathBuf, RecursiveMode)],
+    excluded: &[std::path::PathBuf],
+    handler: &SharedHandler,
+) -> Result<crate::fsevent_stream::ExcludingStream, Error> {
+    let refs: Vec<(&Path, RecursiveMode)> = paths
+        .iter()
+        .map(|(path, mode)| (path.as_path(), *mode))
+        .collect();
+    let excluded: Vec<&Path> = excluded.iter().map(std::path::PathBuf::as_path).collect();
+    let handler = handler.clone();
+    crate::fsevent_stream::ExcludingStream::start(
+        &refs,
+        &excluded,
+        Box::new(move |delivery| {
+            if !is_access(&delivery) {
+                (handler
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner))(delivery);
+            }
+        }),
+    )
 }
 
 /// HS2-P0EHD4: whether a delivery only reports that a file was accessed, which no
@@ -827,5 +930,166 @@ mod tests {
             assert!(sees(&receiver, &file), "no event for {}", file.display());
         }
         assert!(rescan_event().need_rescan());
+    }
+
+    /// Watch `root` recursively, leaving out `excluded`.
+    fn watching_excluding(root: &Path, excluded: &[&Path]) -> (PathWatcher, Receiver<Delivery>) {
+        let (sender, receiver) = mpsc::channel();
+        let watcher = PathWatcher::start_excluding(
+            &[(root, RecursiveMode::Recursive)],
+            excluded,
+            move |delivery| {
+                let _ = sender.send(delivery);
+            },
+        )
+        .unwrap();
+        (watcher, receiver)
+    }
+
+    /// Write `count` files under each of `dirs` (creating them), then `marker`; wait for the
+    /// marker's event and return every path reported up to it. FSEvents reports in order, so
+    /// an excluded write made before the marker would have arrived by then.
+    fn churn_then_marker(
+        receiver: &Receiver<Delivery>,
+        dirs: &[PathBuf],
+        count: usize,
+        marker: &Path,
+    ) -> Vec<PathBuf> {
+        for dir in dirs {
+            fs::create_dir_all(dir).unwrap();
+            for index in 0..count {
+                fs::write(dir.join(format!("out-{index}")), b"x").unwrap();
+            }
+        }
+        fs::write(marker, b"x").unwrap();
+        let deadline = Instant::now() + Duration::from_secs(30);
+        let mut seen = Vec::new();
+        loop {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            match receiver.recv_timeout(remaining) {
+                Ok(Ok(event)) => {
+                    let done = event.paths.iter().any(|path| path == marker);
+                    seen.extend(event.paths);
+                    if done {
+                        return seen;
+                    }
+                }
+                Ok(Err(_)) => {}
+                Err(_) => panic!("no event for {}", marker.display()),
+            }
+        }
+    }
+
+    /// HS2-2HZN2C: excluded build trees (as given or through the macOS `/var` symlink) are
+    /// dropped by the platform, including directories created inside them after the start;
+    /// a write beside them is still seen, and so is the excluded tree's own parent.
+    #[test]
+    fn hs2_2hzn2c_excluded_trees_report_nothing_and_their_siblings_still_do() {
+        let temp = tempfile::tempdir().unwrap();
+        // The spelling as given: on macOS `/var/...`, a symlink to `/private/var/...`.
+        let given = temp.path().to_path_buf();
+        let root = real(&given);
+        let target = given.join("target");
+        let worktrees = given.join(".claude/worktrees");
+        fs::create_dir_all(&target).unwrap();
+        fs::create_dir_all(&worktrees).unwrap();
+        fs::create_dir_all(root.join("src")).unwrap();
+        let (_watcher, receiver) = watching_excluding(&given, &[&target, &worktrees]);
+        let seen = churn_then_marker(
+            &receiver,
+            &[
+                root.join("target/debug/deps"),
+                root.join(".claude/worktrees/agent/target/debug"),
+            ],
+            200,
+            &root.join("src/tracked.rs"),
+        );
+        if cfg!(target_os = "macos") {
+            // An excluded directory's own entry belongs to its parent; nothing inside it is
+            // reported.
+            let inside = |path: &PathBuf, dir: PathBuf| path.starts_with(&dir) && *path != dir;
+            let leaked: Vec<_> = seen
+                .iter()
+                .filter(|path| {
+                    inside(path, root.join("target"))
+                        || inside(path, root.join(".claude/worktrees"))
+                })
+                .collect();
+            assert!(leaked.is_empty(), "excluded events delivered: {leaked:?}");
+        }
+        // The excluded directories' parent is still watched.
+        let beside = root.join(".claude/settings.json");
+        fs::write(&beside, b"{}").unwrap();
+        assert!(sees(&receiver, &beside));
+    }
+
+    /// HS2-2HZN2C: the exclusions are paths, so they keep applying when the watched root is
+    /// removed and created again; tracked writes in the new root are still reported.
+    #[test]
+    fn hs2_2hzn2c_exclusions_survive_the_root_being_recreated() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = real(temp.path()).join("checkout");
+        fs::create_dir_all(root.join("target")).unwrap();
+        let (_watcher, receiver) = watching_excluding(&root, &[&root.join("target")]);
+        let first = root.join("first");
+        fs::write(&first, b"x").unwrap();
+        assert!(sees(&receiver, &first));
+
+        fs::remove_dir_all(&root).unwrap();
+        fs::create_dir_all(&root).unwrap();
+        let seen = churn_then_marker(&receiver, &[root.join("target")], 100, &root.join("again"));
+        if cfg!(target_os = "macos") {
+            // The excluded directory's own removal and creation belong to its parent and are
+            // reported; nothing inside it is.
+            let target = root.join("target");
+            let leaked: Vec<_> = seen
+                .iter()
+                .filter(|path| path.starts_with(&target) && **path != target)
+                .collect();
+            assert!(
+                leaked.is_empty(),
+                "recreated excluded tree reported {leaked:?}"
+            );
+        }
+    }
+
+    /// HS2-2HZN2C: changing the watched paths keeps the exclusions; an empty exclusion list
+    /// is a plain watcher; more than the platform's limit is refused.
+    #[test]
+    fn hs2_2hzn2c_a_change_keeps_exclusions_and_the_limit_is_enforced() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = real(temp.path());
+        let (one, two) = (root.join("one"), root.join("two"));
+        fs::create_dir_all(one.join("target")).unwrap();
+        fs::create_dir_all(two.join("target")).unwrap();
+        let excluded = [one.join("target"), two.join("target")];
+        let excluded_refs: Vec<&Path> = excluded.iter().map(PathBuf::as_path).collect();
+        let (mut watcher, receiver) = watching_excluding(&one, &excluded_refs);
+        watcher
+            .change(&[&one], &[(&two, RecursiveMode::Recursive)])
+            .unwrap();
+        assert_eq!(watcher.starts(), 2);
+        let seen = churn_then_marker(&receiver, &[two.join("target")], 50, &two.join("marker"));
+        if cfg!(target_os = "macos") {
+            assert!(!seen.iter().any(|path| path.starts_with(two.join("target"))));
+        }
+        let left = one.join("left");
+        fs::write(&left, b"x").unwrap();
+        let after = two.join("after");
+        fs::write(&after, b"x").unwrap();
+        assert!(sees(&receiver, &after));
+        assert!(!mentions(&receiver, &left, Duration::from_millis(300)));
+
+        let (_plain, plain_events) = watching_excluding(&one, &[]);
+        let file = one.join("plain");
+        fs::write(&file, b"x").unwrap();
+        assert!(sees(&plain_events, &file));
+
+        let nine: Vec<PathBuf> = (0..=MAX_EXCLUDED_PATHS)
+            .map(|index| root.join(format!("x{index}")))
+            .collect();
+        let nine: Vec<&Path> = nine.iter().map(PathBuf::as_path).collect();
+        let watched = [(root.as_path(), RecursiveMode::Recursive)];
+        assert!(PathWatcher::start_excluding(&watched, &nine, |_| {}).is_err());
     }
 }

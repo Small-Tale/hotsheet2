@@ -424,6 +424,51 @@ describe('web ESLint policy', () => {
     expect(offenders).toEqual([]);
   });
 
+  it('HS2-GFZYCZ never runs an infinite animation on a shape inside an SVG', () => {
+    // WebKit composites a transform animation on a CSS box (an outer <svg>, a span) but repaints an
+    // animated SVG shape every frame. An infinite one kept an idle Safari web app at 20% CPU or more per
+    // indicator for as long as it showed (HS2-GFZYCZ). Animate the <svg> box itself instead.
+    const shapes = new Set(['path', 'circle', 'rect', 'line', 'polyline', 'polygon', 'ellipse', 'g', 'use', 'text']);
+    const files = (directory: string, extension: string): string[] =>
+      readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+        const path = join(directory, entry.name);
+        if (entry.isDirectory()) return files(path, extension);
+        return entry.name.endsWith(extension) && !entry.name.includes('.test.') ? [path] : [];
+      });
+    const markup = files(import.meta.dirname, '.tsx')
+      .map((path) => readFileSync(path, 'utf8'))
+      .join('\n');
+    const offenders: string[] = [];
+    let infinite = 0;
+    for (const path of files(import.meta.dirname, '.css')) {
+      const css = readFileSync(path, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+      for (const [, selectors, body] of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+        if (!/animation(?:-iteration-count)?\s*:[^;]*\binfinite\b/.test(body)) continue;
+        infinite += 1;
+        for (const selector of selectors.split(',')) {
+          const subject =
+            selector
+              .trim()
+              .split(/[\s>+~]+/)
+              .pop() ?? '';
+          const tag = /^[a-z][\w-]*/.exec(subject)?.[0];
+          const classes = [...subject.matchAll(/\.([\w-]+)/g)].map((match) => match[1]);
+          const tags = classes.flatMap((name) =>
+            [...markup.matchAll(new RegExp(`<([a-z][\\w-]*)\\b[^>]*\\bclass="[^"]*\\b${name}\\b`, 'g'))].map(
+              (match) => match[1],
+            ),
+          );
+          for (const candidate of [tag, ...tags])
+            if (candidate && shapes.has(candidate))
+              offenders.push(`${relative(import.meta.dirname, path)}: ${selector.trim()} animates <${candidate}>`);
+        }
+      }
+    }
+    // The project tab's activity ring and the server-busy bars are the app's infinite animations today.
+    expect(infinite).toBeGreaterThanOrEqual(2);
+    expect(offenders).toEqual([]);
+  });
+
   it('HS2-N2HB7G reads the machine homes only through the shared blank-as-unset helper', () => {
     // `??` resolved `HOTSHEET_HOME=""` against the working directory and `||` kept whitespace-only
     // values; `machine-home.ts` applies the Rust `machine_home` rule (HS2-1D4DQF) for every bridge.

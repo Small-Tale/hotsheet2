@@ -2,6 +2,8 @@ import { signal } from 'kerfjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  type AttachmentLabelConflict,
+  attachmentLabelConflictFor,
   type AttachmentLabelEditing,
   attachmentLabelEditingDraft,
   attachmentLabelEditingKey,
@@ -106,6 +108,36 @@ describe('attachment label editing state (HS2-SG0AZY)', () => {
     );
   });
 
+  it('renders the label conflict card on its own batch only, never for a read-only provider (HS2-9DQXGY)', () => {
+    const attachments = [
+        { id: 'a', name: 'a.png', batch_id: 'one', batch_label: 'One' },
+        { id: 'b', name: 'b.png', batch_id: 'two', batch_label: 'Two' },
+      ],
+      labelConflict = attachmentLabelConflictFor(
+        {
+          scope: INSPECTOR_ATTACHMENT_LABEL_SCOPE,
+          key: 'two',
+          draftKey: 'draft:two',
+          base: 'Base',
+          mine: 'Mine',
+          theirs: 'Two',
+          resolution: 'Mine and Two',
+        },
+        INSPECTOR_ATTACHMENT_LABEL_SCOPE,
+        undefined,
+      ),
+      markup = String(TicketAttachments({ attachments, labelConflict }));
+    expect(markup.match(/data-component="ticket-field-conflict"/g)).toHaveLength(1);
+    expect(markup.indexOf('data-component="ticket-field-conflict"')).toBeGreaterThan(
+      markup.indexOf('data-attachment-batch-key="two"'),
+    );
+    expect(markup).toContain('Mine and Two');
+    expect(markup).toContain('data-action="apply-attachment-label-merge"');
+    expect(String(TicketAttachments({ attachments, editable: false, labelConflict }))).not.toContain(
+      'ticket-field-conflict',
+    );
+  });
+
   it('shows the controlled draft in the open editor only (HS2-0QQHSZ)', () => {
     const attachments = [
         { id: 'a', name: 'a.png', batch_id: 'one', batch_label: 'One' },
@@ -186,6 +218,7 @@ describe('attachment label autosave contract (HS2-0QQHSZ)', () => {
 
   function harness(stored = '') {
     const editing = signal<AttachmentLabelEditing | undefined>(undefined),
+      conflict = signal<AttachmentLabelConflict | undefined>(undefined),
       storage = memoryStorage(),
       saves: Array<{ label: string; ids: readonly string[] | undefined; metadata: unknown }> = [],
       notes: string[] = [];
@@ -204,9 +237,12 @@ describe('attachment label autosave contract (HS2-0QQHSZ)', () => {
         return Promise.resolve(true);
       },
       notify: (message) => notes.push(message),
+      conflict,
+      ticketKey: (scope) => `ticket-of-${scope}`,
     });
     return {
       editing,
+      conflict,
       storage,
       saves,
       notes,
@@ -373,14 +409,17 @@ describe('attachment label autosave contract (HS2-0QQHSZ)', () => {
     h.editor.begin(rebased.title);
     expect(h.editing.value).toMatchObject({ draft: 'ALPHA beta GAMMA', base: 'alpha beta GAMMA' });
 
-    // A conflicting copy is discarded with a notice; a stale copy equal to the label is dropped quietly.
+    // A conflicting copy is kept for the conflict card (HS2-9DQXGY); a stale copy equal to the label is
+    // dropped quietly.
     h.editing.value = undefined;
     h.storage.setItem('draft:k3', JSON.stringify({ base: 'one', draft: 'two', at: 1 }));
     const conflicted = editableBatch('k3', 'three');
-    h.editor.begin(conflicted.title);
+    expect(h.editor.begin(conflicted.title)).toBeUndefined();
     expect(conflicted.input.value).toBe('three');
-    expect(h.storage.items.has('draft:k3')).toBe(false);
-    expect(h.notes.at(-1)).toMatch(/could not be merged/);
+    expect(h.storage.items.has('draft:k3')).toBe(true);
+    expect(h.conflict.value).toMatchObject({ key: 'k3', base: 'one', mine: 'two', theirs: 'three' });
+    expect(h.notes.join('\n')).not.toMatch(/discarded/);
+    h.editor.acceptTheirs();
     h.editing.value = undefined;
     h.storage.setItem('draft:k4', JSON.stringify({ base: 'x', draft: 'y', at: 1 }));
     const stale = editableBatch('k4', 'y');
@@ -401,5 +440,173 @@ describe('attachment label autosave contract (HS2-0QQHSZ)', () => {
     h.type(reader.input, 'Reader label');
     await h.editor.finish(reader.input);
     expect(h.saves.map((save) => save.label)).toEqual(['Reader label']);
+  });
+});
+
+describe('attachment label conflicts keep the recovery copy (HS2-9DQXGY)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function setup(remote: string) {
+    const editing = signal<AttachmentLabelEditing | undefined>(undefined),
+      conflict = signal<AttachmentLabelConflict | undefined>(undefined),
+      storage = memoryStorage(),
+      saves: string[] = [],
+      notes: string[] = [];
+    let label = remote,
+      fail = false;
+    const editor = createAttachmentLabelEditor({
+      editing,
+      conflict,
+      storage: () => storage,
+      draftKey: (batchKey) => `draft:${batchKey}`,
+      currentLabel: () => label,
+      describe: (batch) => ({ batch_id: batch.dataset.attachmentBatch }),
+      ticketKey: (scope) => `ticket-of-${scope}`,
+      save: (_edit, next) => {
+        saves.push(next);
+        if (fail) return Promise.resolve(false);
+        label = next;
+        return Promise.resolve(true);
+      },
+      notify: (message) => notes.push(message),
+    });
+    return {
+      editing,
+      conflict,
+      storage,
+      saves,
+      notes,
+      editor,
+      setFail: (next: boolean) => {
+        fail = next;
+      },
+      field: (value: string) => ({ value }) as unknown as HTMLTextAreaElement,
+    };
+  }
+
+  it('merges a disjoint copy on reopen and says so with the merge toast', () => {
+    const h = setup('alpha beta GAMMA');
+    h.storage.setItem('draft:k1', JSON.stringify({ base: 'alpha beta gamma', draft: 'ALPHA beta gamma', at: 1 }));
+    const batch = editableBatch('k1', 'alpha beta GAMMA');
+    expect(h.editor.begin(batch.title)).toBe(batch.input);
+    expect(batch.input.value).toBe('ALPHA beta GAMMA');
+    expect(h.notes).toEqual(['Restored an unsaved edit and merged it with a newer change to Attachment Label.']);
+    expect(h.conflict.value).toBeUndefined();
+  });
+
+  it('clears a copy whose merge the server already holds instead of restoring a no-op', () => {
+    const h = setup('ALPHA beta GAMMA');
+    h.storage.setItem('draft:k1', JSON.stringify({ base: 'alpha beta GAMMA', draft: 'ALPHA beta GAMMA', at: 1 }));
+    const batch = editableBatch('k1', 'ALPHA beta GAMMA');
+    h.editor.begin(batch.title);
+    expect(h.storage.items.size).toBe(0);
+    expect(h.notes).toEqual([]);
+  });
+
+  it('keeps an overlapping copy, offers both versions, and applies the merged value once', async () => {
+    const h = setup('Repro on WebKit');
+    h.storage.setItem('draft:k1', JSON.stringify({ base: 'Repro', draft: 'Repro on Safari 17', at: 1 }));
+    const batch = editableBatch('k1', 'Repro on WebKit', ['a', 'b'], 'reader-1');
+    expect(h.editor.begin(batch.title)).toBeUndefined();
+    expect(h.editing.value).toBeUndefined();
+    expect(h.storage.items.has('draft:k1')).toBe(true);
+    expect(h.conflict.value).toMatchObject({
+      scope: 'reader-1',
+      ticketKey: 'ticket-of-reader-1',
+      key: 'k1',
+      draftKey: 'draft:k1',
+      ids: ['a', 'b'],
+      metadata: { batch_id: 'batch-id' },
+      mine: 'Repro on Safari 17',
+      theirs: 'Repro on WebKit',
+      resolution: 'Repro on Safari 17',
+    });
+    // The card is scoped to its surface and ticket.
+    expect(attachmentLabelConflictFor(h.conflict.value, 'reader-1', 'ticket-of-reader-1')).toMatchObject({
+      key: 'k1',
+      resolution: 'Repro on Safari 17',
+      conflict: { key: 'attachment_label:k1', field: 'attachment_label', label: 'Attachment Label' },
+    });
+    expect(attachmentLabelConflictFor(h.conflict.value, INSPECTOR_ATTACHMENT_LABEL_SCOPE, 'ticket-of-reader-1')).toBe(
+      undefined,
+    );
+    expect(attachmentLabelConflictFor(h.conflict.value, 'reader-1', 'another-ticket')).toBeUndefined();
+
+    // Typing the merged value is coalesced: no write, and state catches up after the pause.
+    h.editor.conflictInput(h.field('Repro on Safari'));
+    h.editor.conflictInput(h.field('Repro on Safari 17 and WebKit'));
+    expect(h.conflict.value?.resolution).toBe('Repro on Safari 17');
+    // Reopening while the card shows keeps the merged value being shaped.
+    h.editor.flushConflictInput();
+    expect(h.editor.begin(batch.title)).toBeUndefined();
+    expect(h.conflict.value?.resolution).toBe('Repro on Safari 17 and WebKit');
+    expect(h.saves).toEqual([]);
+
+    // A failed write keeps the card and the copy; a retry commits once and settles both.
+    h.setFail(true);
+    await expect(h.editor.applyMerge()).resolves.toBe(false);
+    expect(h.conflict.value).toBeDefined();
+    expect(h.storage.items.has('draft:k1')).toBe(true);
+    h.setFail(false);
+    await expect(h.editor.applyMerge()).resolves.toBe(true);
+    expect(h.saves).toEqual(['Repro on Safari 17 and WebKit', 'Repro on Safari 17 and WebKit']);
+    expect(h.conflict.value).toBeUndefined();
+    expect(h.storage.items.size).toBe(0);
+    // Nothing waits any more: reopening is clean and a second apply is a no-op.
+    await expect(h.editor.applyMerge()).resolves.toBe(false);
+    expect(h.editor.begin(batch.title)).toBe(batch.input);
+  });
+
+  it('Use Theirs drops the copy without a write; applying their label unchanged writes nothing', async () => {
+    const h = setup('three');
+    h.storage.setItem('draft:k1', JSON.stringify({ base: 'one', draft: 'two', at: 1 }));
+    h.editor.begin(editableBatch('k1', 'three').title);
+    h.editor.conflictInput(h.field('pending'));
+    h.editor.acceptTheirs();
+    expect(h.conflict.value).toBeUndefined();
+    expect(h.storage.items.size).toBe(0);
+    vi.runAllTimers();
+    expect(h.conflict.value).toBeUndefined();
+
+    h.storage.setItem('draft:k2', JSON.stringify({ base: 'one', draft: 'two', at: 1 }));
+    h.editor.begin(editableBatch('k2', 'three').title);
+    h.editor.conflictInput(h.field(' three '));
+    await expect(h.editor.applyMerge()).resolves.toBe(true);
+    expect(h.saves).toEqual([]);
+    expect(h.storage.items.size).toBe(0);
+    // Input or Use Theirs with nothing waiting is a no-op.
+    h.editor.conflictInput(h.field('stray'));
+    h.editor.acceptTheirs();
+    expect(h.conflict.value).toBeUndefined();
+  });
+
+  it('offers a copy without a merge base instead of ignoring it, and drops one equal to the label', () => {
+    const h = setup('Current');
+    h.storage.setItem('draft:k1', JSON.stringify({ draft: 'Legacy text', at: 1 }));
+    h.editor.begin(editableBatch('k1', 'Current').title);
+    expect(h.conflict.value).toMatchObject({ base: '', mine: 'Legacy text', theirs: 'Current' });
+    h.editor.acceptTheirs();
+    h.storage.setItem('draft:k2', JSON.stringify({ draft: 'Current', at: 1 }));
+    const same = editableBatch('k2', 'Current');
+    expect(h.editor.begin(same.title)).toBe(same.input);
+    expect(h.storage.items.size).toBe(0);
+    expect(h.conflict.value).toBeUndefined();
+  });
+
+  it('a newer reopen that no longer conflicts settles the shown card', () => {
+    const h = setup('three');
+    h.storage.setItem('draft:k1', JSON.stringify({ base: 'one', draft: 'two', at: 1 }));
+    h.editor.begin(editableBatch('k1', 'three').title);
+    expect(h.conflict.value).toBeDefined();
+    // The label changed elsewhere to the copy's text: nothing is left to choose.
+    const converged = editableBatch('k1', 'two');
+    h.editor.begin(converged.title);
+    expect(h.conflict.value).toBeUndefined();
+    expect(h.storage.items.size).toBe(0);
   });
 });

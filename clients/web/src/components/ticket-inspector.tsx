@@ -50,7 +50,7 @@ import type { MarkdownEditorMode } from './markdown-editor';
 import type { NoteCardProps } from './note-card';
 import { inspectorToggle, SidebarPane, type SidebarPanelParts } from './sidebar-panel';
 import type { TicketStatus } from './status-badge';
-import { type TicketAttachmentItem, TicketAttachments } from './ticket-attachments';
+import { type TicketAttachmentItem, type TicketAttachmentLabelConflict, TicketAttachments } from './ticket-attachments';
 import type { TicketBlockersProps } from './ticket-blockers';
 import { TicketCodeReview } from './ticket-code-review';
 import {
@@ -135,6 +135,8 @@ export interface TicketInspectorProps {
   attachmentLabelEditing?: string;
   /** The controlled draft of that open label editor (HS2-0QQHSZ). */
   attachmentLabelDraft?: string;
+  /** A batch label recovery copy waiting for the user's choice in that batch's conflict card (HS2-9DQXGY). */
+  attachmentLabelConflict?: TicketAttachmentLabelConflict;
   attachmentFilenameEdit?: AttachmentFilenameEditing;
   attachmentContext?: AttachmentReferenceContext;
   notes?: readonly NoteCardProps[];
@@ -240,6 +242,7 @@ export function ticketInspectorPanel({
   attachmentMessage = '',
   attachmentLabelEditing,
   attachmentLabelDraft,
+  attachmentLabelConflict,
   attachmentFilenameEdit,
   attachmentContext,
   notes,
@@ -645,6 +648,7 @@ export function ticketInspectorPanel({
           message={attachmentMessage}
           editingLabelBatch={attachmentLabelEditing}
           editingLabelDraft={attachmentLabelDraft}
+          labelConflict={attachmentLabelConflict}
           filenameEdit={attachmentFilenameEdit}
           presentation={presentation}
         />

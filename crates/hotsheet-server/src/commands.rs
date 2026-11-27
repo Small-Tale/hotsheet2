@@ -21,17 +21,34 @@ const OUTPUT_CAP: usize = 10_000;
 /// cannot keep the run from completing past this bound.
 const OUTPUT_DRAIN_GRACE: std::time::Duration = std::time::Duration::from_secs(2);
 
+/// How a finished run's output drain ended (HS2-Y0KGC1). Tests assert this cause directly
+/// instead of inferring it from wall-clock time, which load can stretch past the bound.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DrainOutcome {
+    /// Every reader reached EOF within the grace bound.
+    Eof,
+    /// At least one reader still held its pipe when the grace bound elapsed.
+    GraceElapsed,
+}
+
 /// Wait until every reader thread has drained its pipe, or until `grace` elapses.
-fn await_readers(readers: Vec<std::thread::JoinHandle<()>>, grace: std::time::Duration) {
+fn await_readers(
+    readers: Vec<std::thread::JoinHandle<()>>,
+    grace: std::time::Duration,
+) -> DrainOutcome {
     let deadline = std::time::Instant::now() + grace;
+    let mut outcome = DrainOutcome::Eof;
     for reader in readers {
         while !reader.is_finished() && std::time::Instant::now() < deadline {
             std::thread::sleep(std::time::Duration::from_millis(5));
         }
         if reader.is_finished() {
             let _ = reader.join();
+        } else {
+            outcome = DrainOutcome::GraceElapsed;
         }
     }
+    outcome
 }
 type ChangeCallback = Arc<dyn Fn(CommandRun) + Send + Sync>;
 
@@ -85,6 +102,8 @@ struct LiveRun {
     view: CommandRun,
     child: Option<Arc<Mutex<hotsheet_process_journal::TrackedChild>>>,
     next_seq: u64,
+    /// How the exit waiter's output drain ended; `None` until it settles (HS2-Y0KGC1).
+    drain: Option<DrainOutcome>,
 }
 
 type CommandWriteSequences = HashMap<(String, String), (u64, Option<String>)>;
@@ -231,6 +250,11 @@ impl CommandManager {
             })
             .collect()
     }
+    /// How the run's exit waiter ended its output drain, once it has settled (HS2-Y0KGC1).
+    #[cfg(all(test, unix))]
+    fn drain_outcome(&self, id: &str) -> Option<DrainOutcome> {
+        self.runs.lock_or_recover().get(id).and_then(|r| r.drain)
+    }
     pub fn get(&self, id: &str, after: u64) -> Option<CommandRun> {
         self.get_for("", id, after)
     }
@@ -318,6 +342,7 @@ impl CommandManager {
             view: view.clone(),
             child: Some(handle.clone()),
             next_seq: 0,
+            drain: None,
         });
         let mut readers = Vec::new();
         if let Some(out) = stdout {
@@ -343,13 +368,14 @@ impl CommandManager {
                         if let Some(r) = runs.lock_or_recover().get_mut(&run_id) {
                             r.child = None;
                         }
-                        await_readers(std::mem::take(&mut readers), OUTPUT_DRAIN_GRACE);
+                        let drain = await_readers(std::mem::take(&mut readers), OUTPUT_DRAIN_GRACE);
                         let changed = if let Some(r) = runs.lock_or_recover().get_mut(&run_id) {
                             if r.view.state == "running" {
                                 r.view.state = "completed".into();
                             }
                             r.view.exit_code = status.code();
                             r.child = None;
+                            r.drain = Some(drain);
                             Some(r.view.clone())
                         } else {
                             None
@@ -361,13 +387,14 @@ impl CommandManager {
                     }
                     Ok(None) => std::thread::sleep(std::time::Duration::from_millis(20)),
                     Err(_) => {
-                        await_readers(std::mem::take(&mut readers), OUTPUT_DRAIN_GRACE);
+                        let drain = await_readers(std::mem::take(&mut readers), OUTPUT_DRAIN_GRACE);
                         let changed = if let Some(r) = runs.lock_or_recover().get_mut(&run_id) {
                             // HS2-PAG7HG: one terminal state; a cancel that won keeps it.
                             if r.view.state == "running" {
                                 r.view.state = "failed".into();
                             }
                             r.child = None;
+                            r.drain = Some(drain);
                             Some(r.view.clone())
                         } else {
                             None
@@ -425,6 +452,7 @@ impl CommandManager {
             view: view.clone(),
             child: None,
             next_seq: 0,
+            drain: None,
         });
         Ok(view)
     }
@@ -798,21 +826,19 @@ mod tests {
             }],
         );
         let run = manager.start("pwd").unwrap();
-        for _ in 0..100 {
-            let view = manager.get(&run.id, 0).unwrap();
-            if view.state == "completed" && !view.output.is_empty() {
-                assert_eq!(
-                    view.output[0].text,
-                    hotsheet_sync::paths::canonicalize(project.path())
-                        .unwrap()
-                        .display()
-                        .to_string()
-                );
-                return;
-            }
-            std::thread::sleep(std::time::Duration::from_millis(10));
-        }
-        panic!("pwd command did not complete with output");
+        // HS2-Y0KGC1: wait for the published completion (output already drained) instead of
+        // a 1 s polling budget that full-suite load can exhaust.
+        let view = first_finished_view(&manager, &run.id);
+        assert_eq!(view.state, "completed");
+        assert_eq!(
+            view.output.first().map(|line| line.text.clone()),
+            Some(
+                hotsheet_sync::paths::canonicalize(project.path())
+                    .unwrap()
+                    .display()
+                    .to_string()
+            )
+        );
     }
 
     #[cfg(unix)]
@@ -868,7 +894,6 @@ mod tests {
                 "(sleep 0.3; echo late-line) & exit 0",
             )],
         );
-        let started = std::time::Instant::now();
         let run = manager.start("late").unwrap();
         let view = first_finished_view(&manager, &run.id);
         assert_eq!(view.exit_code, Some(0));
@@ -878,8 +903,11 @@ mod tests {
             "finished run lacks its output: {:?}",
             view.output
         );
-        assert!(
-            started.elapsed() < OUTPUT_DRAIN_GRACE,
+        // HS2-Y0KGC1: observe the completion cause itself. Total wall-clock time includes
+        // spawn and scheduling delays that full-suite load stretches past the grace bound.
+        assert_eq!(
+            manager.drain_outcome(&run.id),
+            Some(DrainOutcome::Eof),
             "completed by EOF, not by the grace bound"
         );
     }
@@ -892,15 +920,22 @@ mod tests {
         let store = tempfile::tempdir().unwrap();
         let manager = CommandManager::new(
             store.path().to_path_buf(),
-            vec![shell_program("held", "sleep 6 & echo early-line")],
+            // The held writer outlives any plausible scheduling delay, so the drain can only
+            // end by the grace bound, never by EOF (HS2-Y0KGC1).
+            vec![shell_program("held", "sleep 30 & echo early-line")],
         );
         let started = std::time::Instant::now();
         let run = manager.start("held").unwrap();
         let view = first_finished_view(&manager, &run.id);
         assert_eq!(view.exit_code, Some(0));
         assert!(view.output.iter().any(|line| line.text == "early-line"));
+        // HS2-Y0KGC1: the run settled because the bound elapsed while the pipe was still
+        // held, observed directly rather than as an upper wall-clock bound load can break.
+        assert_eq!(
+            manager.drain_outcome(&run.id),
+            Some(DrainOutcome::GraceElapsed)
+        );
         assert!(started.elapsed() >= OUTPUT_DRAIN_GRACE);
-        assert!(started.elapsed() < std::time::Duration::from_secs(6));
         // HS2-PAG7HG: cancelling a drained run reports its settled state unchanged.
         let settled = manager.cancel(&run.id).unwrap();
         assert_eq!(settled.state, "completed");

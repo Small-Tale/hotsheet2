@@ -4,6 +4,8 @@ import { phaseEstimatePresentation } from '../active-ticket-work';
 import type { CodeReview, FullTicket, TicketRow as WireTicketRow } from '../api';
 import type { AttachmentFilenameEditing } from '../attachment-filename-editing';
 import {
+  type AttachmentLabelConflict,
+  attachmentLabelConflictFor,
   type AttachmentLabelEditing,
   attachmentLabelEditingDraft,
   attachmentLabelEditingKey,
@@ -43,6 +45,8 @@ export interface ReaderLayersSurfaceDependencies {
   attachmentContext: (ticket: FullTicket, current?: Project) => AttachmentReferenceContext | undefined;
   attachmentItems: ReturnType<typeof createInspectorSurface>['attachmentItems'];
   attachmentLabelEditing: Signal<AttachmentLabelEditing | undefined>;
+  /** An unmergeable batch label recovery copy waiting for the user's choice (HS2-9DQXGY). */
+  attachmentLabelConflict?: Signal<AttachmentLabelConflict | undefined>;
   attachmentFilenameEditing?: Signal<AttachmentFilenameEditing | undefined>;
   attachmentMenuSurfaceProps: ({
     insideGallery,
@@ -146,6 +150,7 @@ export function createReaderLayersSurface(dependencies: ReaderLayersSurfaceDepen
     attachmentContext,
     attachmentItems,
     attachmentLabelEditing,
+    attachmentLabelConflict,
     attachmentFilenameEditing,
     attachmentMenuSurfaceProps,
     attachmentMessage,
@@ -347,6 +352,11 @@ export function createReaderLayersSurface(dependencies: ReaderLayersSurfaceDepen
         }
         attachmentLabelEditing={attachmentLabelEditingKey(attachmentLabelEditing.value, readerScope)}
         attachmentLabelDraft={attachmentLabelEditingDraft(attachmentLabelEditing.value, readerScope)}
+        attachmentLabelConflict={attachmentLabelConflictFor(
+          attachmentLabelConflict?.value,
+          readerScope,
+          ticket.qualified_id,
+        )}
         largeText={readerLargeText.value}
         fieldConflict={editable ? fieldConflict.value : undefined}
         fieldConflictResolution={editable ? fieldConflictResolution.value : ''}

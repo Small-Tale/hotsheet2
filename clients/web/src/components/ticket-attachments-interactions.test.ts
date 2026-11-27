@@ -47,6 +47,10 @@ describe('wireTicketAttachmentActions (HS2-1KM6MB)', () => {
     escape: vi.fn(),
     finish: vi.fn(() => finishResult),
     flush: vi.fn(() => Promise.resolve(true)),
+    conflictInput: vi.fn(),
+    flushConflictInput: vi.fn(),
+    acceptTheirs: vi.fn(),
+    applyMerge: vi.fn(() => Promise.resolve(true)),
   };
   const bindings = {
     addFiles: vi.fn(),
@@ -123,10 +127,12 @@ describe('wireTicketAttachmentActions (HS2-1KM6MB)', () => {
 
   it('edits a batch label: begin focuses, input drafts, Enter blurs and refocuses after the save settles', async () => {
     // The heading's Edit action and a double-click on the heading both open the editor (HS2-K9HSXZ).
-    handler('click', 'edit-attachment-batch-label')({}, { open: true });
-    handler('click', 'edit-attachment-batch-label')({}, { open: false });
-    handler('dblclick', 'data-attachment-batch-title')({}, { open: true });
-    handler('dblclick', 'data-attachment-batch-title')({}, { open: false });
+    const closed = { open: false, closest: () => null },
+      opened = { open: true, closest: () => null };
+    handler('click', 'edit-attachment-batch-label')({}, opened);
+    handler('click', 'edit-attachment-batch-label')({}, closed);
+    handler('dblclick', 'data-attachment-batch-title')({}, opened);
+    handler('dblclick', 'data-attachment-batch-title')({}, closed);
     await Promise.resolve();
     expect(editorInput.focus).toHaveBeenCalledTimes(2);
     expect(editorInput.select).toHaveBeenCalledTimes(2);
@@ -148,6 +154,34 @@ describe('wireTicketAttachmentActions (HS2-1KM6MB)', () => {
     handler('keydown', 'attachment-batch-label')({ key: 'a' }, field);
     expect(labelEditor.escape).toHaveBeenCalledWith(field);
     expect(field.blur).toHaveBeenCalledTimes(2);
+  });
+
+  it('routes the label conflict card and focuses its merged value when begin opens it (HS2-9DQXGY)', () => {
+    const resolution = { focus: vi.fn() },
+      surface = { querySelector: vi.fn(() => resolution) },
+      conflicted = {
+        open: false,
+        closest: (selector: string) =>
+          selector.includes('batch-key')
+            ? { dataset: { attachmentBatchKey: 'k1' } }
+            : selector.includes('ticket-attachments')
+              ? surface
+              : null,
+      };
+    handler('click', 'edit-attachment-batch-label')({}, conflicted);
+    expect(surface.querySelector).toHaveBeenCalledWith(
+      '[data-attachment-batch-key="k1"] [name="attachment-label-conflict-resolution"]',
+    );
+    expect(resolution.focus).toHaveBeenCalledTimes(1);
+    const field = { value: 'Merged' };
+    handler('input', 'attachment-label-conflict-resolution')({}, field);
+    expect(labelEditor.conflictInput).toHaveBeenCalledWith(field);
+    handler('focusout', 'attachment-label-conflict-resolution')({}, field);
+    expect(labelEditor.flushConflictInput).toHaveBeenCalledTimes(1);
+    handler('click', 'accept-remote-attachment-label')({}, {});
+    expect(labelEditor.acceptTheirs).toHaveBeenCalledTimes(1);
+    handler('click', 'apply-attachment-label-merge')({}, {});
+    expect(labelEditor.applyMerge).toHaveBeenCalledTimes(1);
   });
 
   it('blurs a Web Awesome editor on Escape only after it renders the restored label (HS2-K9HSXZ)', async () => {

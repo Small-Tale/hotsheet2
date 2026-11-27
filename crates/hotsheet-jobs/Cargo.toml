@@ -23,6 +23,8 @@ notify.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
 notify-batched.workspace = true
+objc2-core-foundation.workspace = true
+objc2-core-services.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 libc.workspace = true

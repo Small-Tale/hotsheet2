@@ -19,8 +19,13 @@ import { MoreHorizontal, Paperclip, Pencil, Plus, Upload } from 'lucide';
 import type { AttachmentActor, AttachmentPurpose } from '../api';
 import type { AttachmentFilenameEditing } from '../attachment-filename-editing';
 import { isGalleryMediaAttachment, isVideoAttachment } from '../attachment-references';
-import { ATTACHMENTS_AND_GALLERY_ACTIONS } from '../interaction-attrs/attachments-and-gallery';
+import {
+  ATTACHMENTS_AND_GALLERY_ACTIONS,
+  ATTACHMENTS_AND_GALLERY_TARGETS,
+} from '../interaction-attrs/attachments-and-gallery';
+import type { TicketFieldConflict as TicketFieldConflictState } from '../ticket-field-reconciliation';
 import { AttachmentFilenameEditor } from './attachment-filename-editor';
+import { TicketFieldConflict } from './ticket-field-conflict';
 import { TicketInspectorPanel, type TicketInspectorPanelPresentation } from './ticket-inspector-panel';
 
 export interface TicketAttachmentItem {
@@ -134,6 +139,14 @@ export function groupAttachments(attachments: readonly TicketAttachmentItem[]): 
   return [...groups.values()];
 }
 
+/** A batch label conflict the batch shows in the shared field-conflict card (HS2-9DQXGY). */
+export interface TicketAttachmentLabelConflict {
+  /** The batch's grouping key (`AttachmentBatch.key`). */
+  key: string;
+  conflict: TicketFieldConflictState;
+  resolution: string;
+}
+
 export function TicketAttachments({
   attachments = DEFAULT_ATTACHMENTS,
   enabled = true,
@@ -143,6 +156,7 @@ export function TicketAttachments({
   presentation = 'sidebar',
   editingLabelBatch,
   editingLabelDraft,
+  labelConflict,
   filenameEdit,
 }: {
   attachments?: readonly TicketAttachmentItem[];
@@ -173,6 +187,11 @@ export function TicketAttachments({
    * rerender keeps what the user typed. Defaults to the batch's stored label.
    */
   editingLabelDraft?: string;
+  /**
+   * A batch whose unsaved label recovery copy overlaps a newer label (HS2-9DQXGY): the batch shows
+   * the shared field-conflict card with both versions until the user picks one.
+   */
+  labelConflict?: TicketAttachmentLabelConflict;
   filenameEdit?: AttachmentFilenameEditing;
 }) {
   const manageable = enabled && editable;
@@ -289,6 +308,16 @@ export function TicketAttachments({
                       renderSelected={(choice) => <Badge tone="info">{choice.label}</Badge>}
                     />
                   </List>
+                  {manageable && labelConflict?.key === group.key && (
+                    // The ticket fields' conflict card, routed to the label's own handlers (HS2-9DQXGY).
+                    <TicketFieldConflict
+                      conflict={labelConflict.conflict}
+                      resolution={labelConflict.resolution}
+                      acceptAction={ATTACHMENTS_AND_GALLERY_ACTIONS.acceptRemoteAttachmentLabel.value}
+                      mergeAction={ATTACHMENTS_AND_GALLERY_ACTIONS.applyAttachmentLabelMerge.value}
+                      resolutionName={ATTACHMENTS_AND_GALLERY_TARGETS.attachmentLabelConflictResolutionField.value}
+                    />
+                  )}
                   {group.items.map((attachment) => (
                     // The app-owned wrapper carries the drag source and row identity Kerf roots protect
                     // (`draggable`, `data-component`); Kerf ContentItem, Row, Text, and icon-only Button own the

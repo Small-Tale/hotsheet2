@@ -1105,19 +1105,22 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   collapses independently for each ticket and presentation across updates. Wide layouts
   show the full title, and the title editor still grows to show its draft.
 
-- **Ticket claims.** Ticket rows show a yellow spinner directly after status only
-  while a worker holds a non-expired claim lease. Started tickets without a lease remain
+- **Ticket claims.** Ticket rows show a small indeterminate Kerf `ProgressRing` (the live-work
+  indicator) directly after status only while a worker holds a non-expired claim lease. It
+  replaced the yellow `LoadingSpinner`, which spins a shape inside its SVG and repainted every
+  frame in WebKit, holding an idle Safari web app at 20% CPU or more per row (HS2-GFZYCZ,
+  KF-M4WWRW). Started tickets without a lease remain
   unclaimed, and old `claim_count` values never imply presence. A local one-shot expiry timer removes stale indicators without issuing
   polling requests; claim/release changes otherwise arrive through the shared live-update
   channel. When a live claim has an on-track ETA, a progress ring of the same size replaces
-  the spinner in that slot; the time-left label remains after the holder name. An overrun
-  keeps the spinner and shows `Soon`. Long worker IDs are clipped only in the row display;
+  the indeterminate ring in that slot; the time-left label remains after the holder name. An overrun
+  returns to the indeterminate ring and shows `Soon`. Long worker IDs are clipped only in the row display;
   hover and assistive technology retain the full value.
 
 - **Started phase.** List rows, column cards, and the ticket inspector show the optional phase label
   inside the Started badge. Other status labels remain hidden on column cards because the column
   already names their status. `Final testing` remains visible after a worker releases
-  the claim to wait for remote CI; the live-work spinner and worker name still follow the lease.
+  the claim to wait for remote CI; the live-work indicator and worker name still follow the lease.
   Legacy Started tickets without a phase keep the plain `Started` label.
 
 - **Custom project commands.** The sidebar renders machine-local typed command
@@ -2870,9 +2873,11 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   pause (175 ms), or for at most one second during a continuous stream. The monitor then
   re-reads Git's porcelain-v2 status fingerprint, at most once every 750 ms, and announces
   only a changed fingerprint. Events under paths Git ignores, and under `.git/objects` or
-  `.git/logs`, are dropped before that read. The ignored set is re-learned whenever events
-  arrive without a status change, and a linked worktree's external Git directories are
-  watched too. An idle checkout spawns no `git` process. Starting a native stream can take
+  `.git/logs`, are dropped before that read. On macOS up to eight ignored directories
+  (build output such as `target/` and `node_modules/`, agent worktrees) are excluded from
+  the stream itself, so the file-event service never delivers their churn (HS2-2HZN2C,
+  `docs/03-indexing-and-query.md` §3.4). The ignored set is re-learned after every status
+  read, and a linked worktree's external Git directories are watched too. An idle checkout spawns no `git` process. Starting a native stream can take
   seconds on a busy Mac, so until it is live the monitor polls the fingerprint every 750 ms
   as a bridge. If the native watcher cannot start at all, it falls back to that poll with a
   two-second idle backoff. Changes are announced as checkout-scoped `repository_changed`
@@ -2914,7 +2919,13 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   merged against that edit-start label, and the editor shows its draft until the write commits.
   Enter or Escape returns keyboard focus to the batch title once that write settles and the
   editor closes, however long the save takes (HS2-VRBDPV). Reopening the batch restores an
-  unsaved copy. Escape in any inline editor of the inspector (the
+  unsaved copy with the ticket fields' restore rules: a copy that a newer label changed in other
+  words is three-way merged and announced with the merge toast (HS2-JJ3R1G), and a copy that
+  overlaps the newer label is never discarded. The editor stays closed and the batch shows the
+  ticket fields' conflict card with both versions and an editable merged value; Use Theirs drops
+  the copy, and Apply Merged Value writes once and drops the copy only after that write commits.
+  The card belongs to its surface, ticket, and batch, so a linked reader frame shows its own
+  (HS2-9DQXGY). Escape in any inline editor of the inspector (the
   batch label, the title, notes, details, tags, and the blocked reason) acts on that editor only: the
   label restores its value, the others finish their edit (blur autosaves), and the key stops there,
   so the narrow-layout inspector overlay stays open until a second Escape outside the editor
@@ -3674,7 +3685,9 @@ view layer is new work.
   simultaneous active claim (capped at 8 drawn segments for legibility; the accessible
   label still reports the true active count), while the center label always projects the Up Next count
   (so it can read `0` while work is active); the ring's segment count is the only axis that
-  tracks active claims (HS2-3TGYER). Each open project's replay-safe WebSocket-first stream
+  tracks active claims (HS2-3TGYER). The whole ring `<svg>` rotates, never a shape inside it,
+  because WebKit composites only the former; an animated SVG shape repainted every frame and
+  kept an idle Safari web app busy for as long as a claim was live (HS2-GFZYCZ). Each open project's replay-safe WebSocket-first stream
   reconciles those cached rows after ticket, claim, renew, and release events even when the
   project is not selected; the indicator never waits for a tab activation to become current.
   Because lease expiry is a passage of time rather than a server mutation, the client also
@@ -5838,10 +5851,10 @@ brand-tinted "<holder> is working on this" line: the holder's worker label (else
 shared activity slot, and, when the claim carries an ETA, the same progress ring and time
 left (or `Soon` once overrun) that list and column rows show (HS2-XQMDQB). It uses the rows'
 local ETA clock, so the countdown never triggers network requests, and it disappears as soon as
-the claim is released, expires, or the ticket reaches a terminal status. The spinner and ETA ring
-come from one shared component (`components/active-claim.tsx`) so rows and headers cannot drift.
-The inspector and reader compose the holder and ETA as a Kerf `StateBanner` with a
-public-token-colored `LoadingSpinner` when progress is indeterminate; the same-sized ETA ring
+the claim is released, expires, or the ticket reaches a terminal status. The indeterminate and ETA
+rings come from one shared component (`components/active-claim.tsx`) so rows and headers cannot drift.
+The inspector and reader compose the holder and ETA as a Kerf `StateBanner` with an indeterminate
+`ProgressRing` when progress is unknown (HS2-GFZYCZ); the same-sized ETA ring
 occupies its icon slot while the estimate is on track (HS2-SNC0S3/1FYDF0). The time-left
 label stays in the banner action, and the claim label remains accessible (HS2-KEHG7H).
 The time-left label has an inline gap from the holder text. Generated worker ids show a

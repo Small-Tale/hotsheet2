@@ -11,7 +11,8 @@ use hotsheet_index::hash_bytes;
 use hotsheet_model::{Ulid, parse_file};
 use hotsheet_sync::LockExt;
 use std::path::Path as FsPath;
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant, SystemTime};
 use tokio::sync::broadcast;
 
@@ -20,6 +21,17 @@ use tokio::sync::broadcast;
 /// Keeps the watcher alive; dropping it stops watching.
 pub struct WatchHandle {
     _watcher: HeldWatcher,
+}
+
+#[cfg(test)]
+impl WatchHandle {
+    /// Whether a native watcher still polls through its bridge (HS2-190GDZ).
+    fn native_bridge_held(&self) -> bool {
+        match &self._watcher {
+            HeldWatcher::Native { _hold: hold } => hold.0.with_lock(|state| state.bridge.is_some()),
+            HeldWatcher::Poll { .. } => false,
+        }
+    }
 }
 
 /// Keeps one checkout monitor alive. Initialization and repository inspection happen on
@@ -45,9 +57,210 @@ enum HeldWatcher {
 #[derive(Default)]
 struct NativeWatcherState {
     watcher: Option<notify::RecommendedWatcher>,
-    /// Bridges the native stream's start-up: polls until the stream has been live a moment.
+    /// Bridges the native stream's start-up: polls until the stream proves it delivers.
     bridge: Option<notify::PollWatcher>,
     stopped: bool,
+    /// Wakes a supervisor waiting for its stream's probe when the handle is dropped.
+    proof: Arc<StreamProof>,
+}
+
+/// File names of the probes a native registration must deliver before it is trusted
+/// (HS2-190GDZ). A dot-file ending in `.tmp` matches the store's staged-write ignore
+/// pattern, and the ticket listing skips plain files directly under `tickets/`.
+const STREAM_PROBE_PREFIX: &str = ".hotsheet-watch-probe.";
+/// How long the first probe waits; each unanswered probe doubles it up to
+/// [`STREAM_PROBE_WAIT_MAX`].
+const STREAM_PROBE_WAIT: Duration = Duration::from_secs(1);
+const STREAM_PROBE_WAIT_MAX: Duration = Duration::from_secs(30);
+/// After this many unanswered probes in a row the directory is registered again.
+const STREAM_PROBE_ROUNDS_PER_REGISTRATION: u32 = 2;
+static STREAM_PROBE_SEQ: AtomicU64 = AtomicU64::new(0);
+
+/// Evidence that a native registration delivers events (HS2-190GDZ).
+///
+/// macOS FSEvents can return from a stream (re)start while `fseventsd` is busy and then
+/// deliver nothing for the watched subtree, with no dropped-event flag. A fixed delay
+/// cannot tell that apart from a live stream, so after every registration the supervisor
+/// writes a probe file into the watched directory and waits for the stream to report it.
+/// FSEvents and inotify deliver in order, so once a probe arrives every later write is
+/// reported, and every rearm signal raised before the probe is already queued.
+#[derive(Default)]
+struct StreamProof {
+    state: Mutex<StreamProofState>,
+    changed: Condvar,
+}
+
+#[derive(Default)]
+struct StreamProofState {
+    /// Probes written since the current registration; only these prove it.
+    pending: Vec<std::ffi::OsString>,
+    seen: bool,
+    stopped: bool,
+    /// Test seam: probes the simulated stream fails to report before one proves it.
+    drop_probes: usize,
+    dropped: Vec<std::ffi::OsString>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ProofOutcome {
+    /// The stream reported a probe written after its registration.
+    Proven,
+    /// No probe could be written (read-only store, or the directory just vanished).
+    Unwritable,
+    /// Registering the directory again failed: it is no longer watched.
+    Unregistered,
+    /// The watcher handle was dropped.
+    Stopped,
+}
+
+impl StreamProof {
+    fn is_probe(name: &std::ffi::OsStr) -> bool {
+        name.to_str()
+            .is_some_and(|name| name.starts_with(STREAM_PROBE_PREFIX))
+    }
+
+    /// Called by the native callback. Returns whether `event` names a probe, which is
+    /// never a store change; a probe of the current registration proves the stream.
+    fn observe(&self, event: &notify::Event) -> bool {
+        let mut probes = event
+            .paths
+            .iter()
+            .filter_map(|path| path.file_name())
+            .filter(|name| Self::is_probe(name))
+            .peekable();
+        if probes.peek().is_none() {
+            return false;
+        }
+        let mut state = self.state.lock_or_recover();
+        for name in probes {
+            if !state.pending.iter().any(|pending| pending == name) {
+                continue;
+            }
+            if state.dropped.iter().any(|dropped| dropped == name) {
+                continue;
+            }
+            if state.drop_probes > 0 {
+                state.drop_probes -= 1;
+                state.dropped.push(name.to_os_string());
+                continue;
+            }
+            state.seen = true;
+            self.changed.notify_all();
+        }
+        true
+    }
+
+    /// Starts a proof for a new registration: earlier probes no longer count.
+    fn begin(&self) -> bool {
+        let mut state = self.state.lock_or_recover();
+        state.pending.clear();
+        state.seen = false;
+        !state.stopped
+    }
+
+    fn stop(&self) {
+        self.state.lock_or_recover().stopped = true;
+        self.changed.notify_all();
+    }
+
+    /// Writes one probe into `dir` and waits up to `wait` for the stream to report any
+    /// probe of the current registration. `None` means the wait timed out.
+    fn probe(&self, dir: &FsPath, wait: Duration) -> Option<ProofOutcome> {
+        let name = format!(
+            "{STREAM_PROBE_PREFIX}{}.{}.tmp",
+            std::process::id(),
+            STREAM_PROBE_SEQ.fetch_add(1, Ordering::Relaxed)
+        );
+        {
+            let mut state = self.state.lock_or_recover();
+            if state.stopped {
+                return Some(ProofOutcome::Stopped);
+            }
+            if state.seen {
+                return Some(ProofOutcome::Proven);
+            }
+            state.pending.push(name.clone().into());
+        }
+        let path = dir.join(&name);
+        if std::fs::File::create(&path).is_err() {
+            return Some(ProofOutcome::Unwritable);
+        }
+        let _ = std::fs::remove_file(&path);
+        let state = self.state.lock_or_recover();
+        let (state, _) = self
+            .changed
+            .wait_timeout_while(state, wait, |state| !state.seen && !state.stopped)
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if state.stopped {
+            Some(ProofOutcome::Stopped)
+        } else if state.seen {
+            Some(ProofOutcome::Proven)
+        } else {
+            None
+        }
+    }
+}
+
+/// Waits until the native stream in `slot` reports a probe written into `dir`, its
+/// recursively watched directory (HS2-190GDZ). Unanswered probes back off, and every
+/// [`STREAM_PROBE_ROUNDS_PER_REGISTRATION`] of them the directory is registered again:
+/// a registration that misses its own probe may never report that subtree.
+/// `on_unanswered` runs after each unanswered probe with the count so far.
+fn prove_native_stream<W: notify::Watcher>(
+    proof: &StreamProof,
+    watcher: &Mutex<impl WatcherSlot<W>>,
+    dir: &FsPath,
+    first_wait: Duration,
+    mut on_unanswered: impl FnMut(u32),
+) -> ProofOutcome {
+    if !proof.begin() {
+        return ProofOutcome::Stopped;
+    }
+    let mut wait = first_wait;
+    let mut unanswered = 0;
+    loop {
+        if let Some(outcome) = proof.probe(dir, wait) {
+            return outcome;
+        }
+        unanswered += 1;
+        tracing::debug!(dir = %dir.display(), unanswered, "native watcher has not reported its probe");
+        on_unanswered(unanswered);
+        wait = (wait * 2).min(STREAM_PROBE_WAIT_MAX);
+        if unanswered % STREAM_PROBE_ROUNDS_PER_REGISTRATION != 0 {
+            continue;
+        }
+        tracing::warn!(dir = %dir.display(), unanswered, "native watcher missed its probes; registering it again");
+        {
+            let mut slot = watcher.lock_or_recover();
+            let Some(watcher) = slot.live_watcher() else {
+                return ProofOutcome::Stopped;
+            };
+            let _ = watcher.unwatch(dir);
+            if watcher
+                .watch(dir, notify::RecursiveMode::Recursive)
+                .is_err()
+            {
+                return ProofOutcome::Unregistered;
+            }
+        }
+        if !proof.begin() {
+            return ProofOutcome::Stopped;
+        }
+    }
+}
+
+/// The running watcher a proof registers again, unless its handle was dropped.
+trait WatcherSlot<W> {
+    fn live_watcher(&mut self) -> Option<&mut W>;
+}
+
+impl WatcherSlot<notify::RecommendedWatcher> for NativeWatcherState {
+    fn live_watcher(&mut self) -> Option<&mut notify::RecommendedWatcher> {
+        if self.stopped {
+            return None;
+        }
+        self.watcher.as_mut()
+    }
 }
 
 /// A parent-directory signal survives deletion of the watched store directory.
@@ -127,10 +340,14 @@ struct NativeWatcherHold(pub(crate) NativeWatcherSlot);
 
 impl Drop for NativeWatcherHold {
     fn drop(&mut self) {
-        let watchers = self.0.with_lock(|state| {
+        let (watchers, proof) = self.0.with_lock(|state| {
             state.stopped = true;
-            (state.watcher.take(), state.bridge.take())
+            (
+                (state.watcher.take(), state.bridge.take()),
+                state.proof.clone(),
+            )
         });
+        proof.stop();
         // Stop the stream outside the lock: it waits for the stream's run-loop thread.
         drop(watchers);
     }
@@ -244,20 +461,38 @@ pub(crate) fn spawn_watcher_in_scope(
     backend: WatcherBackend,
     scope: Arc<TicketsWatchScope>,
 ) -> anyhow::Result<WatchHandle> {
-    spawn_watcher_in_scope_with_startup_hook(target, backend, scope, None, None, None)
+    spawn_watcher_in_scope_with_startup_hooks(target, backend, scope, StartupHooks::default())
 }
 
 type StartupHook = Box<dyn FnOnce() + Send>;
 
-fn spawn_watcher_in_scope_with_startup_hook(
+/// Test seams in the native watcher's startup sequence.
+#[derive(Default)]
+struct StartupHooks {
+    /// After the parent is registered, before the store's own directories.
+    before_children: Option<StartupHook>,
+    /// After the directories are registered, before their identity is sampled.
+    after_watch_before_identity: Option<StartupHook>,
+    /// After the identity is sampled, before the stream is proven.
+    after_children: Option<StartupHook>,
+    /// Probes the stream fails to report before one proves it, simulating a busy
+    /// `fseventsd` (HS2-190GDZ).
+    dropped_probes: usize,
+}
+
+fn spawn_watcher_in_scope_with_startup_hooks(
     target: WatchTarget,
     backend: WatcherBackend,
     scope: Arc<TicketsWatchScope>,
-    before_children: Option<StartupHook>,
-    after_watch_before_identity: Option<StartupHook>,
-    after_children: Option<StartupHook>,
+    hooks: StartupHooks,
 ) -> anyhow::Result<WatchHandle> {
     use notify::{RecursiveMode, Watcher};
+    let StartupHooks {
+        before_children,
+        after_watch_before_identity,
+        after_children,
+        dropped_probes,
+    } = hooks;
 
     // The tickets directory is derived from the store root, so the root needs no `parent()`
     // lookup that could fail at runtime (HS2-FXF07C).
@@ -282,6 +517,8 @@ fn spawn_watcher_in_scope_with_startup_hook(
             // store is re-checked when the bridge starts and again when it is dropped, covering
             // writes made before either watcher took its first look.
             let slot: NativeWatcherSlot = Arc::default();
+            let proof = slot.with_lock(|state| state.proof.clone());
+            proof.state.lock_or_recover().drop_probes = dropped_probes;
             let started = slot.clone();
             std::thread::spawn(move || {
                 let resync = tx.clone();
@@ -289,16 +526,35 @@ fn spawn_watcher_in_scope_with_startup_hook(
                     resync.send(Ok(resync_event(dir, info)));
                 };
                 let bridge_tx = tx.clone();
-                let bridge = notify::PollWatcher::new(
-                    move |res| {
-                        bridge_tx.send(res);
-                    },
-                    startup_bridge_config(),
-                )
-                .and_then(|mut bridge| {
-                    bridge.watch(&tickets_dir, RecursiveMode::Recursive)?;
-                    Ok(bridge)
-                });
+                let new_bridge = || {
+                    let bridge_tx = bridge_tx.clone();
+                    let bridge_root = store_root.clone();
+                    let bridge_tickets = tickets_dir.clone();
+                    let away = std::sync::atomic::AtomicBool::new(false);
+                    notify::PollWatcher::new(
+                        move |res| {
+                            // The poller follows the path, so a moved store reads as every
+                            // ticket deleted. Drop that, as the native scope does, keep misses
+                            // walking, and reconcile the store once it returns (HS2-190GDZ).
+                            if !bridge_root.is_dir() {
+                                if !away.swap(true, Ordering::SeqCst) {
+                                    bridge_tx.freshness.set_live(false);
+                                }
+                                return;
+                            }
+                            if away.swap(false, Ordering::SeqCst) {
+                                bridge_tx.send(Ok(resync_event(&bridge_tickets, REARM_RESYNC)));
+                            }
+                            bridge_tx.send(res);
+                        },
+                        startup_bridge_config(),
+                    )
+                    .and_then(|mut bridge| {
+                        bridge.watch(&tickets_dir, RecursiveMode::Recursive)?;
+                        Ok(bridge)
+                    })
+                };
+                let bridge = new_bridge();
                 {
                     let mut slot = started.lock_or_recover();
                     if slot.stopped {
@@ -325,6 +581,7 @@ fn spawn_watcher_in_scope_with_startup_hook(
                     .as_ref()
                     .map(|root| root.join("tickets"));
                 let removal_freshness = resync.freshness.clone();
+                let observed_proof = proof.clone();
                 let mut watcher =
                     match notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
                         if let Ok(event) = &res
@@ -343,6 +600,12 @@ fn spawn_watcher_in_scope_with_startup_hook(
                                 removal_freshness.set_live(false);
                             }
                             let _ = rearm_tx.send(signal);
+                        }
+                        // A probe proves the stream; it is never a store change (HS2-190GDZ).
+                        if let Ok(event) = &res
+                            && observed_proof.observe(event)
+                        {
+                            return;
                         }
                         if is_access_event(&res) {
                             return;
@@ -400,7 +663,54 @@ fn spawn_watcher_in_scope_with_startup_hook(
                     }
                     slot.watcher = Some(watcher);
                 }
-                std::thread::sleep(STARTUP_RESYNC_DELAY);
+                // HS2-190GDZ: trust the stream only once it reports a probe written after
+                // its registration. Signals for changes made before the probe are queued
+                // by then, so the startup check below sees every replacement.
+                // While a registration is unproven the bridge polls the store. Once a probe
+                // goes unanswered, the bridge-backed index is trusted for misses after a full
+                // reconcile, so a lagging `fseventsd` delays native delivery without making
+                // the store look stale.
+                let bridge_until_proven = |unanswered: u32| {
+                    if unanswered != 1 {
+                        return;
+                    }
+                    if started.with_lock(|slot| slot.bridge.is_none()) {
+                        let bridge = new_bridge().ok();
+                        let mut slot = started.lock_or_recover();
+                        if slot.stopped {
+                            return;
+                        }
+                        slot.bridge = bridge;
+                    }
+                    request_resync(&tickets_dir, REARM_RESYNC);
+                };
+                let prove_registration = || {
+                    prove_native_stream(
+                        &proof,
+                        &started,
+                        &watch_dir,
+                        STREAM_PROBE_WAIT,
+                        &bridge_until_proven,
+                    )
+                };
+                let prove = |watched_dir: &mut bool| {
+                    let outcome = if *watched_dir {
+                        prove_registration()
+                    } else {
+                        ProofOutcome::Unwritable
+                    };
+                    match outcome {
+                        ProofOutcome::Proven => {}
+                        // Nothing to probe: give the stream the former fixed start-up delay.
+                        ProofOutcome::Unwritable => std::thread::sleep(STARTUP_RESYNC_DELAY),
+                        ProofOutcome::Unregistered => *watched_dir = false,
+                        ProofOutcome::Stopped => return false,
+                    }
+                    true
+                };
+                if !prove(&mut watched_dir) {
+                    return;
+                }
                 // A child may have disappeared and returned while the native stream
                 // started. Re-register its current path before trusting the index.
                 let changed_during_startup = rearm_rx.try_iter().fold(false, |changed, signal| {
@@ -435,11 +745,12 @@ fn spawn_watcher_in_scope_with_startup_hook(
                             root_watched = watched_dir;
                         }
                     }
+                    drop(slot);
+                    if watched_dir && !prove(&mut watched_dir) {
+                        return;
+                    }
                 }
-                if watched_dir && (changed_during_startup || missing_during_startup) {
-                    std::thread::sleep(STARTUP_RESYNC_DELAY);
-                }
-                // The native stream is live: retire the bridge and re-check once more.
+                // The native stream is proven: retire the bridge and re-check once more.
                 let bridge = started.with_lock(|slot| slot.bridge.take());
                 drop(bridge);
                 if watched_dir {
@@ -493,6 +804,26 @@ fn spawn_watcher_in_scope_with_startup_hook(
                         watched_dir = true;
                         if watch_dir == store_root {
                             root_watched = true;
+                        }
+                        drop(slot);
+                        // HS2-190GDZ: the index goes live only through the bridge or once the
+                        // new registration reports a probe; the resync covers earlier writes.
+                        let outcome = prove_registration();
+                        // The native stream now reports this directory: retire any bridge
+                        // that covered the wait. The resync covers writes it may have missed.
+                        let bridge = started.with_lock(|slot| slot.bridge.take());
+                        drop(bridge);
+                        match outcome {
+                            ProofOutcome::Stopped => return,
+                            ProofOutcome::Unregistered => {
+                                watched_dir = false;
+                                if watch_dir == store_root {
+                                    root_watched = false;
+                                }
+                                resync.freshness.set_live(false);
+                                continue;
+                            }
+                            ProofOutcome::Proven | ProofOutcome::Unwritable => {}
                         }
                         request_resync(&tickets_dir, REARM_RESYNC);
                     }
@@ -758,13 +1089,18 @@ impl RepositoryRefreshGate {
 struct RepositoryEventFilter {
     ignored: Vec<std::path::PathBuf>,
     git_dirs: Vec<std::path::PathBuf>,
+    /// HS2-2HZN2C: the last raw `ls-files` listing, so an unchanged one costs no further Git.
+    listing: Vec<u8>,
+    /// HS2-2HZN2C: whether `ignored` holds only entries an ignore pattern matches, which
+    /// is what makes them safe to exclude from the platform stream.
+    pattern_checked: bool,
 }
 
 impl RepositoryEventFilter {
     fn load(root: &FsPath) -> Self {
         let mut filter = Self {
-            ignored: Vec::new(),
             git_dirs: repository_git_dirs(root),
+            ..Self::default()
         };
         filter.refresh_ignored(root);
         filter
@@ -789,12 +1125,19 @@ impl RepositoryEventFilter {
         else {
             return;
         };
-        if !output.status.success() {
+        if !output.status.success() || output.stdout == self.listing {
             return;
         }
+        self.listing = output.stdout;
+        // HS2-2HZN2C: `--directory` also lists an untracked directory whose files all happen
+        // to be ignored (`.claude/` holding only `.claude/worktrees/`). No pattern ignores it,
+        // so a new file in it changes the status: keep only entries a pattern matches. If Git
+        // cannot answer, keep the listing (the filter's old behavior) and exclude nothing.
+        let checked = pattern_ignored_entries(root, &self.listing);
+        self.pattern_checked = checked.is_some();
+        let entries = checked.unwrap_or_else(|| self.listing.clone());
         let bases = path_spellings(root);
-        self.ignored = output
-            .stdout
+        self.ignored = entries
             .split(|byte| *byte == 0)
             .filter(|entry| !entry.is_empty())
             .map(|entry| {
@@ -821,8 +1164,17 @@ impl RepositoryEventFilter {
         event.paths.iter().any(|path| self.path_is_relevant(path))
     }
 
+    /// HS2-2HZN2C: the most specific ignored entry `path` lies in, if any (Git lists both
+    /// an untracked directory holding only ignored files and the ignored directory in it).
+    fn ignored_entry(&self, path: &FsPath) -> Option<&std::path::PathBuf> {
+        self.ignored
+            .iter()
+            .filter(|ignored| path.starts_with(ignored))
+            .max_by_key(|ignored| ignored.components().count())
+    }
+
     fn path_is_relevant(&self, path: &FsPath) -> bool {
-        if self.ignored.iter().any(|ignored| path.starts_with(ignored)) {
+        if self.ignored_entry(path).is_some() {
             return false;
         }
         for git_dir in &self.git_dirs {
@@ -892,6 +1244,165 @@ fn announce_repository_change(
     Some(changed)
 }
 
+/// HS2-2HZN2C: what a native repository monitor has done, for tests and measurements.
+#[derive(Debug, Default)]
+pub(crate) struct RepositoryMonitorProbe {
+    /// Every delivery the platform handed the monitor.
+    delivered: AtomicU64,
+    /// Streams started (the first one and each replacement).
+    streams: AtomicU64,
+    /// The directories the live stream leaves out.
+    excluded: Mutex<Vec<std::path::PathBuf>>,
+}
+
+impl RepositoryMonitorProbe {
+    #[cfg(test)]
+    pub(crate) fn delivered(&self) -> u64 {
+        self.delivered.load(Ordering::SeqCst)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn streams(&self) -> u64 {
+        self.streams.load(Ordering::SeqCst)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn excluded(&self) -> Vec<std::path::PathBuf> {
+        self.excluded.lock_or_recover().clone()
+    }
+}
+
+/// HS2-2HZN2C: the paths no exclusion may cover: Git directories (watched or inside the
+/// working tree) and the group registry with its ignored remote overlay, in every spelling.
+fn repository_protected_paths(
+    root: &FsPath,
+    git_dirs: &[std::path::PathBuf],
+) -> Vec<std::path::PathBuf> {
+    let mut protected = git_dirs.to_vec();
+    protected.extend(path_spellings(
+        &root.join(hotsheet_ticketing::groups::GROUP_REGISTRY_DIR),
+    ));
+    protected.extend(path_spellings(
+        &root.join(hotsheet_ticketing::groups::git_sync::GROUP_REMOTE_OVERLAY_FILE),
+    ));
+    protected
+}
+
+/// HS2-2HZN2C: the ignored directories the checkout's stream should leave out, in the
+/// spelling the platform reports (macOS `/private/var` for `/var`).
+fn desired_repository_exclusions(
+    root: &FsPath,
+    filter: &RepositoryEventFilter,
+    churn: &std::collections::HashMap<std::path::PathBuf, u64>,
+) -> Vec<std::path::PathBuf> {
+    if !filter.pattern_checked {
+        return Vec::new();
+    }
+    let reported_root = path_spellings(root)
+        .pop()
+        .unwrap_or_else(|| root.to_path_buf());
+    let candidates: Vec<std::path::PathBuf> = filter
+        .ignored
+        .iter()
+        .filter(|entry| entry.starts_with(&reported_root))
+        .cloned()
+        .collect();
+    crate::repository_watch_exclusions::select_exclusions(
+        &candidates,
+        &repository_protected_paths(root, &filter.git_dirs),
+        churn,
+        hotsheet_jobs::watch::MAX_EXCLUDED_PATHS,
+        FsPath::is_dir,
+    )
+}
+
+/// HS2-2HZN2C: the entries of a raw `ls-files -z` listing that one of the checkout's ignore
+/// patterns matches, in the same NUL-separated form; `None` when Git cannot answer.
+fn pattern_ignored_entries(root: &FsPath, listing: &[u8]) -> Option<Vec<u8>> {
+    use std::io::Write;
+    if listing.is_empty() {
+        return Some(Vec::new());
+    }
+    let mut child = hotsheet_ticketing::git::command()
+        .arg("--no-optional-locks")
+        .arg("-C")
+        .arg(root)
+        .args(["check-ignore", "--stdin", "-z"])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .ok()?;
+    let mut stdin = child.stdin.take()?;
+    let input = listing.to_vec();
+    // Written from its own thread so a large answer cannot fill the pipe while we write.
+    let writer = std::thread::spawn(move || stdin.write_all(&input));
+    let output = child.wait_with_output().ok()?;
+    let _ = writer.join();
+    // Exit status 1 means that nothing matched; anything else but 0 is an error.
+    match output.status.code() {
+        Some(0 | 1) => Some(output.stdout),
+        _ => None,
+    }
+}
+
+/// Start the checkout's stream over its working tree and any Git directory outside it,
+/// leaving out `excluded`. Returns the watcher and the exclusions it actually applies.
+fn start_repository_stream(
+    watch_root: &FsPath,
+    git_dirs: &[std::path::PathBuf],
+    excluded: &[std::path::PathBuf],
+    tx: &std::sync::mpsc::Sender<hotsheet_jobs::watch::Delivery>,
+) -> Result<(hotsheet_jobs::watch::PathWatcher, Vec<std::path::PathBuf>), hotsheet_jobs::watch::Error>
+{
+    use hotsheet_jobs::watch::{PathWatcher, RecursiveMode};
+    // A linked worktree keeps its HEAD, index and refs outside the working tree.
+    // HS2-654VBY: every directory is registered before the watcher starts once; a
+    // `watch` call per directory restarted the macOS event stream each time.
+    let roots = path_spellings(watch_root);
+    let mut outside: Vec<&std::path::Path> = Vec::new();
+    for git_dir in git_dirs {
+        if roots.iter().any(|root| git_dir.starts_with(root))
+            || !git_dir.is_dir()
+            || outside.contains(&git_dir.as_path())
+        {
+            continue;
+        }
+        outside.push(git_dir);
+    }
+    let mut paths = vec![(watch_root, RecursiveMode::Recursive)];
+    paths.extend(outside.iter().map(|dir| (*dir, RecursiveMode::Recursive)));
+    let excluded_refs: Vec<&FsPath> = excluded.iter().map(std::path::PathBuf::as_path).collect();
+    // HS2-P0EHD4: `PathWatcher` never delivers access events, so a read of a watched
+    // file (Linux inotify reports each open) does not re-read the repository.
+    let handler = || {
+        let tx = tx.clone();
+        move |result| {
+            let _ = tx.send(result);
+        }
+    };
+    let error = match PathWatcher::start_excluding(&paths, &excluded_refs, handler()) {
+        Ok(watcher) => return Ok((watcher, excluded.to_vec())),
+        Err(error) => error,
+    };
+    // One directory that cannot be watched must not cost the others: watch the working
+    // tree alone, as the per-directory registration did.
+    tracing::warn!(
+        checkout_root = %watch_root.display(),
+        %error,
+        "repository watcher could not watch an outside Git directory"
+    );
+    match PathWatcher::start_excluding(&paths[..1], &excluded_refs, handler()) {
+        Ok(watcher) => Ok((watcher, excluded.to_vec())),
+        Err(_) if !excluded.is_empty() => {
+            // HS2-2HZN2C: a platform that refuses the exclusions still gets a plain stream;
+            // the event filter drops ignored output as before.
+            PathWatcher::start(&paths[..1], handler()).map(|watcher| (watcher, Vec::new()))
+        }
+        Err(error) => Err(error),
+    }
+}
+
 fn run_native_repository_monitor(
     root: std::path::PathBuf,
     checkout_id: String,
@@ -899,60 +1410,66 @@ fn run_native_repository_monitor(
     event_log: Arc<Mutex<EventLog>>,
     stop: std::sync::mpsc::Receiver<()>,
 ) {
-    use hotsheet_jobs::watch::{PathWatcher, RecursiveMode};
+    run_native_repository_monitor_with(
+        root,
+        checkout_id,
+        events,
+        event_log,
+        stop,
+        true,
+        &RepositoryMonitorProbe::default(),
+    );
+}
 
+/// The native repository monitor; `exclude` turns the HS2-2HZN2C source exclusions on.
+pub(crate) fn run_native_repository_monitor_with(
+    root: std::path::PathBuf,
+    checkout_id: String,
+    events: broadcast::Sender<ChangeEvent>,
+    event_log: Arc<Mutex<EventLog>>,
+    stop: std::sync::mpsc::Receiver<()>,
+    exclude: bool,
+    probe: &RepositoryMonitorProbe,
+) {
+    type Started = Result<
+        (hotsheet_jobs::watch::PathWatcher, Vec<std::path::PathBuf>),
+        hotsheet_jobs::watch::Error,
+    >;
     let mut previous = git_repository_fingerprint(&root);
     let mut registry = group_registry_fingerprint(&root);
     let mut filter = RepositoryEventFilter::load(&root);
+    // HS2-2HZN2C: events dropped as ignored, by ignored entry, ranking exclusion candidates.
+    let mut churn: std::collections::HashMap<std::path::PathBuf, u64> =
+        std::collections::HashMap::new();
+    let wanted = if exclude {
+        desired_repository_exclusions(&root, &filter, &churn)
+    } else {
+        Vec::new()
+    };
     let (tx, rx) = std::sync::mpsc::channel();
     // Starting a native stream can take many seconds on a busy Mac (HS2-XAHR91), so it starts
     // on its own thread while this one keeps the old Git-status poll going as a bridge.
-    let (ready_tx, ready_rx) = std::sync::mpsc::channel();
-    let watch_root = root.clone();
-    let git_dirs = filter.git_dirs.clone();
-    std::thread::spawn(move || {
-        // A linked worktree keeps its HEAD, index and refs outside the working tree.
-        // HS2-654VBY: every directory is registered before the watcher starts once; a
-        // `watch` call per directory restarted the macOS event stream each time.
-        let roots = path_spellings(&watch_root);
-        let mut outside: Vec<&std::path::Path> = Vec::new();
-        for git_dir in &git_dirs {
-            if roots.iter().any(|root| git_dir.starts_with(root))
-                || !git_dir.is_dir()
-                || outside.contains(&git_dir.as_path())
-            {
-                continue;
-            }
-            outside.push(git_dir);
-        }
-        let mut paths = vec![(watch_root.as_path(), RecursiveMode::Recursive)];
-        paths.extend(outside.iter().map(|dir| (*dir, RecursiveMode::Recursive)));
-        // HS2-P0EHD4: `PathWatcher` never delivers access events, so a read of a watched
-        // file (Linux inotify reports each open) does not re-read the repository.
-        let handler = {
-            let tx = tx.clone();
-            move |result| {
-                let _ = tx.send(result);
-            }
-        };
-        let started = PathWatcher::start(&paths, handler).or_else(|error| {
-            // One directory that cannot be watched must not cost the others: watch the
-            // working tree alone, as the per-directory registration did.
-            tracing::warn!(
-                checkout_root = %watch_root.display(),
-                %error,
-                "repository watcher could not watch an outside Git directory"
-            );
-            PathWatcher::start(&paths[..1], move |result| {
-                let _ = tx.send(result);
-            })
+    let stream_git_dirs = filter.git_dirs.clone();
+    let spawn_start = |excluded: Vec<std::path::PathBuf>| {
+        let (ready_tx, ready_rx) = std::sync::mpsc::channel::<Started>();
+        let watch_root = root.clone();
+        let git_dirs = stream_git_dirs.clone();
+        let tx = tx.clone();
+        std::thread::spawn(move || {
+            // If the monitor already stopped, the send fails and the watcher is dropped.
+            let _ = ready_tx.send(start_repository_stream(
+                &watch_root,
+                &git_dirs,
+                &excluded,
+                &tx,
+            ));
         });
-        // If the monitor already stopped, the send fails and the watcher is dropped.
-        let _ = ready_tx.send(started);
-    });
-    let _watcher = loop {
+        ready_rx
+    };
+    let ready_rx = spawn_start(wanted);
+    let (mut watcher, mut excluded) = loop {
         match ready_rx.recv_timeout(REPOSITORY_FINGERPRINT_INTERVAL) {
-            Ok(Ok(watcher)) => break watcher,
+            Ok(Ok(started)) => break started,
             Ok(Err(error)) => {
                 tracing::warn!(
                     "native repository watcher for {} failed to start ({error}); falling back to Git status",
@@ -978,6 +1495,12 @@ fn run_native_repository_monitor(
             Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => return,
         }
     };
+    probe.streams.fetch_add(1, Ordering::SeqCst);
+    *probe.excluded.lock_or_recover() = excluded.clone();
+    // HS2-2HZN2C: a replacement stream with new exclusions, starting while the current one
+    // keeps reporting.
+    let mut replacement: Option<std::sync::mpsc::Receiver<Started>> = None;
+    let mut last_replacement: Option<Instant> = None;
 
     let mut gate = RepositoryRefreshGate::new();
     // Compare once the stream is live, covering the moments since the bridge's last read.
@@ -987,13 +1510,47 @@ fn run_native_repository_monitor(
         if stop.try_recv().is_ok() {
             return;
         }
+        if let Some(ready) = &replacement {
+            match ready.try_recv() {
+                Ok(Ok((next, next_excluded))) => {
+                    let old = std::mem::replace(&mut watcher, next);
+                    // Stopping a stream can take seconds on a busy Mac; never on this thread.
+                    std::thread::spawn(move || drop(old));
+                    excluded = next_excluded;
+                    probe.streams.fetch_add(1, Ordering::SeqCst);
+                    *probe.excluded.lock_or_recover() = excluded.clone();
+                    replacement = None;
+                    last_replacement = Some(Instant::now());
+                    // Read once more: a newly watched directory's changes went unreported.
+                    gate.note_event(Instant::now());
+                }
+                Ok(Err(error)) => {
+                    tracing::warn!(
+                        checkout_root = %root.display(),
+                        %error,
+                        "repository watcher kept its stream: the replacement did not start"
+                    );
+                    replacement = None;
+                    last_replacement = Some(Instant::now());
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => {}
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => replacement = None,
+            }
+        }
         match rx.recv_timeout(gate.wait(Instant::now())) {
             Ok(result) => {
+                probe.delivered.fetch_add(1, Ordering::Relaxed);
                 if touches_group_registry(&root, &result) {
                     registry_touched = true;
                     gate.note_event(Instant::now());
                 } else if filter.is_relevant(&result) {
                     gate.note_event(Instant::now());
+                } else if exclude && let Ok(event) = &result {
+                    for path in &event.paths {
+                        if let Some(entry) = filter.ignored_entry(path) {
+                            *churn.entry(entry.clone()).or_default() += 1;
+                        }
+                    }
                 }
                 continue;
             }
@@ -1008,11 +1565,24 @@ fn run_native_repository_monitor(
         if std::mem::take(&mut registry_touched) {
             announce_group_registry_change(&root, &mut registry, &checkout_id, &events, &event_log);
         }
-        let changed =
-            announce_repository_change(&root, &mut previous, &checkout_id, &events, &event_log);
-        if changed == Some(false) {
-            // Events without a status change are usually new ignored output: learn it.
-            filter.refresh_ignored(&root);
+        announce_repository_change(&root, &mut previous, &checkout_id, &events, &event_log);
+        // Events without a status change are usually new ignored output; a status change may
+        // be a `.gitignore` edit or a forced add that stops Git ignoring a directory. Either
+        // way, learn the ignored set again (HS2-2HZN2C; before, only the first case).
+        filter.refresh_ignored(&root);
+        if exclude && replacement.is_none() {
+            let desired = desired_repository_exclusions(&root, &filter, &churn);
+            let still_ignored =
+                |path: &FsPath| filter.ignored.iter().any(|entry| entry == path) || !path.exists();
+            if crate::repository_watch_exclusions::replacement_due(
+                &excluded,
+                &desired,
+                still_ignored,
+                last_replacement,
+                now,
+            ) {
+                replacement = Some(spawn_start(desired));
+            }
         }
     }
 }
@@ -1832,6 +2402,20 @@ mod watcher_tests {
         assert!(filter.is_relevant(&event(root.join("dist/bundle.js"))));
         filter.refresh_ignored(root);
         assert!(!filter.is_relevant(&event(root.join("dist/bundle.js"))));
+
+        // HS2-2HZN2C: Git lists `.claude/` as ignored while it holds only an ignored
+        // directory, but no pattern ignores it: a new file beside the ignored one counts.
+        std::fs::write(
+            root.join(".gitignore"),
+            "target/\ndist/\n.claude/worktrees/\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(root.join(".claude/worktrees/agent")).unwrap();
+        std::fs::write(root.join(".claude/worktrees/agent/file"), "x").unwrap();
+        filter.refresh_ignored(root);
+        assert!(filter.pattern_checked);
+        assert!(!filter.is_relevant(&event(root.join(".claude/worktrees/agent/file"))));
+        assert!(filter.is_relevant(&event(root.join(".claude/settings.json"))));
     }
 
     fn git(root: &std::path::Path, args: &[&str]) {
@@ -2116,13 +2700,17 @@ mod freshness_tests {
     // HS2-R6FZ54: macOS FSEvents may spend tens of seconds in a native watch()
     // registration even when this test has the full Nextest runner. Wait for the
     // observable rearm result instead of mistaking registration latency for a lost watch.
+    // HS2-190GDZ: a startup hook runs only after that registration, so it shares the bound.
+    fn native_deadline() -> Duration {
+        if cfg!(target_os = "macos") {
+            Duration::from_secs(120)
+        } else {
+            Duration::from_secs(30)
+        }
+    }
+
     fn wait_for_native_rearm(what: &str, mut done: impl FnMut() -> bool) {
-        let deadline = Instant::now()
-            + if cfg!(target_os = "macos") {
-                Duration::from_secs(120)
-            } else {
-                Duration::from_secs(30)
-            };
+        let deadline = Instant::now() + native_deadline();
         while !done() {
             assert!(Instant::now() < deadline, "timed out waiting for {what}");
             std::thread::sleep(Duration::from_millis(20));
@@ -2744,16 +3332,18 @@ mod freshness_tests {
             } else {
                 (None, Some(hook))
             };
-            let handle = super::spawn_watcher_in_scope_with_startup_hook(
+            let handle = super::spawn_watcher_in_scope_with_startup_hooks(
                 target,
                 WatcherBackend::Recommended,
                 scope,
-                None,
-                between_watch_and_identity,
-                after_children,
+                super::StartupHooks {
+                    after_watch_before_identity: between_watch_and_identity,
+                    after_children,
+                    ..Default::default()
+                },
             )
             .unwrap();
-            let (new_slug, new_id) = replaced.recv_timeout(Duration::from_secs(60)).unwrap();
+            let (new_slug, new_id) = replaced.recv_timeout(native_deadline()).unwrap();
             wait_for_native_rearm("startup replacement to reconcile", || {
                 entry.freshness.in_sync()
                     && entry
@@ -2807,16 +3397,18 @@ mod freshness_tests {
                 let new = create(&store, "replacement after missing child");
                 ready.send((new.slug, new.id)).unwrap();
             });
-            let handle = super::spawn_watcher_in_scope_with_startup_hook(
+            let handle = super::spawn_watcher_in_scope_with_startup_hooks(
                 target,
                 WatcherBackend::Recommended,
                 scope,
-                Some(before),
-                None,
-                Some(after),
+                super::StartupHooks {
+                    before_children: Some(before),
+                    after_children: Some(after),
+                    ..Default::default()
+                },
             )
             .unwrap();
-            let (new_slug, new_id) = replaced.recv_timeout(Duration::from_secs(60)).unwrap();
+            let (new_slug, new_id) = replaced.recv_timeout(native_deadline()).unwrap();
             wait_for_native_rearm("missing startup child to reconcile", || {
                 entry.freshness.in_sync()
                     && entry
@@ -2836,6 +3428,470 @@ mod freshness_tests {
             });
             drop(handle);
         }
+    }
+}
+
+#[cfg(test)]
+mod stream_proof_tests {
+    //! HS2-190GDZ: a native registration is trusted only after it reports a probe.
+    use super::{
+        NativeWatcherState, ProofOutcome, STREAM_PROBE_PREFIX, StreamProof, WatcherBackend,
+        WatcherSlot, prove_native_stream,
+    };
+    use crate::store_watch_scope::TicketsWatchScope;
+    use hotsheet_model::{Timestamp, Ulid};
+    use hotsheet_sync::LockExt;
+    use hotsheet_ticketing::{FsStore, NewTicket, StoreMetadata, ops};
+    use std::path::{Path, PathBuf};
+    use std::sync::{Arc, Mutex};
+    use std::time::{Duration, Instant};
+
+    fn probe_event(path: PathBuf) -> notify::Event {
+        notify::Event::new(notify::EventKind::Create(notify::event::CreateKind::File))
+            .add_path(path)
+    }
+
+    fn wait_for(what: &str, mut done: impl FnMut() -> bool) {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while !done() {
+            assert!(Instant::now() < deadline, "timed out waiting for {what}");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    }
+
+    /// The name of the `index`th probe written since the current registration began.
+    fn pending(proof: &StreamProof, index: usize) -> Option<PathBuf> {
+        proof
+            .state
+            .lock_or_recover()
+            .pending
+            .get(index)
+            .map(PathBuf::from)
+    }
+
+    #[test]
+    fn hs2_190gdz_a_reported_probe_proves_the_stream_and_is_not_a_store_change() {
+        let dir = tempfile::tempdir().unwrap();
+        let proof = Arc::new(StreamProof::default());
+        assert!(proof.begin());
+        let waiting = {
+            let proof = proof.clone();
+            let dir = dir.path().to_path_buf();
+            std::thread::spawn(move || proof.probe(&dir, Duration::from_secs(60)))
+        };
+        wait_for("the probe to be written", || pending(&proof, 0).is_some());
+        let name = pending(&proof, 0).unwrap();
+        assert!(name.to_str().unwrap().starts_with(STREAM_PROBE_PREFIX));
+        // A store change is not a probe and proves nothing.
+        assert!(!proof.observe(&probe_event(
+            dir.path().join("01ARZ3NDEKTSV4RRFFQ69G5FAV.md")
+        )));
+        // A probe another registration wrote is consumed but proves nothing either.
+        let foreign = dir
+            .path()
+            .join(format!("{STREAM_PROBE_PREFIX}1.999999.tmp"));
+        assert!(proof.observe(&probe_event(foreign)));
+        assert!(!proof.state.lock_or_recover().seen);
+        assert!(proof.observe(&probe_event(dir.path().join(&name))));
+        assert_eq!(waiting.join().unwrap(), Some(ProofOutcome::Proven));
+        // The probe file itself never outlives its write.
+        assert!(!dir.path().join(&name).exists());
+        // Once proven, a further probe returns at once without writing.
+        assert_eq!(
+            proof.probe(dir.path(), Duration::from_secs(60)),
+            Some(ProofOutcome::Proven)
+        );
+    }
+
+    #[test]
+    fn hs2_190gdz_a_probe_from_an_earlier_registration_does_not_prove_the_next() {
+        let dir = tempfile::tempdir().unwrap();
+        let proof = Arc::new(StreamProof::default());
+        assert!(proof.begin());
+        assert_eq!(proof.probe(dir.path(), Duration::from_millis(10)), None);
+        let stale = pending(&proof, 0).unwrap();
+        // The directory is registered again: the old probe arrives late.
+        assert!(proof.begin());
+        assert!(proof.observe(&probe_event(dir.path().join(&stale))));
+        assert!(!proof.state.lock_or_recover().seen);
+        let waiting = {
+            let proof = proof.clone();
+            let dir = dir.path().to_path_buf();
+            std::thread::spawn(move || proof.probe(&dir, Duration::from_secs(60)))
+        };
+        wait_for("the new probe to be written", || {
+            pending(&proof, 0).is_some()
+        });
+        let fresh = pending(&proof, 0).unwrap();
+        assert_ne!(fresh, stale);
+        assert!(proof.observe(&probe_event(dir.path().join(fresh))));
+        assert_eq!(waiting.join().unwrap(), Some(ProofOutcome::Proven));
+    }
+
+    #[test]
+    fn hs2_190gdz_dropping_the_handle_ends_a_proof_wait() {
+        let dir = tempfile::tempdir().unwrap();
+        let proof = Arc::new(StreamProof::default());
+        assert!(proof.begin());
+        let waiting = {
+            let proof = proof.clone();
+            let dir = dir.path().to_path_buf();
+            std::thread::spawn(move || proof.probe(&dir, Duration::from_secs(600)))
+        };
+        wait_for("the probe to be written", || pending(&proof, 0).is_some());
+        proof.stop();
+        assert_eq!(waiting.join().unwrap(), Some(ProofOutcome::Stopped));
+        // A stopped proof neither begins again nor writes another probe.
+        assert!(!proof.begin());
+        assert_eq!(
+            proof.probe(dir.path(), Duration::from_secs(600)),
+            Some(ProofOutcome::Stopped)
+        );
+    }
+
+    #[test]
+    fn hs2_190gdz_a_directory_that_takes_no_probe_is_unwritable() {
+        let dir = tempfile::tempdir().unwrap();
+        let proof = StreamProof::default();
+        assert!(proof.begin());
+        assert_eq!(
+            proof.probe(&dir.path().join("missing"), Duration::from_secs(600)),
+            Some(ProofOutcome::Unwritable)
+        );
+    }
+
+    #[test]
+    fn hs2_190gdz_the_simulated_busy_stream_drops_only_the_requested_probes() {
+        let dir = tempfile::tempdir().unwrap();
+        let proof = StreamProof::default();
+        proof.state.lock_or_recover().drop_probes = 1;
+        assert!(proof.begin());
+        assert_eq!(proof.probe(dir.path(), Duration::from_millis(1)), None);
+        let first = dir.path().join(pending(&proof, 0).unwrap());
+        // Every event of the dropped probe is ignored, not just the first.
+        assert!(proof.observe(&probe_event(first.clone())));
+        assert!(proof.observe(&probe_event(first)));
+        assert!(!proof.state.lock_or_recover().seen);
+        assert_eq!(proof.probe(dir.path(), Duration::from_millis(1)), None);
+        let second = dir.path().join(pending(&proof, 1).unwrap());
+        assert!(proof.observe(&probe_event(second)));
+        assert!(proof.state.lock_or_recover().seen);
+    }
+
+    /// Records registrations and, while armed, reports each probe as soon as it is written.
+    struct FakeWatcher {
+        calls: Arc<Mutex<Vec<String>>>,
+        fail_watch: bool,
+    }
+
+    impl notify::Watcher for FakeWatcher {
+        fn new<F: notify::EventHandler>(_: F, _: notify::Config) -> notify::Result<Self> {
+            unreachable!("constructed directly")
+        }
+        fn watch(&mut self, path: &Path, _: notify::RecursiveMode) -> notify::Result<()> {
+            self.calls
+                .lock()
+                .unwrap()
+                .push(format!("watch {}", path.display()));
+            if self.fail_watch {
+                return Err(notify::Error::path_not_found());
+            }
+            Ok(())
+        }
+        fn unwatch(&mut self, path: &Path) -> notify::Result<()> {
+            self.calls
+                .lock()
+                .unwrap()
+                .push(format!("unwatch {}", path.display()));
+            Ok(())
+        }
+        fn kind() -> notify::WatcherKind {
+            notify::WatcherKind::NullWatcher
+        }
+    }
+
+    struct FakeSlot {
+        watcher: Option<FakeWatcher>,
+        stopped: bool,
+    }
+
+    impl WatcherSlot<FakeWatcher> for FakeSlot {
+        fn live_watcher(&mut self) -> Option<&mut FakeWatcher> {
+            if self.stopped {
+                return None;
+            }
+            self.watcher.as_mut()
+        }
+    }
+
+    fn fake_slot(fail_watch: bool) -> (Mutex<FakeSlot>, Arc<Mutex<Vec<String>>>) {
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let slot = Mutex::new(FakeSlot {
+            watcher: Some(FakeWatcher {
+                calls: calls.clone(),
+                fail_watch,
+            }),
+            stopped: false,
+        });
+        (slot, calls)
+    }
+
+    #[test]
+    fn hs2_190gdz_unanswered_probes_register_the_directory_again() {
+        let dir = tempfile::tempdir().unwrap();
+        let proof = Arc::new(StreamProof::default());
+        let (slot, calls) = fake_slot(false);
+        let slot = Arc::new(slot);
+        // The stream answers only once the directory has been registered again, as a
+        // registration that came up dead under a busy fseventsd would.
+        let answering = {
+            let proof = proof.clone();
+            let calls = calls.clone();
+            let dir = dir.path().to_path_buf();
+            std::thread::spawn(move || {
+                wait_for("the directory to be registered again", || {
+                    calls.lock().unwrap().len() >= 2
+                });
+                // Report the newest probe until one lands in the current registration;
+                // another re-registration may race a report and void it.
+                wait_for("a probe of the new registration to prove it", || {
+                    let newest = proof.state.lock_or_recover().pending.last().cloned();
+                    if let Some(name) = newest {
+                        proof.observe(&probe_event(dir.join(name)));
+                    }
+                    proof.state.lock_or_recover().seen
+                });
+            })
+        };
+        let mut unanswered = Vec::new();
+        let outcome = prove_native_stream(
+            &proof,
+            &*slot,
+            dir.path(),
+            Duration::from_millis(1),
+            |count| unanswered.push(count),
+        );
+        answering.join().unwrap();
+        assert_eq!(outcome, ProofOutcome::Proven);
+        // Every unanswered probe was reported in order, and re-registration came in
+        // unwatch/watch pairs, one per two unanswered probes.
+        assert!(unanswered.len() >= 2);
+        assert!(unanswered.iter().copied().eq(1..=unanswered.len() as u32));
+        let display = dir.path().display();
+        let calls = calls.lock().unwrap();
+        assert_eq!(calls.len(), unanswered.len() / 2 * 2);
+        for pair in calls.chunks(2) {
+            assert_eq!(
+                pair,
+                [format!("unwatch {display}"), format!("watch {display}")]
+            );
+        }
+    }
+
+    #[test]
+    fn hs2_190gdz_a_failed_registration_or_a_dropped_handle_ends_the_proof() {
+        let dir = tempfile::tempdir().unwrap();
+        let (failing, _) = fake_slot(true);
+        assert_eq!(
+            prove_native_stream(
+                &StreamProof::default(),
+                &failing,
+                dir.path(),
+                Duration::from_millis(1),
+                |_| {}
+            ),
+            ProofOutcome::Unregistered
+        );
+        let (dropped, calls) = fake_slot(false);
+        dropped.lock().unwrap().stopped = true;
+        assert_eq!(
+            prove_native_stream(
+                &StreamProof::default(),
+                &dropped,
+                dir.path(),
+                Duration::from_millis(1),
+                |_| {}
+            ),
+            ProofOutcome::Stopped
+        );
+        assert!(calls.lock().unwrap().is_empty());
+        // The production slot refuses a stopped watcher the same way.
+        let mut state = NativeWatcherState {
+            stopped: true,
+            ..Default::default()
+        };
+        assert!(state.live_watcher().is_none());
+    }
+
+    fn create(store: &FsStore, title: &str) -> hotsheet_model::Ticket {
+        ops::create(
+            store,
+            Ulid::new(),
+            "HS",
+            Timestamp::new("2026-11-27T00:00:00Z"),
+            NewTicket {
+                title: title.into(),
+                category: "task".into(),
+                ..Default::default()
+            },
+        )
+        .unwrap()
+    }
+
+    fn native_deadline() -> Duration {
+        if cfg!(target_os = "macos") {
+            Duration::from_secs(120)
+        } else {
+            Duration::from_secs(30)
+        }
+    }
+
+    fn wait_for_native(what: &str, mut done: impl FnMut() -> bool) {
+        let deadline = Instant::now() + native_deadline();
+        while !done() {
+            assert!(Instant::now() < deadline, "timed out waiting for {what}");
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    }
+
+    /// Walks external writes landing before, during and after the native registration and
+    /// after its proof, against a stream that reports at once, one that misses its first
+    /// probe, and one that misses two and is registered again (HS2-190GDZ).
+    #[test]
+    fn hs2_190gdz_writes_around_an_unproven_registration_are_indexed() {
+        for dropped_probes in [0, 1, 2] {
+            let parent = tempfile::tempdir().unwrap();
+            let root = parent.path().join("store");
+            let store = FsStore::init(&root, &StoreMetadata::new("HS")).unwrap();
+            let state = crate::AppState::new(store, "secret".into()).unwrap();
+            let target = super::default_watch_target(&state);
+            let entry = target.entry.clone();
+            let scope = Arc::new(TicketsWatchScope::for_store(&root));
+            let written = Arc::new(Mutex::new(Vec::new()));
+            let hook = |title: &'static str| -> Option<super::StartupHook> {
+                let root = root.clone();
+                let written = written.clone();
+                Some(Box::new(move || {
+                    let store = FsStore::open(&root).unwrap();
+                    written.lock().unwrap().push(create(&store, title));
+                }))
+            };
+            let handle = super::spawn_watcher_in_scope_with_startup_hooks(
+                target,
+                WatcherBackend::Recommended,
+                scope,
+                super::StartupHooks {
+                    before_children: hook("before registration"),
+                    after_watch_before_identity: hook("during registration"),
+                    after_children: hook("before the proof"),
+                    dropped_probes,
+                },
+            )
+            .unwrap();
+            let indexed = |ticket: &hotsheet_model::Ticket| {
+                entry
+                    .index
+                    .lock()
+                    .unwrap()
+                    .slug_candidates(&ticket.slug)
+                    .unwrap()
+                    == vec![ticket.id]
+            };
+            wait_for_native(
+                &format!("the proven stream to go live (dropped_probes={dropped_probes})"),
+                // A proven stream retires the bridge that covered its unanswered probes.
+                || {
+                    entry.freshness.in_sync()
+                        && written.lock().unwrap().len() == 3
+                        && !handle.native_bridge_held()
+                },
+            );
+            for ticket in written.lock().unwrap().iter() {
+                assert!(indexed(ticket), "{} was lost", ticket.title);
+            }
+            let after = create(&FsStore::open(&root).unwrap(), "after the proof");
+            wait_for_native(
+                &format!(
+                    "the proven stream to report a later write (dropped_probes={dropped_probes})"
+                ),
+                || indexed(&after),
+            );
+            drop(handle);
+        }
+    }
+
+    /// A registration that never reports a probe (an `fseventsd` backlog) is covered by
+    /// the polling bridge: the index goes live through it after a full reconcile, indexes
+    /// later writes, and keeps the bridge until a probe arrives (HS2-190GDZ).
+    #[test]
+    fn hs2_190gdz_an_unproven_stream_goes_live_through_the_bridge() {
+        let parent = tempfile::tempdir().unwrap();
+        let root = parent.path().join("store");
+        let store = FsStore::init(&root, &StoreMetadata::new("HS")).unwrap();
+        let state = crate::AppState::new(store, "secret".into()).unwrap();
+        let target = super::default_watch_target(&state);
+        let entry = target.entry.clone();
+        let scope = Arc::new(TicketsWatchScope::for_store(&root));
+        let written = Arc::new(Mutex::new(None));
+        let hook_root = root.clone();
+        let hook_written = written.clone();
+        let handle = super::spawn_watcher_in_scope_with_startup_hooks(
+            target,
+            WatcherBackend::Recommended,
+            scope,
+            super::StartupHooks {
+                after_children: Some(Box::new(move || {
+                    let store = FsStore::open(&hook_root).unwrap();
+                    *hook_written.lock().unwrap() = Some(create(&store, "before going live"));
+                })),
+                dropped_probes: usize::MAX,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let indexed = |ticket: &hotsheet_model::Ticket| {
+            entry
+                .index
+                .lock()
+                .unwrap()
+                .slug_candidates(&ticket.slug)
+                .unwrap()
+                == vec![ticket.id]
+        };
+        wait_for_native("the bridged index to go live", || {
+            entry.freshness.in_sync() && written.lock().unwrap().as_ref().is_some_and(indexed)
+        });
+        assert!(
+            handle.native_bridge_held(),
+            "an unproven stream keeps its bridge"
+        );
+        let later = create(&FsStore::open(&root).unwrap(), "while unproven");
+        wait_for_native("the bridge to index a later write", || indexed(&later));
+        assert!(handle.native_bridge_held());
+
+        // The bridge follows the path: a moved store must not read as deleted tickets. The
+        // index stops being trusted while the store is away and reconciles on its return.
+        let mut changes = state.events.subscribe();
+        std::fs::rename(&root, parent.path().join("away")).unwrap();
+        wait_for_native("the moved store to be marked out of sync", || {
+            !entry.freshness.in_sync()
+        });
+        std::fs::rename(parent.path().join("away"), &root).unwrap();
+        let first = written.lock().unwrap().clone().unwrap();
+        wait_for_native("the returned store to reconcile through the bridge", || {
+            entry.freshness.in_sync() && indexed(&first) && indexed(&later)
+        });
+        let mut deleted = Vec::new();
+        while let Ok(event) = changes.try_recv() {
+            if event.kind == "deleted" {
+                deleted.push(event.id);
+            }
+        }
+        assert!(
+            deleted.is_empty(),
+            "a moved store reported deletions: {deleted:?}"
+        );
+        drop(handle);
     }
 }
 

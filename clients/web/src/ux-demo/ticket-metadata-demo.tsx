@@ -4,6 +4,8 @@ import { createScope } from 'kerfjs/scope';
 
 import type { MediaAnnotation, StartedPhase } from '../api';
 import {
+  type AttachmentLabelConflict,
+  attachmentLabelConflictFor,
   type AttachmentLabelEditing,
   attachmentLabelEditingDraft,
   attachmentLabelEditingKey,
@@ -392,13 +394,32 @@ export function regroupAttachmentDemo(id: string, destinationBatch?: string) {
       : item,
   );
 }
+/** A batch whose unsaved label overlaps a newer label, shown with the shared conflict card (HS2-9DQXGY). */
+const attachmentConflictDemoItems = signal<TicketAttachmentItem[]>([
+  { id: 'conflict-log', name: 'safari-console.log', batch_id: 'conflict', batch_label: 'Repro on WebKit' },
+]);
+/** The seeded conflict: the recovery copy and the newer label both rewrote the same words. */
+export const attachmentDemoLabelConflict = signal<AttachmentLabelConflict | undefined>({
+  scope: INSPECTOR_ATTACHMENT_LABEL_SCOPE,
+  key: 'conflict',
+  draftKey: ticketDraftKey('ux-demo', 'ticket-attachments-demo', 'attachment_label', 'conflict'),
+  ids: ['conflict-log'],
+  metadata: { batch_id: 'conflict' },
+  base: 'Repro',
+  mine: 'Repro on Safari 17',
+  theirs: 'Repro on WebKit',
+  resolution: 'Repro on Safari 17',
+});
 export function renameAttachmentDemoBatch(batchId: string, label: string) {
-  const nextBatchId = batchId || browserRandomId();
-  attachmentDemoItems.value = attachmentDemoItems.value.map((item) =>
-    (item.batch_id ?? '') === batchId
-      ? { ...item, batch_id: nextBatchId, batch_label: label.trim() || undefined }
-      : item,
-  );
+  const nextBatchId = batchId || browserRandomId(),
+    rename = (items: TicketAttachmentItem[]) =>
+      items.map((item) =>
+        (item.batch_id ?? '') === batchId
+          ? { ...item, batch_id: nextBatchId, batch_label: label.trim() || undefined }
+          : item,
+      );
+  attachmentDemoItems.value = rename(attachmentDemoItems.value);
+  attachmentConflictDemoItems.value = rename(attachmentConflictDemoItems.value);
 }
 /**
  * The demo composes the production label editor (HS2-0QQHSZ) over its fixture: the same controlled
@@ -413,6 +434,7 @@ export const attachmentDemoLabelEditor = createAttachmentLabelEditor({
     renameAttachmentDemoBatch(edit.metadata?.batch_id ?? '', label);
     return Promise.resolve(true);
   },
+  conflict: attachmentDemoLabelConflict,
 });
 const appendOnlyAttachmentDemoItems: TicketAttachmentItem[] = [
   { id: 'gh-trace', name: 'trace.log', url: 'data:text/plain,trace', batch_id: 'gh', batch_label: 'Repro' },
@@ -451,6 +473,21 @@ export function TicketAttachmentsDemo() {
         {menu && menu.origin !== 'gallery' && (
           <AttachmentContextMenu x={menu.x} y={menu.y} kind={menu.kind} hostActionsAvailable={!menu.remote} />
         )}
+      </CatalogExample>
+      <CatalogExample
+        label="Label Conflict"
+        note="An unsaved label edit overlaps a newer label: the batch keeps both versions until one is chosen."
+        viewport={{ width: 'compact', frame: 'solid', surface: 'default', overflow: 'hidden', shadow: true }}
+        rootAttributes={{ 'data-attachment-label-conflict-demo': '' }}
+      >
+        <TicketAttachments
+          attachments={attachmentConflictDemoItems.value}
+          labelConflict={attachmentLabelConflictFor(
+            attachmentDemoLabelConflict.value,
+            INSPECTOR_ATTACHMENT_LABEL_SCOPE,
+            undefined,
+          )}
+        />
       </CatalogExample>
       <CatalogExample
         label="Remote Device"

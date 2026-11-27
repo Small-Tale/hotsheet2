@@ -69,6 +69,10 @@ notify = "6"
 # HS2-N1QDZW: macOS waiters register every path before one event-stream start, which
 # needs notify 8's batched path changes. Linux and Windows stay on notify 6.
 notify-batched = { package = "notify", version = "8.2.1" }
+# HS2-2HZN2C: the repository watcher creates its own FSEvents stream to set exclusion paths,
+# which notify does not expose. These are the versions notify 8.2.1 already builds.
+objc2-core-foundation = { version = "0.3.2", default-features = false, features = ["std", "CFArray", "CFString", "CFRunLoop", "CFDate"] }
+objc2-core-services = { version = "0.3.2", default-features = false, features = ["std", "libc", "FSEvents"] }
 toml = "0.8"
 # Format-preserving edits of user TOML configs (HS2-3MH5FH); the version `toml` 0.8 locks.
 toml_edit = "0.22"

@@ -1182,6 +1182,8 @@ dependencies = [
  "libc",
  "notify 6.1.1",
  "notify 8.2.1",
+ "objc2-core-foundation",
+ "objc2-core-services",
  "serde",
  "serde_json",
  "tempfile",

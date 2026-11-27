@@ -610,7 +610,7 @@ test('labels converted demo specimens through Kerf CatalogExample, not app-owned
     ['ticket-board-column', 1],
     ['ticket-search-field', 6],
     ['ticket-code-review', 7], // HS2-MCGCPQ adds the follow-up link action examples
-    ['ticket-attachments', 6],
+    ['ticket-attachments', 7],
     ['attachment-gallery', 1],
     ['ticket-info-panel', 2],
     ['list', 3],
@@ -6364,6 +6364,20 @@ test('keeps a demo attachment label edit open across a late catalog rerender (HS
   await editor.press('Escape');
   await expect(first.getByRole('button', { name: /Brian · Round 1 · Problem evidence/ })).toBeFocused();
   await expect(first).not.toHaveAttribute('data-editing-label', /.*/);
+});
+
+test('resolves the seeded label conflict in the TicketAttachments demo (HS2-9DQXGY)', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/ux-demo?component=ticket-attachments');
+  const example = page.getByRole('region', { name: 'Label Conflict', exact: true }),
+    card = example.locator('[data-component="ticket-field-conflict"]');
+  await expect(card).toContainText('Resolve attachment label conflict');
+  await expect(card).toContainText('Repro on WebKit');
+  await expect(card).toContainText('Repro on Safari 17');
+  await card.getByRole('textbox', { name: 'Merged attachment label' }).fill('Repro on Safari 17 and WebKit');
+  await card.getByRole('button', { name: 'Apply Merged Value' }).click();
+  await expect(card).toHaveCount(0);
+  await expect(example.getByRole('heading', { level: 3 })).toHaveText('Repro on Safari 17 and WebKit');
 });
 
 test('shows append-only and unsupported attachment variants in the TicketAttachments demo (HS2-HSA64D)', async ({

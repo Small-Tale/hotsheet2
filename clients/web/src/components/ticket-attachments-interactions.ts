@@ -14,6 +14,7 @@ const GROUP_DROP_TARGETS = '[data-attachment-group-drop-target], [data-attachmen
 /** The batch heading Kerf ListHeader renders for an editable batch (HS2-K9HSXZ). */
 const BATCH_TITLE = '[data-attachment-batch-title]';
 const LABEL_FIELD = ATTACHMENTS_AND_GALLERY_TARGETS.attachmentBatchLabelField.selector;
+const LABEL_CONFLICT_FIELD = ATTACHMENTS_AND_GALLERY_TARGETS.attachmentLabelConflictResolutionField.selector;
 
 /**
  * Side effects for TicketAttachments' add, drop, batch-label, purpose, and regroup gestures (HS2-1KM6MB).
@@ -88,8 +89,21 @@ export function wireTicketAttachmentActions(root: HTMLElement, bindings: TicketA
     }),
   );
   const beginLabelEdit = (target: Element) => {
+    // Read the batch before begin: opening the editor rerenders the heading and detaches `target`.
+    const key = target.closest<HTMLElement>('[data-attachment-batch-key]')?.dataset.attachmentBatchKey,
+      surface = target.closest<HTMLElement>('[data-component="ticket-attachments"]');
     const input = labelEditor.begin(target);
-    if (!input) return;
+    if (!input) {
+      // An unmergeable recovery copy opens the batch's conflict card instead of the editor; focus its
+      // merged value once it renders (HS2-9DQXGY).
+      if (key !== undefined && surface)
+        requestAnimationFrame(() => {
+          surface
+            .querySelector<HTMLElement>(`[data-attachment-batch-key="${CSS.escape(key)}"] ${LABEL_CONFLICT_FIELD}`)
+            ?.focus();
+        });
+      return;
+    }
     queueMicrotask(() => {
       input.focus();
       input.select();
@@ -97,6 +111,28 @@ export function wireTicketAttachmentActions(root: HTMLElement, bindings: TicketA
   };
   // The batch heading's Edit action opens the label editor; double-clicking the heading itself stays a
   // shortcut (HS2-K9HSXZ). Repeating either gesture keeps the open edit and its draft.
+  // The label's conflict card (HS2-9DQXGY): the merged value is coalesced app state, and the two
+  // resolutions settle the kept recovery copy.
+  lifetime.add(
+    delegate(root, 'input', LABEL_CONFLICT_FIELD, (_event, target) => {
+      labelEditor.conflictInput(target as HTMLTextAreaElement);
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'focusout', LABEL_CONFLICT_FIELD, () => {
+      labelEditor.flushConflictInput();
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'click', ATTACHMENTS_AND_GALLERY_ACTIONS.acceptRemoteAttachmentLabel.selector, () => {
+      labelEditor.acceptTheirs();
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'click', ATTACHMENTS_AND_GALLERY_ACTIONS.applyAttachmentLabelMerge.selector, () => {
+      void labelEditor.applyMerge();
+    }),
+  );
   lifetime.add(
     delegate(root, 'click', ATTACHMENTS_AND_GALLERY_ACTIONS.editAttachmentBatchLabel.selector, (_event, target) => {
       beginLabelEdit(target);

@@ -184,8 +184,8 @@ runtime — uses its own platform-native watcher (FSEvents on macOS), started on
 so opening a project never waits for the OS to start the stream (HS2-P3SSGR). A native stream
 drops changes made while it is still starting, and starting it can take seconds on a busy macOS
 machine, so a short-lived 250ms poller bridges that window: the store is re-checked when the bridge
-starts, the bridge is dropped about 1.5s after the native stream is live, and the store is re-checked
-once more. Each re-check processes only ticket files whose bytes differ from the index. The bridge compares file
+starts, the bridge is dropped once the native stream has proven it delivers (below), and the store is
+re-checked once more. Each re-check processes only ticket files whose bytes differ from the index. The bridge compares file
 contents, not just mtimes, because notify's poller records mtimes in whole seconds and would otherwise
 miss an edit made in the same second as its previous scan until the native stream was up (HS2-XAHR91). That start-up
 gap, not a second stream, is what made the old macOS registered-store test fail (HS2-SG1BKJ); the
@@ -222,6 +222,58 @@ The parent is registered before its child watches. During startup, a missing chi
 parent monitor running, and a directory identity sampled before and after child registration
 detects replacement during that call and triggers a fresh child registration
 and full reconcile before the watcher becomes live.
+
+**A native registration is trusted only once it reports a probe (HS2-190GDZ).** On a busy macOS
+machine (heavy file churn keeping `fseventsd` behind) a freshly started or re-armed FSEvents stream
+can return from registration and then report nothing under `tickets/`, with no dropped-event flag,
+so a write landing after the reconcile was lost. A fixed wait cannot tell such a stream from a
+live one. After every registration (startup, a startup replacement, and every re-arm) the watcher
+creates and deletes an empty probe file, `.hotsheet-watch-probe.<pid>.<n>.tmp`, in the watched
+directory and waits for the stream to report it. Native streams deliver in order, so a reported probe
+proves every later write will be reported and every re-arm signal raised before it has arrived.
+Only then is the bridge retired and the full reconcile requested that makes the index live. An
+unanswered probe is retried after 1 s, doubling to at most 30 s, and every second unanswered probe
+registers the directory again, since a dead registration may never recover. Under a deep
+`fseventsd` backlog no probe may arrive for minutes. The first unanswered probe therefore starts
+the 250ms bridge (or keeps the startup bridge), and a full reconcile makes the bridge-backed index
+live. The bridge then sees every write within one scan, like the native stream's own delivery
+latency. Once a probe finally arrives, the bridge is retired and the store is reconciled again.
+The bridge polls only while a registration is unproven; an idle store with a proven stream is not
+polled. The bridge follows the `tickets/` path, so while the store root is missing (moved away) it
+drops its events instead of reporting every ticket deleted, and marks the index out of sync. When
+the root returns, it requests the full reconcile, as the native re-arm does. Probe events never reach
+the watch loop. Probe names match the store's `.*.tmp` staged-write ignore pattern, and the ticket
+listing skips plain files directly under `tickets/`. A store that cannot take a probe (read-only)
+falls back to the former 1.5 s start-up wait. On Linux and Windows the probe is reported at once,
+so startup no longer waits a fixed delay there either.
+
+**The checkout's repository watcher leaves ignored build trees out at the source (HS2-2HZN2C).**
+Separate from the store watcher, each open checkout has a repository monitor (`docs/06-clients.md`,
+HS2-4S9ENS) whose stream covers the whole working tree. FSEvents streams are recursive, and notify
+filters only in its own callback, so every write under `target/`, `node_modules/` or an agent
+worktree's `target/` was routed by `fseventsd` to the server and dropped there. That kept
+`fseventsd` near 100% CPU and the server around a third of a core on a busy development Mac. On
+macOS the repository stream is now created directly (`hotsheet_jobs::watch::PathWatcher::start_excluding`)
+with `FSEventStreamSetExclusionPaths`, so the file-event service drops those events itself. A stream
+takes at most eight exclusions. They are chosen from the ignored directories Git reports
+(`git ls-files --others --ignored --directory`) inside the working tree and confirmed by
+`git check-ignore`: Git also lists an untracked directory whose files all happen to be ignored
+(`.claude/` holding only `.claude/worktrees/`), and a new file there must still count, so the event
+filter and the exclusions keep only entries an ignore pattern matches. Both Git reads are skipped
+while the listing is unchanged. An exclusion is never one that is or contains
+a watched Git directory or the group registry, ranked by events the filter has dropped so far, then
+known heavy output names (`target`, `node_modules`, `worktrees`, `dist`, `build`, ...), then the
+shallowest path. An excluded directory's own creation and removal are still reported to its parent;
+nothing inside it is. The ignored set is re-read after every status read. When the pick changes, a
+replacement stream starts on a helper thread while the current one keeps reporting, the old one is
+stopped off-thread, and the status is read once more. An exclusion Git no longer ignores (a
+`.gitignore` edit or a forced add) is dropped at once; a new ignored tree (a first build) is added
+at once; any other swap waits 30 s after the last replacement, so churn alternating among more than
+eight trees cannot restart the stream often. The exclusions are paths, so they survive the checkout
+root being removed and recreated. Linux and Windows have no exclusion API here: they keep notify's
+watcher and the event filter, and Linux inotify still watches each directory under ignored trees.
+The store watcher's stream over a store's parent directory (HS2-R6FZ54) is a separate source of
+the same cost (HS2-AZFCB6).
 
 On change:
 

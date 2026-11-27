@@ -50,6 +50,7 @@ mod provider_overlay;
 pub mod provider_write_behind;
 pub mod remote_auth;
 pub mod repository_browser;
+mod repository_watch_exclusions;
 mod request_timing;
 mod routes;
 pub mod source_revision;
