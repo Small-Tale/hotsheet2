@@ -43,100 +43,22 @@
       "rationale": "Pending adoption HS2-CR912H: QuickTicketComposer still renders a raw wa-dialog and sets its ::part(dialog) viewport height and pointer events and its ::part(body) padding. Kerf DialogSurface already exposes preferred width, viewport maximum, and content layout, so this is app adoption work rather than a Kerf gap; the exception goes when HS2-CR912H moves the shell to DialogSurface."
     },
     {
-      "id": "intentional-nested-inset-attachment-gallery",
-      "rules": ["KUI-L004"],
-      "target": "src/components/attachment-gallery.tsx",
-      "rationale": "Reviewed HS2-M6B8AD: design: attachment-gallery__annotation-label, attachment-gallery__selected-note are tinted label and note surfaces with their own background that carry their own padding over the padded gallery stage. Upstream KF-A9H745 would let the app declare these inset surfaces instead of a per-file exception."
-    },
-    {
-      "id": "intentional-nested-inset-markdown-editor",
-      "rules": ["KUI-L004"],
-      "target": "src/components/markdown-editor.tsx",
-      "rationale": "Reviewed HS2-M6B8AD: design: markdown-editor__source, markdown-editor__preview are the embedded editor's source and preview panes; each supplies its own text inset inside the padded editor frame. Upstream KF-A9H745 would let the app declare these inset surfaces instead of a per-file exception."
-    },
-    {
-      "id": "intentional-nested-inset-quick-ticket-composer",
-      "rules": ["KUI-L004"],
-      "target": "src/components/quick-ticket-composer.tsx",
-      "rationale": "Reviewed HS2-M6B8AD: design: quick-ticket-composer__attachment is a tinted attachment chip that carries its own padding inside the padded attachments group. Upstream KF-A9H745 would let the app declare these inset surfaces instead of a per-file exception."
-    },
-    {
       "id": "intentional-nested-inset-terminal-dashboard",
       "rules": ["KUI-L004"],
       "target": "src/components/terminal-dashboard.tsx",
-      "rationale": "Reviewed HS2-M6B8AD: design: workspace-chat-tile__preview-surface, workspace-chat-tile__preview-icon are the chat tile's preview surface and its tinted icon tile, each a deliberate inset surface inside the padded dashboard tile. Upstream KF-A9H745 would let the app declare these inset surfaces instead of a per-file exception."
-    },
-    {
-      "id": "intentional-nested-inset-ticket-code-review",
-      "rules": ["KUI-L004"],
-      "target": "src/components/ticket-code-review.tsx",
-      "rationale": "Reviewed HS2-M6B8AD: design: ticket-code-review__commit-sha, ticket-code-review__compare-label are tinted inline badges that carry their own padding inside the padded commit summary. Upstream KF-A9H745 would let the app declare these inset surfaces instead of a per-file exception."
-    },
-    {
-      "id": "intentional-nested-inset-halted-session-question",
-      "rules": ["KUI-L004"],
-      "target": "src/components/halted-session-popup.tsx",
-      "rationale": "Reviewed HS2-SWY32A: design: halted-session-popup__free-text is a bordered text field that supplies its own input inset inside the padded question group; it is visible and intentional in wide and phone captures. Upstream KF-A9H745 would let the app declare these inset surfaces instead of a per-file exception."
-    },
-    {
-      "id": "state-modifier-classes-ai-conversation",
-      "rules": ["KUI-L008"],
-      "target": "src/components/ai-conversation.tsx",
-      "rationale": "Reviewed HS2-M6B8AD: the dynamic class expression only composes this component's own app-owned base class with its state or variant modifier (BEM `--state`) or forwards a consumer-supplied app class; no Kerf public class is chosen dynamically. Upstream KF-R55A9X would classify these app-owned expressions. Expressions: className={`ai-conversation__message ai-conversation__message--${message.role}`}"
-    },
-    {
-      "id": "state-modifier-classes-connection-state-banner",
-      "rules": ["KUI-L008"],
-      "target": "src/components/connection-state-banner.tsx",
-      "rationale": "Reviewed HS2-M6B8AD: the dynamic class expression only composes this component's own app-owned base class with its state or variant modifier (BEM `--state`) or forwards a consumer-supplied app class; no Kerf public class is chosen dynamically. Upstream KF-R55A9X would classify these app-owned expressions. Expressions: className={`connection-state-banner connection-state-banner--${state}`}"
-    },
-    {
-      "id": "state-modifier-classes-markdown-editor",
-      "rules": ["KUI-L008"],
-      "target": "src/components/markdown-editor.tsx",
-      "rationale": "Reviewed HS2-M6B8AD: the dynamic class expression only composes this component's own app-owned base class with its state or variant modifier (BEM `--state`) or forwards a consumer-supplied app class; no Kerf public class is chosen dynamically. Upstream KF-R55A9X would classify these app-owned expressions. Expressions: class={`${expanded ? 'markdown-editor markdown-editor--expanded' : 'markdown-editor'}${appearance === 'embedded' ? ' markdown-editor--embedded' : ''}${inset === 'flush' ? ' markdown-editor--flush' : ''}`}"
-    },
-    {
-      "id": "state-modifier-classes-note-card",
-      "rules": ["KUI-L008"],
-      "target": "src/components/note-card.tsx",
-      "rationale": "Reviewed HS2-M6B8AD: the dynamic class expression only composes this component's own app-owned base class with its state or variant modifier (BEM `--state`) or forwards a consumer-supplied app class; no Kerf public class is chosen dynamically. Upstream KF-R55A9X would classify these app-owned expressions. Expressions: class={`note-card${editorOpen ? ' note-card--editing' : ''}`}"
-    },
-    {
-      "id": "state-modifier-classes-terminal-dashboard",
-      "rules": ["KUI-L008"],
-      "target": "src/components/terminal-dashboard.tsx",
-      "rationale": "Reviewed HS2-M6B8AD: the dynamic class expression only composes this component's own app-owned base class with its state or variant modifier (BEM `--state`) or forwards a consumer-supplied app class; no Kerf public class is chosen dynamically. Upstream KF-R55A9X would classify these app-owned expressions. Expressions: class={`terminal-viewport${dashboardPreview ? ' terminal-viewport--scaled-preview' : ''}`}"
-    },
-    {
-      "id": "state-modifier-classes-ticket-empty-state",
-      "rules": ["KUI-L008"],
-      "target": "src/components/ticket-empty-state.tsx",
-      "rationale": "Reviewed HS2-M6B8AD: the dynamic class expression only composes this component's own app-owned base class with its state or variant modifier (BEM `--state`) or forwards a consumer-supplied app class; no Kerf public class is chosen dynamically. Upstream KF-R55A9X would classify these app-owned expressions. Expressions: className={`ticket-empty-state ticket-empty-state--${props.kind}`}"
+      "rationale": "Reviewed HS2-M6B8AD: design: workspace-chat-tile__preview, workspace-chat-tile__preview-surface are the chat tile's padded preview frame and its scaled summary card, which is absolutely positioned at the frame inset and carries its own card padding, so the two insets do not compound. Pending adoption HS2-5FFT4J: Kerf ships independent-surface recognition since beta.139; the exception goes when the card declares an accepted surface boundary or a Kerf ticket owns the absolute-child case."
     },
     {
       "id": "state-modifier-classes-ticket-inspector-panel",
       "rules": ["KUI-L008"],
       "target": "src/components/ticket-inspector-panel.tsx",
-      "rationale": "Reviewed HS2-M6B8AD: (extended for HS2-MGVE50) the dynamic class expression only composes this component's own app-owned base class with its `--reader` presentation modifier and forwards the composing tab panel's own root class (ticket-info-panel, ticket-timeline, ticket-code-review, ticket-attachments); no Kerf public class is chosen dynamically. Upstream KF-R55A9X would classify these app-owned expressions. Expressions: class={classes.join(' ')}"
-    },
-    {
-      "id": "state-modifier-classes-ticket-inspector",
-      "rules": ["KUI-L008"],
-      "target": "src/components/ticket-inspector.tsx",
-      "rationale": "Reviewed HS2-M6B8AD: the dynamic class expression only composes this component's own app-owned base class with its state or variant modifier (BEM `--state`) or forwards a consumer-supplied app class; no Kerf public class is chosen dynamically. Upstream KF-R55A9X would classify these app-owned expressions. Expressions: class={`ticket-inspector__star${upNext ? ' ticket-inspector__star--active' : ''}`} | class={presentation === 'reader' ? 'ticket-inspector__title-frame ticket-inspector__title-frame--reader' : 'ticket-inspector__title-frame'} | class={presentation === 'reader' ? 'ticket-inspector__title-input ticket-inspector__title-input--reader' : 'ticket-inspector__title-input'} | class={presentation === 'reader' ? 'ticket-inspector__title ticket-inspector__title--reader' : 'ticket-inspector__title'} | class={presentation === 'reader' ? 'ticket-inspector ticket-inspector--reader' : 'ticket-inspector'}"
-    },
-    {
-      "id": "state-modifier-classes-ticket-row",
-      "rules": ["KUI-L008"],
-      "target": "src/components/ticket-row.tsx",
-      "rationale": "Reviewed HS2-9Y3V3T: the remaining dynamic class expression selects only the app-owned Up Next star state, never a Kerf class. Upstream KF-R55A9X would classify these app-owned expressions. Expressions: class={`ticket-list-row__up-next${props.upNext ? ' ticket-list-row__up-next--active' : ''}`}"
+      "rationale": "Reviewed HS2-M6B8AD: (extended for HS2-MGVE50) the dynamic class expression only composes this component's own app-owned base class with its `--reader` presentation modifier and forwards the composing tab panel's own root class (ticket-info-panel, ticket-timeline, ticket-code-review, ticket-attachments); no Kerf public class is chosen dynamically. Pending adoption HS2-5FFT4J: Kerf classifies literal-union class modifiers since beta.139; the exception goes when the consumer class becomes a literal union. Expressions: class={classes.join(' ')}"
     },
     {
       "id": "state-modifier-classes-sidebar-panel",
       "rules": ["KUI-L008"],
       "target": "src/components/sidebar-panel.tsx",
-      "rationale": "Reviewed HS2-M6B8AD: the dynamic class expression only composes this component's own app-owned base class with its state or variant modifier (BEM `--state`) or forwards a consumer-supplied app class; no Kerf public class is chosen dynamically. Upstream KF-R55A9X would classify these app-owned expressions. Expressions: className={className}"
+      "rationale": "Reviewed HS2-M6B8AD: the dynamic class expression only composes this component's own app-owned base class with its state or variant modifier (BEM `--state`) or forwards a consumer-supplied app class; no Kerf public class is chosen dynamically. Pending adoption HS2-5FFT4J: Kerf classifies literal-union class modifiers since beta.139; the exception goes when the forwarded class becomes a literal union. Expressions: className={className}"
     }
   ]
 }

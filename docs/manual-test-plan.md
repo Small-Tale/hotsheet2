@@ -1198,12 +1198,16 @@ suite uses fake audio to verify request and state wiring; it cannot hear output.
 
 With Live on, drive a real Codex and a real Claude session on a synthetic project
 through a task that reads and searches the code, edits a few files, runs tests,
-and commits. Listen for a few minutes: routine reading and searching should come
-as an occasional summary ("codex looked through the code for …"), never "ran zsh"
-or a path or flag; test runs, commits, ticket claims, permission requests, and
-the turn end should be said promptly, and a Codex test run should say whether it
-passed. Judge whether the pace feels edited rather than exhaustive. Unit and
-browser tests pin the policy; only listening can judge the pace.
+and commits. Listen for a few minutes: routine reading, searching and editing
+should appear on screen as an occasional summary ("codex looked through the code
+for …") but not be said (HS2-G3HJZH), and neither should turn starts and ends;
+nothing said should be "ran zsh" or a path or flag. Test runs, commits, ticket
+claims and permission requests should be said promptly in the first person ("I
+ran the unit tests, and they passed"), the first utterance and any switch to
+another project should start "For <project>," (HS2-MR8GA4), and a Codex test run
+should say whether it passed. Judge whether the pace feels edited rather than
+exhaustive. Unit and browser tests pin the policy; only listening can judge the
+pace.
 
 ### Grid sidebar touch swipe on a phone or tablet (HS2-EZSQDF)
 

@@ -7,6 +7,7 @@ import {
   commandIntent,
   commandOutcome,
   commandPhrase,
+  firstPerson,
   speakableProse,
   toolCallIntent,
   toolCallPhrase,
@@ -30,7 +31,7 @@ describe('announcer speech never reads a literal command (HS2-R5Q2GY)', () => {
   it.each(commands)('summarizes %s without its text', (text) => {
     const spoken = command(text);
     // Words, and at most a bare file name such as `notes.md` (HS2-RKYCTP), never code.
-    expect(spoken).toMatch(/^claude [a-z]+(?: [\w.-]+)*\.$/i);
+    expect(spoken).toMatch(/^I [a-z]+(?: [\w.-]+)*\.$/i);
     expect(spoken).not.toContain('`');
     expect(spoken).not.toContain(text);
     // No path, flag, quoted argument, variable, or other code fragment of the command is spoken.
@@ -47,9 +48,9 @@ describe('announcer speech never reads a literal command (HS2-R5Q2GY)', () => {
         summary: 'codex ran `git push origin main`',
         detail: null,
       }),
-    ).toBe('codex pushed changes to main.');
+    ).toBe('I pushed changes to main.');
     expect(announcerSpokenText({ tool: 'codex', kind: 'command', summary: 'codex ran a command', detail: {} })).toBe(
-      'codex ran a command.',
+      'I ran a command.',
     );
   });
 
@@ -122,7 +123,7 @@ describe('announcer speech never reads a literal command (HS2-R5Q2GY)', () => {
         summary: 'claude ran a command',
         detail: { command: "/bin/zsh -lc 'cd /work/repo && git diff -- src | head -80'" },
       }),
-    ).toBe('claude reviewed the changes.');
+    ).toBe('I reviewed the changes.');
   });
 });
 
@@ -144,7 +145,7 @@ describe('announcer speech for other events (HS2-R5Q2GY)', () => {
         summary: 'claude edited clients/web/src/sample.ts',
         detail: { path: 'clients/web/src/sample.ts' },
       }),
-    ).toBe('claude edited sample.ts.');
+    ).toBe('I edited sample.ts.');
     expect(
       announcerSpokenText({
         tool: 'codex',
@@ -157,11 +158,9 @@ describe('announcer speech for other events (HS2-R5Q2GY)', () => {
 
   it('names an empty event by its kind', () => {
     expect(announcerSpokenText({ tool: 'codex', kind: 'turn_end', summary: '``', detail: null })).toBe(
-      'codex reported turn end.',
+      'I reported turn end.',
     );
-    expect(announcerSpokenText({ tool: ' ', kind: 'command', summary: '', detail: null })).toBe(
-      'The agent ran a command.',
-    );
+    expect(announcerSpokenText({ tool: ' ', kind: 'command', summary: '', detail: null })).toBe('I ran a command.');
   });
 
   it('gives every reel item display text and separate spoken text', () => {
@@ -175,7 +174,7 @@ describe('announcer speech for other events (HS2-R5Q2GY)', () => {
       importance: 'normal',
     });
     expect(item.narration).toBe('claude ran `cat > notes.md`');
-    expect(item.spoken).toBe('claude wrote notes.md.');
+    expect(item.spoken).toBe('I wrote notes.md.');
   });
 });
 
@@ -202,10 +201,8 @@ describe('announcer speech for tool calls (HS2-NKE7RB)', () => {
   it('replaces only the default summary and keeps custom tool-call prose', () => {
     const spoken = (summary: string, name?: string) =>
       announcerSpokenText({ tool: 'claude', kind: 'tool_call', summary, detail: name ? { name } : null });
-    expect(spoken('claude called mcp__hotsheet__hotsheet_get', 'mcp__hotsheet__hotsheet_get')).toBe(
-      'claude read a ticket.',
-    );
-    expect(spoken('claude used a tool')).toBe('claude used a tool.');
+    expect(spoken('claude called mcp__hotsheet__hotsheet_get', 'mcp__hotsheet__hotsheet_get')).toBe('I read a ticket.');
+    expect(spoken('claude used a tool')).toBe('I used a tool.');
     expect(spoken('Fetched the release notes', 'WebFetch')).toBe('Fetched the release notes');
   });
 });
@@ -290,12 +287,12 @@ describe('announcer speech says how a command ended (HS2-RKYCTP)', () => {
     });
 
   it('says whether tests passed or failed when the tool reports an exit code', () => {
-    expect(ran('/bin/zsh -lc cargo test', { exit_code: 0 })).toBe('codex ran the Rust tests, and they passed.');
-    expect(ran('/bin/zsh -lc cargo test', { exit_code: 101 })).toBe('codex ran the Rust tests, and they failed.');
-    expect(ran('npm run build', { exitCode: 2 })).toBe('codex built the project, and it failed.');
-    expect(ran('npm run build', { exitCode: 0 })).toBe('codex built the project.');
-    expect(ran('git push', { status: 'failed' })).toBe('codex pushed changes, and it failed.');
-    expect(ran('npx vitest run', {})).toBe('codex ran the unit tests.');
+    expect(ran('/bin/zsh -lc cargo test', { exit_code: 0 })).toBe('I ran the Rust tests, and they passed.');
+    expect(ran('/bin/zsh -lc cargo test', { exit_code: 101 })).toBe('I ran the Rust tests, and they failed.');
+    expect(ran('npm run build', { exitCode: 2 })).toBe('I built the project, and it failed.');
+    expect(ran('npm run build', { exitCode: 0 })).toBe('I built the project.');
+    expect(ran('git push', { status: 'failed' })).toBe('I pushed changes, and it failed.');
+    expect(ran('npx vitest run', {})).toBe('I ran the unit tests.');
     expect(commandOutcome({ exit_code: 'x' })).toBeUndefined();
     expect(commandOutcome([1])).toBeUndefined();
   });
@@ -319,5 +316,41 @@ describe('announcer speech says how a command ended (HS2-RKYCTP)', () => {
     expect(toolCallIntent('mcp__hotsheet__hotsheet_get').category).toBe('ticket-work');
     expect(toolCallIntent('Task').category).toBe('milestone');
     expect(toolCallIntent('Read').category).toBe('read');
+  });
+});
+
+describe('the agent speaks for itself (HS2-G3HJZH)', () => {
+  it('turns prose that opens with the tool name into the first person', () => {
+    expect(firstPerson('codex is blocked: waiting for review', 'codex')).toBe('I am blocked: waiting for review');
+    expect(firstPerson('claude is asking permission', 'claude')).toBe('I am asking permission');
+    expect(firstPerson('Claude has a question', 'claude')).toBe('I have a question');
+    expect(firstPerson('codex was interrupted', 'codex')).toBe('I was interrupted');
+    expect(firstPerson('codex decided: keep it short', 'codex')).toBe('I decided: keep it short');
+    expect(firstPerson('claude sub-agent: reading the docs', 'claude')).toBe('My sub-agent: reading the docs');
+    expect(firstPerson('claude background task completed: build', 'claude')).toBe(
+      'My background task completed: build',
+    );
+    expect(firstPerson("claude's plan is ready", 'claude')).toBe('My plan is ready');
+  });
+
+  it('leaves other prose alone', () => {
+    expect(firstPerson('Updated the synthetic sample file', 'codex')).toBe('Updated the synthetic sample file');
+    expect(firstPerson('codexify the docs', 'codex')).toBe('codexify the docs');
+    expect(firstPerson('codex: done', 'codex')).toBe('codex: done');
+    expect(firstPerson('codex', 'codex')).toBe('codex');
+    expect(firstPerson('claude is here', ' ')).toBe('claude is here');
+  });
+
+  it('says commands, tool calls, edits, and prose events as "I"', () => {
+    const say = (kind: string, summary: string, detail: unknown = null) =>
+      announcerSpokenText({ tool: 'codex', kind, summary, detail });
+    expect(say('command', 'codex ran `git push origin main`', { command: 'git push origin main' })).toBe(
+      'I pushed changes to main.',
+    );
+    expect(say('tool_call', 'codex called Grep', { name: 'Grep' })).toBe('I searched the code.');
+    expect(say('edit', 'codex edited src/a.ts', { path: 'src/a.ts' })).toBe('I edited a.ts.');
+    expect(say('blocked', 'codex is blocked: `npm ci` needs the network')).toBe(
+      'I am blocked: a command needs the network',
+    );
   });
 });

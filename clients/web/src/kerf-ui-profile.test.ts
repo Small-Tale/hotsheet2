@@ -11,44 +11,33 @@ interface KerfProfile {
 /**
  * HS2-AF1Q16: the exact reviewed profile exceptions, in file order. This list only shrinks: removing
  * a stale entry deletes its id here, and adding one needs a reviewed ticket that names its owner. On
- * 2026-11-26 an analyzer run without exceptions matched only these 17 of the former 48 entries.
+ * 2026-11-26 an analyzer run without exceptions matched only these 17 of the former 48 entries. With
+ * Kerf beta.139 (KF-A9H745, KF-R55A9X) the doctor reports 13 of them as suppressing nothing (KUI-P032),
+ * so only these 4 remain (HS2-23GC8C).
  */
 const PROFILE_EXCEPTION_IDS = [
   'web-awesome-quick-ticket-parts',
-  'intentional-nested-inset-attachment-gallery',
-  'intentional-nested-inset-markdown-editor',
-  'intentional-nested-inset-quick-ticket-composer',
   'intentional-nested-inset-terminal-dashboard',
-  'intentional-nested-inset-ticket-code-review',
-  'intentional-nested-inset-halted-session-question',
-  'state-modifier-classes-ai-conversation',
-  'state-modifier-classes-connection-state-banner',
-  'state-modifier-classes-markdown-editor',
-  'state-modifier-classes-note-card',
-  'state-modifier-classes-terminal-dashboard',
-  'state-modifier-classes-ticket-empty-state',
   'state-modifier-classes-ticket-inspector-panel',
-  'state-modifier-classes-ticket-inspector',
-  'state-modifier-classes-ticket-row',
   'state-modifier-classes-sidebar-panel',
 ];
 
 /**
  * HS2-AF1Q16: open Kerf tickets (kerf.hs2) whose capability retires an exception. Tests cannot
  * read the Kerf store, so this list is checked in. When a ticket ships or is archived, remove it
- * here; the exceptions that still name it then fail until they are removed or re-owned.
+ * here; the exceptions that still name it then fail until they are removed or re-owned. KF-A9H745 and
+ * KF-R55A9X shipped in beta.139; their remaining exceptions moved to HS2-5FFT4J (HS2-23GC8C).
  */
-const OPEN_KERF_OWNERS: Record<string, string> = {
-  'KF-A9H745': 'KUI-L004: recognize or declare intentional nested inset surfaces',
-  'KF-R55A9X': 'KUI-L008: classify app-owned base/modifier dynamic class expressions',
-};
+const OPEN_KERF_OWNERS: Record<string, string> = {};
 
 /**
  * HS2-AF1Q16: Hot Sheet adoption tickets for exceptions where Kerf already ships the capability, so
- * there is no upstream gap. The rationale names the ticket as `Pending adoption HS2-XXXXXX`.
+ * there is no upstream gap. The rationale names the ticket as `Pending adoption HS2-XXXXXX:`, after
+ * any rule-required `Reviewed HS2-XXXXXX:` prefix.
  */
 const ADOPTION_OWNERS: Record<string, string> = {
   'HS2-CR912H': 'Move the quick ticket composer shell to Kerf DialogSurface',
+  'HS2-5FFT4J': 'Retire the last three Kerf profile exceptions with KF-A9H745 and KF-R55A9X',
 };
 
 interface KerfDoctorConfig {
@@ -189,7 +178,7 @@ describe('Kerf application UI profile', () => {
       for (const slug of kerfSlugs)
         if (slug in OPEN_KERF_OWNERS) usedOwners.add(slug);
         else problems.push(`${exception.id}: ${slug} is not an open Kerf owner`);
-      const adoption = /^Pending adoption (HS2-[0-9A-Z]{6}):/.exec(exception.rationale)?.[1];
+      const adoption = /(?:^|\. )Pending adoption (HS2-[0-9A-Z]{6}):/.exec(exception.rationale)?.[1];
       if (adoption !== undefined) {
         if (adoption in ADOPTION_OWNERS) usedOwners.add(adoption);
         else problems.push(`${exception.id}: ${adoption} is not a listed adoption owner`);

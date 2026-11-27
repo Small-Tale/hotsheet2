@@ -5,7 +5,7 @@ import { delegate, type Signal, signal } from 'kerfjs';
 import type { SafeHtml } from 'kerfjs/jsx-runtime';
 import { Radio } from 'lucide';
 
-import { type AnnouncerEntry, editAnnouncerReel, nextSettleAt } from '../announcer-editorial';
+import { type AnnouncerEntry, announcerSpeaks, editAnnouncerReel, nextSettleAt } from '../announcer-editorial';
 import {
   ANNOUNCER_DOCK_REGION_ID,
   ANNOUNCER_FLOATING_ID,
@@ -29,6 +29,7 @@ import {
   loadAnnouncerSettings,
   saveAnnouncerSettings,
 } from '../announcer-settings';
+import { announcerUtterance } from '../announcer-utterance';
 import { type ActivityEvent, Api, type TtsVoice } from '../api';
 import { AnnouncerOverlay } from '../components/announcer-overlay';
 import type { Project } from '../interactions/types';
@@ -159,6 +160,9 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
   let currentUrl: string | undefined;
   /** Narration has started and not yet ended, including the gap before speech reports its start. */
   let narrating = false;
+  /** The project the last utterance was about; a different one is named first (HS2-MR8GA4). Opening the
+   * announcer forgets it, so the first utterance always names its project. */
+  let lastSpokenProject: string | undefined;
 
   const editorialOptions = () => ({ now: Date.now(), receivedAt: (key: string) => receivedAt.get(key) });
 
@@ -205,7 +209,7 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
   function pumpLive() {
     if (!live.peek() || !open.peek() || narrating || speaking.peek()) return;
     const list = entries.peek();
-    const next = list.findIndex((entry) => entry.settled && !isHeard(entry));
+    let next = list.findIndex((entry) => entry.settled && !isHeard(entry));
     if (next < 0) return;
     clearDiff();
     if (!audible.peek()) {
@@ -214,6 +218,13 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
       index.value = list.reduce((latest, entry, at) => (entry.settled ? at : latest), next);
       return;
     }
+    // Routine steps and turn boundaries are shown as live mode passes them, but not said (HS2-G3HJZH).
+    while (next >= 0 && !announcerSpeaks(list[next])) {
+      hear(list[next]);
+      index.value = next;
+      next = list.findIndex((entry) => entry.settled && !isHeard(entry));
+    }
+    if (next < 0) return;
     hear(list[next]);
     index.value = next;
     void narrateCurrent();
@@ -277,15 +288,13 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
       pumpLive();
     };
     error.value = undefined;
+    const text = announcerUtterance(item, lastSpokenProject);
+    lastSpokenProject = item.projectId;
     if (provider.peek() !== 'browser') {
       try {
         const project = projects.peek().find((entry) => entry.id === item.projectId);
         if (!project) throw new Error('Project is no longer open.');
-        const blob = await new Api(project.apiPath).synthesizeSpeech(
-          item.spoken,
-          provider.peek(),
-          voice.peek() || undefined,
-        );
+        const blob = await new Api(project.apiPath).synthesizeSpeech(text, provider.peek(), voice.peek() || undefined);
         if (generation !== speechGeneration) return;
         currentUrl = URL.createObjectURL(blob);
         const audio = new Audio(currentUrl);
@@ -316,7 +325,7 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
       return;
     }
     // Speech says the item's summary, never its literal command (HS2-R5Q2GY).
-    const utterance = new SpeechSynthesisUtterance(item.spoken);
+    const utterance = new SpeechSynthesisUtterance(text);
     utterance.rate = rate.peek();
     if (voice.peek()) {
       const selected = speechSynthesis.getVoices().find((candidate) => candidate.name === voice.peek());
@@ -401,6 +410,7 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
       case 'open':
         clearDiff();
         open.value = !open.peek();
+        lastSpokenProject = undefined;
         if (open.peek()) void loadDigest();
         else {
           live.value = false;

@@ -1134,16 +1134,17 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   collapses independently for each ticket and presentation across updates. Wide layouts
   show the full title, and the title editor still grows to show its draft.
 
-- **Ticket claims.** Ticket rows show a small indeterminate Kerf `ProgressRing` (the live-work
-  indicator) directly after status only while a worker holds a non-expired claim lease. It
-  replaced the yellow `LoadingSpinner`, which spins a shape inside its SVG and repainted every
-  frame in WebKit, holding an idle Safari web app at 20% CPU or more per row (HS2-GFZYCZ,
-  KF-M4WWRW). Started tickets without a lease remain
+- **Ticket claims.** Ticket rows show a yellow Kerf `LoadingSpinner` (the live-work indicator)
+  directly after status only while a worker holds a non-expired claim lease. Since Kerf beta.139
+  the spinner turns its whole SVG box with `transform`, which WebKit and Chromium composite, so
+  an idle app with live claims does no per-frame repaint or style work (HS2-Y913AE, KF-M4WWRW;
+  HS2-GFZYCZ briefly used an indeterminate `ProgressRing` while Kerf's spinner repainted every
+  frame). Started tickets without a lease remain
   unclaimed, and old `claim_count` values never imply presence. A local one-shot expiry timer removes stale indicators without issuing
   polling requests; claim/release changes otherwise arrive through the shared live-update
   channel. When a live claim has an on-track ETA, a progress ring of the same size replaces
-  the indeterminate ring in that slot; the time-left label remains after the holder name. An overrun
-  returns to the indeterminate ring and shows `Soon`. Long worker IDs are clipped only in the row display;
+  the spinner in that slot; the time-left label remains after the holder name. An overrun
+  keeps the spinner and shows `Soon`. Long worker IDs are clipped only in the row display;
   hover and assistive technology retain the full value.
 
 - **Started phase.** List rows, column cards, and the ticket inspector show the optional phase label
@@ -2158,7 +2159,7 @@ checkout name>`, where the host is the machine name the peer last reported on th
   along with toolbars, toolbar text/control groups, page headers, loading indicators,
   and Lucide rendering; the client does not carry local copies of those primitives.
   The web client pins `kerfjs`, `@kerfjs/ui`, `create-kerf-component`, and
-  `eslint-plugin-kerfjs` at 5.0.0-beta.137 (HS2-N4G74W). Its Kerf/Web Awesome
+  `eslint-plugin-kerfjs` at 5.0.0-beta.139 (HS2-23GC8C). Its Kerf/Web Awesome
   spike remains pinned to beta.117 for its compatibility proof (HS2-F83DZZ).
   `npx kerfjs setup --ui --write --yes`, run from `clients/web`, installs the Kerf
   `kerf-app`, `kerf-ui`, and `kerf-ui-design-mock` skills under `clients/web/.claude/skills`
@@ -5892,10 +5893,10 @@ brand-tinted "<holder> is working on this" line: the holder's worker label (else
 shared activity slot, and, when the claim carries an ETA, the same progress ring and time
 left (or `Soon` once overrun) that list and column rows show (HS2-XQMDQB). It uses the rows'
 local ETA clock, so the countdown never triggers network requests, and it disappears as soon as
-the claim is released, expires, or the ticket reaches a terminal status. The indeterminate and ETA
-rings come from one shared component (`components/active-claim.tsx`) so rows and headers cannot drift.
-The inspector and reader compose the holder and ETA as a Kerf `StateBanner` with an indeterminate
-`ProgressRing` when progress is unknown (HS2-GFZYCZ); the same-sized ETA ring
+the claim is released, expires, or the ticket reaches a terminal status. The spinner and ETA ring
+come from one shared component (`components/active-claim.tsx`) so rows and headers cannot drift.
+The inspector and reader compose the holder and ETA as a Kerf `StateBanner` with a
+public-token-colored `LoadingSpinner` when progress is indeterminate (HS2-Y913AE); the same-sized ETA ring
 occupies its icon slot while the estimate is on track (HS2-SNC0S3/1FYDF0). The time-left
 label stays in the banner action, and the claim label remains accessible (HS2-KEHG7H).
 The time-left label has an inline gap from the holder text. Generated worker ids show a

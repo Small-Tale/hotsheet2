@@ -3,18 +3,22 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { ActiveClaimIndicator, ClaimEta, LiveClaimNotice } from './active-claim';
+import {
+  ACTIVE_CLAIM_SPINNER_SIZE,
+  ActiveClaimIndicator,
+  ActiveClaimSpinner,
+  ClaimEta,
+  LiveClaimNotice,
+} from './active-claim';
 
 describe('active claim presentation (HS2-QKNQXC)', () => {
-  it('renders a labeled indeterminate ProgressRing the row and header share, never a LoadingSpinner (HS2-GFZYCZ)', () => {
-    const markup = String(ActiveClaimIndicator({ label: 'Codex is actively working on this ticket' }));
-    expect(markup).toContain('aria-label="Codex is actively working on this ticket"');
-    // Kerf's indeterminate ring spins its whole svg box, which WebKit composites; LoadingSpinner spins a
-    // shape inside its svg and repainted every frame while a claim was live (HS2-GFZYCZ, KF-M4WWRW).
-    expect(markup).toMatch(/data-component="progress-ring"[^>]*data-indeterminate/);
-    expect(markup).toContain('data-size="small"');
-    expect(markup).not.toContain('aria-valuenow');
-    expect(markup).not.toContain('loading-spinner');
+  it('renders a labeled yellow LoadingSpinner the row and header share (HS2-Y913AE)', () => {
+    const markup = String(ActiveClaimSpinner({ label: 'Codex is actively working on this ticket' }));
+    expect(markup).toContain('Codex is actively working on this ticket');
+    // Kerf sizes the spinner through LoadingSpinner `size`; the app no longer reaches into its svg (HS2-JVPPVV).
+    expect(ACTIVE_CLAIM_SPINNER_SIZE).toBe(16.8);
+    expect(markup).toMatch(/<svg[^>]*class="kui-loading-spinner"[^>]*data-size/);
+    expect(markup).toContain('var(--hs-ticket-state-up-next)');
     const css = readFileSync(resolve(import.meta.dirname, 'active-claim.css'), 'utf8');
     expect(css).not.toContain('svg');
     expect(css).not.toContain('.active-claim-spinner');
@@ -47,7 +51,7 @@ describe('active claim presentation (HS2-QKNQXC)', () => {
           eta: { kind: 'overrun', label: 'Soon', title: '' },
         }),
       ),
-    ).toMatch(/data-component="progress-ring"[^>]*data-indeterminate/);
+    ).toContain('data-component="loading-spinner"');
     const css = readFileSync(resolve(import.meta.dirname, 'active-claim.css'), 'utf8');
     expect(css).not.toContain('.claim-eta__ring');
   });
@@ -70,8 +74,7 @@ describe('active claim presentation (HS2-QKNQXC)', () => {
     const withoutEta = String(LiveClaimNotice({ agentName: 'codex-01' }));
     expect(withoutEta).toContain('codex-01');
     expect(withoutEta).not.toContain('data-claim-eta');
-    expect(withoutEta).toMatch(/data-component="progress-ring"[^>]*data-indeterminate/);
-    expect(withoutEta).not.toContain('loading-spinner');
+    expect(withoutEta).toContain('var(--kui-state-banner-info-foreground)');
   });
 
   it('keeps a generated worker id accessible without letting it crowd the ETA', () => {
