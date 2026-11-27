@@ -218,6 +218,14 @@ impl RunEventJournal {
         })
     }
 
+    /// HS2-KXKA7X: the journal's end, the cursor a new reader starts from so it reads
+    /// only what is appended after it.
+    pub fn head(&self) -> Result<u64, OrchestrationError> {
+        self.0
+            .read_matching(0, 1, |_| false)
+            .map(|page| page.cursor)
+    }
+
     /// Events after the cursor, for one run or plan step or all, oldest first.
     pub fn read(
         &self,

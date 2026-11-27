@@ -56,6 +56,7 @@ mod ticket_list;
 mod tickets;
 mod timeline;
 mod tool_capacity;
+mod triggers;
 // HS2-5E0D96: the step suites run the portable fixture program on every platform;
 // `validation_portable` runs the process-control essentials with each platform's own
 // shell (HS2-2R32SD). `validation_runner` stays Unix-only: detached runners are

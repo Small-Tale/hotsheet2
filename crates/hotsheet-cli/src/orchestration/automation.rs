@@ -2,18 +2,22 @@
 //! as one pass a host runs whenever something it depends on changed.
 //!
 //! A pass continues template applies that wait on a permission a person has now
-//! answered, or on a planner that is now free. The server runs it from one thread
+//! answered, or on a planner that is now free. HS2-KXKA7X: it also runs every trigger
+//! pass (due schedule occurrences, failed run gates, queued deliveries, template
+//! changes that need a review, an AI session's answered turn On) and names the next
+//! instant a schedule is due, so the host wakes then and not on an interval. The server runs it from one thread
 //! that waits on the directories [`OrchestrationRuntime::automation_directories`]
 //! names (a permission answer and a finished planner turn both write there), never on
 //! an interval; `hotsheet-cli orchestration template resume` runs one pass headless.
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use hotsheet_ticketing::orchestration::TEMPLATE_APPLY_DIR;
+use hotsheet_ticketing::orchestration::{TEMPLATE_APPLY_DIR, TRIGGER_DIR};
 use serde::{Deserialize, Serialize};
 
 use super::request::{Clock, Rng};
 use super::templates::{ResumeMemory, ResumeReport};
+use super::triggers::DeliveryView;
 use super::*;
 
 /// What a host keeps between automation passes, per orchestration project.
@@ -28,6 +32,9 @@ pub struct AutomationReport {
     /// Template applies continued, by owner.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub resumed: BTreeMap<String, ResumeReport>,
+    /// HS2-KXKA7X: trigger deliveries, by owner.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub triggered: BTreeMap<String, Vec<DeliveryView>>,
     /// The earliest instant a pass has work at, when one is known (a backed-off
     /// resume); the host wakes then even when nothing changes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -53,7 +60,11 @@ fn owners_in(directory: &std::path::Path) -> Vec<String> {
 impl OrchestrationRuntime {
     /// The orchestration projects with automation records on this machine.
     pub fn automation_owners(&self) -> Vec<String> {
-        owners_in(&self.home.join(TEMPLATE_APPLY_DIR))
+        let mut owners = owners_in(&self.home.join(TEMPLATE_APPLY_DIR));
+        owners.extend(owners_in(&self.home.join(TRIGGER_DIR)));
+        owners.sort();
+        owners.dedup();
+        owners
     }
 
     /// The directories whose changes can give a pass something to do: permission
@@ -67,6 +78,7 @@ impl OrchestrationRuntime {
             hotsheet_ticketing::orchestration::PLAN_UPDATE_DIR,
             "orchestration-run-events",
             TEMPLATE_APPLY_DIR,
+            TRIGGER_DIR,
         ]
         .into_iter()
         .map(|leaf| self.home.join(leaf))
@@ -92,6 +104,16 @@ impl OrchestrationRuntime {
             }
             if let Some(at) = resume.next_try_ms() {
                 report.next_wake_ms = Some(report.next_wake_ms.map_or(at, |known| known.min(at)));
+            }
+            // HS2-KXKA7X: triggers. A project with none reads one missing file.
+            if let Ok(passed) = self.trigger_pass(&owner, tx) {
+                if !passed.deliveries.is_empty() {
+                    report.triggered.insert(owner.clone(), passed.deliveries);
+                }
+                if let Some(at) = passed.next_wake_ms {
+                    report.next_wake_ms =
+                        Some(report.next_wake_ms.map_or(at, |known| known.min(at)));
+                }
             }
         }
         report

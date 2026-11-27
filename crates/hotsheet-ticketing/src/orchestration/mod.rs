@@ -251,8 +251,8 @@ pub use triggers::{
     Trigger, TriggerAction, TriggerCursor, TriggerError, TriggerHistoryEntry, TriggerOp,
     TriggerPlacement, TriggerProblem, TriggerReview, TriggerSchedule, TriggerSource, TriggerSpec,
     TriggerState, TriggerStore, TriggerTemplate, TriggerWarning, WouldRun, decide_delivery,
-    delivery_operation_id, event_value, keys as trigger_keys, spec_digest,
-    transition as trigger_transition, validate_spec as validate_trigger,
+    delivery_operation_id, event_value, keys as trigger_keys, schedule_due, schedule_next_ms,
+    spec_digest, transition as trigger_transition, validate_spec as validate_trigger,
 };
 pub use validation::{
     DEFAULT_STEP_TIMEOUT_SECONDS, ExecutionEnd, ExecutionOutcome, ExpectedEvidence,

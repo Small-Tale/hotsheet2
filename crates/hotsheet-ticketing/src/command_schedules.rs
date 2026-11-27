@@ -808,9 +808,9 @@ pub mod zoned {
         }
 
         /// The occurrences whose instant lies in `(after, through]`, oldest first, at
-        /// most `limit`. A window longer than a few days (a machine that was off) is
-        /// clipped to its last two days, which is all a caller that coalesces missed
-        /// occurrences into the latest one needs.
+        /// most `limit`. A long window (a machine that was off) is clipped to its last
+        /// two days for sub-day kinds and its last year for date kinds, which is all a
+        /// caller that coalesces missed occurrences into the latest one needs.
         pub fn between(
             &self,
             after: Timestamp,
@@ -821,8 +821,16 @@ pub mod zoned {
                 return Ok(Vec::new());
             }
             let zone = zone(self.time_zone)?;
+            // Sub-day kinds look back two days (at most 576 slots at the five-minute
+            // floor); date kinds a year and a day, so a yearly occurrence missed while
+            // the machine was off still runs once on return.
+            let window = if self.recurrence.kind.is_sub_day() {
+                48
+            } else {
+                24 * 367
+            };
             let earliest = through
-                .checked_sub(jiff::SignedDuration::from_hours(48))
+                .checked_sub(jiff::SignedDuration::from_hours(window))
                 .map_err(text)?;
             let after = after.max(earliest);
             let local_through = local_now(&zone, through)?;
@@ -851,7 +859,7 @@ pub mod zoned {
                     .date()
                     .next_day()
                     .unwrap_or(local_through.date());
-                for date in dates_through(self.recurrence, start, end, 16)? {
+                for date in dates_through(self.recurrence, start, end, 400)? {
                     let instant = self.date_instant(date)?;
                     if instant > after && instant <= through {
                         found.push(Occurrence {

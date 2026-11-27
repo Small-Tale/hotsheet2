@@ -4,8 +4,10 @@
 //! ([`OrchestrationRuntime::automation_directories`]) with the platform file watcher,
 //! and runs one automation pass when any of them changes: template applies waiting on
 //! a permission a person answered, or on a planner that is free again, continue under
-//! their own operation id. It also wakes at the earliest instant the last pass named
-//! (a backed-off resume), and at the watchers' own one-second safety re-check, which
+//! their own operation id; HS2-KXKA7X: triggers fire (a schedule's occurrence, a run's
+//! failed gate, a queued delivery whose run finished). It also wakes at the earliest
+//! instant the last pass named (a schedule's next occurrence
+//! or a backed-off resume), and at the watchers' own one-second safety re-check, which
 //! reads local files only. Idle, it makes no request and contacts nothing.
 use crate::AppState;
 use hotsheet_cli::orchestration::{AutomationMemory, OrchestrationRuntime};
@@ -28,10 +30,14 @@ impl AppState {
             .orchestration_tasks()
             .threads()
             .spawn("orchestration-automation", move || {
-                let Ok(shared) = super::orchestration::server_runtime(&state, handle) else {
+                let Ok(shared) = super::orchestration::server_runtime(&state, handle.clone())
+                else {
                     return;
                 };
                 let directories = shared.automation_directories();
+                // HS2-KXKA7X: the trigger files as last seen, so a trigger turned on by
+                // a headless CLI gets its target follower and branch watch here.
+                let mut seen_triggers: Option<Vec<(String, Option<std::time::SystemTime>)>> = None;
                 for directory in &directories {
                     let _ = std::fs::create_dir_all(directory);
                 }
@@ -43,6 +49,16 @@ impl AppState {
                 let mut memory = AutomationMemory::default();
                 while !state.is_stopping() {
                     let report = OrchestrationRuntime::automation_pass_now(&shared, &mut memory);
+                    for owner in report.triggered.keys() {
+                        super::orchestration::note_orchestration_change(&state, owner);
+                    }
+                    let triggers = trigger_files(&shared);
+                    if seen_triggers.as_ref() != Some(&triggers) {
+                        for (owner, _) in &triggers {
+                            super::orchestration::ensure_trigger_followers(&state, &handle, owner);
+                        }
+                        seen_triggers = Some(triggers);
+                    }
                     let wait = report
                         .next_wake_ms
                         .map(|at| std::time::Duration::from_millis(at.saturating_sub(now_ms())))
@@ -58,6 +74,20 @@ impl AppState {
                 }
             });
     }
+}
+
+/// Each trigger file of this machine with when it last changed.
+fn trigger_files(shared: &OrchestrationRuntime) -> Vec<(String, Option<std::time::SystemTime>)> {
+    shared
+        .trigger_owners()
+        .into_iter()
+        .map(|owner| {
+            let modified = std::fs::metadata(shared.trigger_file(&owner))
+                .and_then(|metadata| metadata.modified())
+                .ok();
+            (owner, modified)
+        })
+        .collect()
 }
 
 fn now_ms() -> u64 {

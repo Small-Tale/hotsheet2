@@ -243,6 +243,32 @@ fn hs2_kxka7x_history_coalesces_skips_and_redeliveries_and_stays_bounded() {
 }
 
 #[test]
+fn hs2_kxka7x_queue_latest_keeps_one_and_the_replaced_one_is_handled() {
+    let mut t = trigger(TriggerState::On, Overlap::QueueLatest);
+    t.queue_latest(delivery("schedule:1"));
+    t.record(entry("schedule:1", DeliveryOutcome::Queued, 1));
+    // Queued is not handled yet: it is taken once the run ends.
+    assert!(t.handled.is_empty());
+    assert!(
+        t.handled("schedule:1"),
+        "the queued key is not delivered twice meanwhile"
+    );
+    t.queue_latest(delivery("schedule:2"));
+    t.record(entry("schedule:2", DeliveryOutcome::Queued, 2));
+    assert_eq!(t.queued.as_ref().unwrap().key, "schedule:2");
+    assert_eq!(t.handled, ["schedule:1"]);
+    // The same one again keeps it.
+    t.queue_latest(delivery("schedule:2"));
+    assert_eq!(t.handled, ["schedule:1"]);
+    // Taken: no longer queued, and its delivery is decided anew.
+    t.queued = None;
+    assert_eq!(
+        decide_delivery(&t, &delivery("schedule:2"), false),
+        DeliveryDecision::Apply
+    );
+}
+
+#[test]
 fn hs2_kxka7x_state_transitions_resume_and_review() {
     use TriggerState as S;
     let cases = [

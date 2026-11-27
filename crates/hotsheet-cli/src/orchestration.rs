@@ -53,10 +53,12 @@ mod target_lines;
 mod templates;
 // HS2-H1CSSN: the owner of the runtime's background threads.
 mod tasks;
+// HS2-KXKA7X: scheduled and event triggers.
 mod ticket_list;
 mod tickets;
 mod timeline;
 mod tool_capacity;
+mod triggers;
 mod validation;
 mod validation_output;
 mod validation_runner;
@@ -173,6 +175,12 @@ pub use tickets::{
 pub use timeline::{MAX_TIMELINE_WAIT_MS, PERMISSION_REQUIRED};
 pub use tool_capacity::{
     SelectTool, SignalResult, ToolCapacityRow, ToolCapacityView, ToolSelection,
+};
+pub use triggers::{
+    BranchFollowState, BranchStep, DeliveryView, FireTrigger, MAX_BRANCH_WAIT_MS, ReviewNeed,
+    ReviewNext, ReviewPerDelivery, ReviewPermission, ReviewProject, ReviewScope, ReviewTrigger,
+    ReviewWatch, SetTrigger, TRIGGER_NEXT_RUNS, TriggerList, TriggerNotification,
+    TriggerPassReport, TriggerPassRequest, TriggerRef, TriggerReviewView, TriggerView,
 };
 pub use validation::{
     CancelValidation, DefineValidation, HostedExecutionState, HostedValidation,

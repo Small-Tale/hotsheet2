@@ -613,16 +613,10 @@ impl Trigger {
     /// Record a delivery's outcome: the key becomes handled, and a skip or a
     /// redelivery right after the same outcome coalesces into that entry.
     pub fn record(&mut self, entry: TriggerHistoryEntry) {
-        if !self
-            .handled
-            .iter()
-            .any(|known| known == &entry.delivery_key)
-        {
-            self.handled.push(entry.delivery_key.clone());
-            if self.handled.len() > MAX_HANDLED_KEYS {
-                let excess = self.handled.len() - MAX_HANDLED_KEYS;
-                self.handled.drain(..excess);
-            }
+        // A queued delivery is not handled yet: it is the one `queued` delivery, and it
+        // is taken once the run it waits for ends.
+        if entry.outcome != DeliveryOutcome::Queued {
+            self.mark_handled(&entry.delivery_key);
         }
         if let Some(last) = self.history.last_mut()
             && coalesces(last, &entry)
@@ -639,6 +633,30 @@ impl Trigger {
         if self.history.len() > MAX_TRIGGER_HISTORY {
             let excess = self.history.len() - MAX_TRIGGER_HISTORY;
             self.history.drain(..excess);
+        }
+    }
+
+    /// Remember a delivery key as handled (bounded, oldest forgotten first).
+    pub fn mark_handled(&mut self, key: &str) {
+        if !self.handled.iter().any(|known| known == key) {
+            self.handled.push(key.to_owned());
+            if self.handled.len() > MAX_HANDLED_KEYS {
+                let excess = self.handled.len() - MAX_HANDLED_KEYS;
+                self.handled.drain(..excess);
+            }
+        }
+    }
+
+    /// Keep `delivery` to run once the current run ends. The one it replaces counts as
+    /// handled (it was skipped in favour of the latest).
+    pub fn queue_latest(&mut self, delivery: Delivery) {
+        if let Some(replaced) = self.queued.replace(delivery)
+            && self
+                .queued
+                .as_ref()
+                .is_some_and(|queued| queued.key != replaced.key)
+        {
+            self.mark_handled(&replaced.key);
         }
     }
 
@@ -900,6 +918,49 @@ pub fn transition(
             other => other,
         },
     }
+}
+
+/// A schedule's next `count` instants after `now_ms`, in epoch milliseconds, through
+/// the command-schedule engine. Empty for a schedule that never runs again.
+pub fn schedule_next_ms(schedule: &TriggerSchedule, now_ms: u64, count: usize) -> Vec<u64> {
+    let Some(now) = instant(now_ms) else {
+        return Vec::new();
+    };
+    zoned(schedule)
+        .next(now, count)
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|occurrence| u64::try_from(occurrence.instant.as_millisecond()).ok())
+        .collect()
+}
+
+/// The latest occurrence due in `(after_ms, now_ms]`, by its key, and how many earlier
+/// ones it covers (missed while this machine was off: they run once, as this one).
+pub fn schedule_due(
+    schedule: &TriggerSchedule,
+    after_ms: u64,
+    now_ms: u64,
+) -> Option<(String, u32)> {
+    let due = zoned(schedule)
+        .between(instant(after_ms)?, instant(now_ms)?, 1024)
+        .ok()?;
+    let latest = due.last()?.key.clone();
+    Some((
+        latest,
+        u32::try_from(due.len().saturating_sub(1)).unwrap_or(u32::MAX),
+    ))
+}
+
+fn zoned(schedule: &TriggerSchedule) -> crate::command_schedules::zoned::Zoned<'_> {
+    crate::command_schedules::zoned::Zoned {
+        time_zone: &schedule.time_zone,
+        local_time: &schedule.local_time,
+        recurrence: &schedule.recurrence,
+    }
+}
+
+fn instant(ms: u64) -> Option<jiff::Timestamp> {
+    jiff::Timestamp::from_millisecond(i64::try_from(ms).ok()?).ok()
 }
 
 /// The value one event field takes in a delivery, when it carries it.

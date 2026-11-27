@@ -38,6 +38,11 @@ pub struct HomeNotification {
 /// elsewhere.
 pub trait HomeNotices: Send + Sync {
     fn notify(&self, notification: &HomeNotification);
+    /// HS2-KXKA7X: a trigger needs a review, cannot watch its source, or could not
+    /// run. The same path as home outages; nothing by default.
+    fn notify_trigger(&self, notification: &super::TriggerNotification) {
+        let _ = notification;
+    }
 }
 
 /// The reason, as one sentence.
