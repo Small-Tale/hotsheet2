@@ -12,3 +12,6 @@ rust-version.workspace = true
 ureq.workspace = true
 # The default agent's TLS provider is pinned to ring, as ureq 2 did (HS2-9ABVDW).
 rustls = { workspace = true, features = ["ring"] }
+
+[dev-dependencies]
+rcgen.workspace = true

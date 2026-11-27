@@ -17,6 +17,7 @@
 //!   the program installed. Callers with their own trust (a pinned CA, a client
 //!   certificate) replace the TLS configuration; certificate verification is never
 //!   turned off.
+//!   [`build_with_tls`] takes such a complete rustls configuration and uses it as given.
 //! - **4xx and 5xx answers are errors** ([`ureq::Error::StatusCode`]) unless the caller
 //!   turns `http_status_as_error` off to read the answer's body.
 //!
@@ -32,7 +33,11 @@ use ureq::http::Uri;
 use ureq::tls::TlsConfig;
 use ureq::typestate::AgentScope;
 use ureq::unversioned::resolver::{DefaultResolver, ResolvedSocketAddrs, Resolver};
-use ureq::unversioned::transport::{DefaultConnector, NextTimeout};
+use ureq::unversioned::transport::{
+    ConnectProxyConnector, Connector, DefaultConnector, NextTimeout, TcpConnector,
+};
+
+mod own_tls;
 use ureq::{Agent, Error, Timeout};
 
 /// Redirects followed before the next one fails with [`FailureKind::TooManyRedirects`].
@@ -57,6 +62,17 @@ pub fn config() -> ConfigBuilder<AgentScope> {
 /// error that [`failure_kind`] could not tell from a broken connection.
 pub fn build(config: ConfigBuilder<AgentScope>) -> Agent {
     Agent::with_parts(config.build(), DefaultConnector::new(), LookupResolver)
+}
+
+/// The agent for a configuration whose TLS is the caller's own complete rustls
+/// configuration (trust roots, client certificate, provider, ALPN), used exactly as given.
+/// Plain `http` URLs connect without TLS as usual.
+pub fn build_with_tls(config: ConfigBuilder<AgentScope>, tls: Arc<rustls::ClientConfig>) -> Agent {
+    let connector =
+        ().chain(ConnectProxyConnector::default())
+            .chain(TcpConnector::default())
+            .chain(own_tls::OwnTlsConnector(tls));
+    Agent::with_parts(config.build(), connector, LookupResolver)
 }
 
 /// An agent with the baseline configuration and nothing else.
@@ -89,6 +105,26 @@ pub fn tls() -> TlsConfig {
     TlsConfig::builder()
         .unversioned_rustls_crypto_provider(Arc::new(rustls::crypto::ring::default_provider()))
         .build()
+}
+
+/// Send a request whose method is chosen at run time, with `body` when there is one.
+/// ureq's typed builders (`agent.get`, `agent.post`, …) fix the method and whether it
+/// carries a body when the program is compiled; this sends the body for any method.
+pub fn run(
+    agent: &Agent,
+    method: &str,
+    url: &str,
+    headers: &[(&str, &str)],
+    body: Option<&[u8]>,
+) -> Result<ureq::http::Response<ureq::Body>, Error> {
+    let mut request = ureq::http::Request::builder().method(method).uri(url);
+    for (name, value) in headers {
+        request = request.header(*name, *value);
+    }
+    match body {
+        Some(body) => agent.run(request.body(body)?),
+        None => agent.run(request.body(())?),
+    }
 }
 
 /// What kind of failure a request ended in.

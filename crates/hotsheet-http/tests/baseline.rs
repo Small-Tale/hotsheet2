@@ -345,3 +345,26 @@ fn hs2_9abvdw_ignores_proxy_environment_variables() {
     assert_eq!(seen.recv().unwrap().path, "/direct");
     assert!(agent().config().proxy().is_none());
 }
+
+#[test]
+fn hs2_9abvdw_run_sends_any_method_with_or_without_a_body() {
+    let (origin, seen) = serve(|_| reply("200 OK", &[], "done"));
+    let agent = agent();
+    let headers = [("Content-Type", "application/json"), ("X-Synthetic", "1")];
+    for (method, body) in [
+        ("PATCH", Some(&b"{\"a\":1}"[..])),
+        ("DELETE", Some(&b"{}"[..])),
+        ("DELETE", None),
+        ("GET", None),
+    ] {
+        let mut response =
+            hotsheet_http::run(&agent, method, &format!("{origin}/run"), &headers, body).unwrap();
+        assert_eq!(response.body_mut().read_to_string().unwrap(), "done");
+        let request = seen.recv().unwrap();
+        assert_eq!(request.method, method);
+        assert_eq!(request.header("x-synthetic"), Some("1"));
+        assert_eq!(request.body, body.unwrap_or_default());
+    }
+    let error = hotsheet_http::run(&agent, "NOT A METHOD", &origin, &[], None).unwrap_err();
+    assert!(matches!(error, ureq::Error::Http(_)), "{error}");
+}
