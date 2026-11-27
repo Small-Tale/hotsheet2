@@ -25757,6 +25757,7 @@ components:
             - start
             - event
             - signal
+            - plan
             - retry
         kind:
           enum:
@@ -27313,18 +27314,86 @@ components:
           type: integer
     TemplateAccept:
       description:
-        A person's accept of the plan proposed for an apply's goal (HS2-36XDDX). The apply as recorded now, the steps
-        this accept released, and `outcome` `accepted` or `existing`.
-      allOf:
-        - $ref: '#/components/schemas/TemplateApply'
-        - type: object
+        A person's accept of the plan proposed for an apply's goal (HS2-36XDDX). The steps this accept released and
+        `outcome` `accepted` or `existing`. HS2-38MFXT - the apply's fields (TemplateApply) when this machine holds the
+        apply record, and `hold` when the checked-in plan carries the apply's hold; an accept on another machine than
+        the one that applied answers the hold only.
+      type: object
+      required:
+        - released
+        - outcome
+      properties:
+        operation_id:
+          type: string
+        template_id:
+          type: string
+        snapshot:
+          $ref: '#/components/schemas/PlanTemplate'
+        state:
+          enum:
+            - waiting_permission
+            - waiting_planner
+            - planning
+            - denied
+        accepted_steps:
+          type: array
+          items:
+            type: string
+        accepted_at_ms:
+          type: integer
+        accepted_by:
+          type: string
+        hold:
+          $ref: '#/components/schemas/PlanHold'
+        released:
+          type: array
+          items:
+            type: string
+        outcome:
+          enum:
+            - accepted
+            - existing
+    PlanHold:
+      description:
+        HS2-38MFXT. A template apply's Wait for Accept, checked in with the plan (`holds` of a version-2
+        `.hotsheet2/orchestration-plan.json`). A step of `goal` (matched by its `native_id`) that `accepted_steps` does
+        not list is held on every machine that reads the plan.
+      type: object
+      required:
+        - operation_id
+        - template_id
+        - template_name
+        - goal
+        - created_at_ms
+      properties:
+        operation_id:
+          type: string
+        template_id:
+          type: string
+        template_name:
+          type: string
+        goal:
+          type: object
           required:
-            - released
+            - connection_id
+            - native_id
           properties:
-            released:
-              type: array
-              items:
-                type: string
+            connection_id:
+              type: string
+            native_id:
+              type: string
+        goal_slug:
+          type: string
+        accepted_steps:
+          type: array
+          items:
+            type: string
+        accepted_at_ms:
+          type: integer
+        accepted_by:
+          type: string
+        created_at_ms:
+          type: integer
     TriggerOperation:
       description:
         Body of a trigger operation (HS2-KXKA7X). `show`, `on`, `dry_run`, `pause`, `resume` and `remove` take

@@ -578,8 +578,13 @@ fn hs2_ydy5hj_damaged_shared_data_is_an_error_and_never_overwritten() {
             false,
         ),
         (
-            good.replace("\"schema_version\": 1", "\"schema_version\": 2"),
+            good.replace("\"schema_version\": 1", "\"schema_version\": 3"),
             true,
+        ),
+        // HS2-38MFXT: version 2 always carries a hold.
+        (
+            good.replace("\"schema_version\": 1", "\"schema_version\": 2"),
+            false,
         ),
         (good.replace(&revision, "not-a-revision"), false),
         // Two steps for one ticket, as a careless text merge could leave.
@@ -721,7 +726,7 @@ fn hs2_f1bkq0_health_names_the_conflict_or_the_damaged_file_and_writes_nothing()
     );
     std::fs::write(
         &path,
-        good.replace("\"schema_version\": 1", "\"schema_version\": 2"),
+        good.replace("\"schema_version\": 1", "\"schema_version\": 3"),
     )
     .unwrap();
     assert_eq!(
@@ -741,4 +746,252 @@ fn hs2_f1bkq0_health_names_the_conflict_or_the_damaged_file_and_writes_nothing()
     let mut b = b;
     b.migrate(true).unwrap();
     assert_eq!(b.plan.health(OWNER_A).unwrap().state, "ok");
+}
+
+// HS2-38MFXT: the Wait for Accept hold travels with the checked-in plan.
+
+fn hold(operation: &str, created_at_ms: u64) -> PlanHold {
+    PlanHold {
+        operation_id: operation.into(),
+        template_id: id(800),
+        template_name: "Repair the release".into(),
+        goal: goal(),
+        goal_slug: Some("PLN-1".into()),
+        accepted_steps: Vec::new(),
+        accepted_at_ms: None,
+        accepted_by: None,
+        created_at_ms,
+    }
+}
+
+/// The goal a template apply opened, and its hold.
+fn template_goal() -> RunTicket {
+    RunTicket {
+        connection_id: "plan".into(),
+        native_id: id(901),
+    }
+}
+fn template_hold(operation: &str, created_at_ms: u64) -> PlanHold {
+    PlanHold {
+        goal: template_goal(),
+        ..hold(operation, created_at_ms)
+    }
+}
+
+impl Machine {
+    fn define_for(
+        &mut self,
+        goal: RunTicket,
+        target: &RunTarget,
+    ) -> Result<(PlanStep, bool), OrchestrationError> {
+        let (owner, plan) = (self.owner, self.plan.clone());
+        let mut step = new(target, Vec::new());
+        step.ticket = goal;
+        plan.define_observed(
+            owner,
+            step,
+            None,
+            Vec::new(),
+            Some("worker-1".into()),
+            &mut self.tx(),
+        )
+    }
+    fn add_hold(&mut self, new: PlanHold) {
+        let (owner, plan) = (self.owner, self.plan.clone());
+        plan.update_holds(owner, &mut self.tx(), |holds, _| {
+            if !holds
+                .iter()
+                .any(|known| known.operation_id == new.operation_id)
+            {
+                holds.push(new);
+            }
+            Ok(())
+        })
+        .unwrap();
+    }
+    /// A person's accept of the goal's live steps, as `templates/accept` records it.
+    fn accept(&mut self, operation: &str) -> Vec<String> {
+        let (owner, plan) = (self.owner, self.plan.clone());
+        let now = self.clock.0.get();
+        plan.update_holds(owner, &mut self.tx(), |holds, steps| {
+            let hold = holds
+                .iter_mut()
+                .find(|hold| hold.operation_id == operation)
+                .unwrap();
+            let goal_steps: Vec<String> = steps
+                .iter()
+                .filter(|step| hold.names_goal(&step.ticket))
+                .map(|step| step.step_id.clone())
+                .collect();
+            hold.accept(&goal_steps, Some("maintainer"), now);
+            Ok(goal_steps)
+        })
+        .unwrap()
+    }
+    fn held(&self) -> Vec<String> {
+        self.plan
+            .held_steps(self.owner)
+            .unwrap()
+            .into_keys()
+            .collect()
+    }
+    fn schema_version(&self, root: &Path) -> u64 {
+        let text = std::fs::read_to_string(root.join(SHARED_PLAN_PATH)).unwrap();
+        serde_json::from_str::<serde_json::Value>(&text).unwrap()["schema_version"]
+            .as_u64()
+            .unwrap()
+    }
+}
+
+#[test]
+fn hs2_38mfxt_a_hold_holds_on_every_machine_and_an_accept_anywhere_releases_it() {
+    let root = tempfile::tempdir().unwrap();
+    let mut a = Machine::new(OWNER_A, root.path(), 100);
+    let mut b = Machine::new(OWNER_B, root.path(), 200);
+    // A step of another goal first: the plan is version 1, byte for byte as before.
+    let (other, _) = a.define(&ticket("other"), Vec::new(), None).unwrap();
+    let before = std::fs::read_to_string(root.path().join(SHARED_PLAN_PATH)).unwrap();
+    assert!(!before.contains("holds"));
+    assert_eq!(a.schema_version(root.path()), 1);
+    // Machine A applies a waiting template: the hold is checked in before any step.
+    a.add_hold(template_hold("tpl-wait", 5));
+    assert_eq!(a.schema_version(root.path()), 2);
+    assert!(a.held().is_empty() && b.held().is_empty());
+    // The planner defines a step of the template's goal: held on both machines.
+    let (first, _) = a.define_for(template_goal(), &ticket("first")).unwrap();
+    assert_eq!(a.held(), std::slice::from_ref(&first.step_id));
+    assert_eq!(b.held(), std::slice::from_ref(&first.step_id));
+    assert!(!b.held().contains(&other.step_id));
+    // An accept on B releases it on both machines.
+    let released = b.accept("tpl-wait");
+    assert_eq!(released, std::slice::from_ref(&first.step_id));
+    assert!(a.held().is_empty() && b.held().is_empty());
+    let holds = a.plan.holds(OWNER_A).unwrap();
+    assert_eq!(holds[0].accepted_by.as_deref(), Some("maintainer"));
+    // A step planned later (on B this time) is held again, until the next accept on A.
+    let (later, _) = b.define_for(template_goal(), &ticket("later")).unwrap();
+    assert_eq!(a.held(), std::slice::from_ref(&later.step_id));
+    assert_eq!(b.held(), std::slice::from_ref(&later.step_id));
+    a.accept("tpl-wait");
+    assert!(a.held().is_empty() && b.held().is_empty());
+    // A repeat accept changes nothing, not even the revision.
+    let revision = a.plan.revision(OWNER_A).unwrap();
+    b.accept("tpl-wait");
+    assert_eq!(a.plan.revision(OWNER_A).unwrap(), revision);
+    // Step writes keep the hold: removing a step keeps it, at version 2.
+    a.remove(&later.step_id).unwrap();
+    assert_eq!(a.plan.holds(OWNER_A).unwrap().len(), 1);
+    assert_eq!(a.schema_version(root.path()), 2);
+    // The same hold added again (a repeated apply) changes nothing.
+    let revision = a.plan.revision(OWNER_A).unwrap();
+    b.add_hold(template_hold("tpl-wait", 9));
+    assert_eq!(a.plan.revision(OWNER_A).unwrap(), revision);
+    // Re-planned after the removal: held again, the accepted one stays released.
+    let (again, _) = a.define_for(template_goal(), &ticket("again")).unwrap();
+    assert_eq!(b.held(), [again.step_id]);
+}
+
+#[test]
+fn hs2_38mfxt_a_step_of_another_goal_is_never_held_and_the_goal_matches_by_native_id() {
+    let mut waiting = hold("tpl-wait", 1);
+    let mut step = shared(1, "a", 1);
+    assert!(waiting.holds(&step));
+    // Another machine names the same goal through its own connection id.
+    step.ticket.connection_id = "another-machine".into();
+    assert!(waiting.holds(&step));
+    // Another goal is not held.
+    step.ticket.native_id = id(901);
+    assert!(!waiting.holds(&step));
+    // An accepted step is not held; the accept is idempotent.
+    let step = shared(1, "a", 1);
+    assert!(waiting.accept(std::slice::from_ref(&step.step_id), Some("maintainer"), 7));
+    assert!(!waiting.holds(&step));
+    assert!(!waiting.accept(std::slice::from_ref(&step.step_id), Some("someone"), 8));
+    assert_eq!(waiting.accepted_at_ms, Some(7));
+    assert_eq!(waiting.accepted_by.as_deref(), Some("maintainer"));
+    // The pure selection: empty holds hold nothing; each held step names its hold.
+    let (one, two) = (shared(1, "a", 1), shared(2, "b", 1));
+    assert!(held_plan_steps(&[], &[one.clone(), two.clone()]).is_empty());
+    let holds = [hold("tpl-a", 1)];
+    let held = held_plan_steps(&holds, &[one, two]);
+    assert_eq!(held.len(), 2);
+    assert!(held.values().all(|hold| hold.operation_id == "tpl-a"));
+    assert_eq!(plan_version(&[]), 1);
+    assert_eq!(plan_version(&holds), PLAN_HOLD_VERSION);
+}
+
+#[test]
+fn hs2_38mfxt_an_older_reader_refuses_a_plan_with_a_hold_and_damage_is_refused() {
+    let root = tempfile::tempdir().unwrap();
+    let mut a = Machine::new(OWNER_A, root.path(), 100);
+    a.define(&ticket("first"), Vec::new(), None).unwrap();
+    a.add_hold(hold("tpl-wait", 1));
+    let path = root.path().join(SHARED_PLAN_PATH);
+    let good = std::fs::read_to_string(&path).unwrap();
+    // An older Hot Sheet reads every orchestration file through the version-1 decoder:
+    // it answers upgrade_required for the plan, so it places nothing and writes nothing.
+    assert!(matches!(
+        super::storage::decode::<serde_json::Value>(good.as_bytes()),
+        Err(OrchestrationError::UnsupportedVersion { found: 2 })
+    ));
+    let second = serde_json::to_string(&hold("tpl-b", 2)).unwrap();
+    let first_hold = serde_json::to_string(&a.plan.holds(OWNER_A).unwrap()[0]).unwrap();
+    for bytes in [
+        // A hold in a version-1 plan: an older binary would have ignored it.
+        good.replace("\"schema_version\": 2", "\"schema_version\": 1"),
+        // Holds out of order, or twice.
+        good.replacen("\"holds\": [", &format!("\"holds\": [{second},"), 1)
+            .replace("tpl-b", "tpl-z"),
+        good.replacen("\"holds\": [", &format!("\"holds\": [{first_hold},"), 1),
+        // A hold that names no goal id, or an unknown field.
+        good.replace(&id(900), "not-a-ulid"),
+        good.replacen("\"operation_id\"", "\"unknown\": 1, \"operation_id\"", 1),
+    ] {
+        std::fs::write(&path, &bytes).unwrap();
+        assert!(
+            matches!(a.plan.holds(OWNER_A), Err(OrchestrationError::Corrupt)),
+            "{bytes}"
+        );
+        // The scheduler's read fails rather than place a step nobody accepted.
+        assert!(a.plan.held_steps(OWNER_A).is_err());
+        assert!(a.define(&ticket("second"), Vec::new(), None).is_err());
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), bytes);
+    }
+}
+
+#[test]
+fn hs2_38mfxt_the_holds_are_bounded_and_a_hold_on_a_live_step_goes_last() {
+    let root = tempfile::tempdir().unwrap();
+    let mut a = Machine::new(OWNER_A, root.path(), 100);
+    // The oldest hold names the goal every planned step belongs to.
+    a.add_hold(hold("tpl-0000", 0));
+    let (first, _) = a.define(&ticket("first"), Vec::new(), None).unwrap();
+    // Fill to the bound with holds of other goals, none holding a live step.
+    let (owner, plan) = (a.owner, a.plan.clone());
+    plan.update_holds(owner, &mut a.tx(), |holds, _| {
+        for n in 1..MAX_PLAN_HOLDS {
+            let mut other = hold(&format!("tpl-{n:04}"), n as u64);
+            other.goal.native_id = id(10_000 + n as u128);
+            holds.push(other);
+        }
+        Ok(())
+    })
+    .unwrap();
+    assert_eq!(a.plan.holds(OWNER_A).unwrap().len(), MAX_PLAN_HOLDS);
+    // One more: the oldest idle hold is forgotten, never the one holding `first`.
+    let mut newest = hold("tpl-9999", 9_999);
+    newest.goal.native_id = id(20_000);
+    a.add_hold(newest);
+    let kept: Vec<String> = a
+        .plan
+        .holds(OWNER_A)
+        .unwrap()
+        .into_iter()
+        .map(|hold| hold.operation_id)
+        .collect();
+    assert_eq!(kept.len(), MAX_PLAN_HOLDS);
+    assert!(kept.contains(&"tpl-0000".to_owned()));
+    assert!(!kept.contains(&"tpl-0001".to_owned()));
+    assert!(kept.contains(&"tpl-9999".to_owned()));
+    assert_eq!(a.held(), [first.step_id]);
 }

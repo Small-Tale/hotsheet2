@@ -21,10 +21,11 @@ use hotsheet_ticketing::ops;
 use hotsheet_ticketing::orchestration::{
     AcceptWait, ApplyDecision, ApplyGoal, ApplyState, AuditOutcome, AuditRecord, DeclarationState,
     DenialReason, GateRequirement, InputKind, MAX_APPLY_OPERATION_ID, PermissionAction,
-    PermissionKey, Prerequisite, ReadinessError, StepAfter, StepTicket, TEMPLATE_GOAL_TAG,
-    TargetAction, Template, TemplateApply, TemplateApplyStore, TemplateError, TemplateGoal,
-    TemplateInput, TemplateProblem, TemplateState, TemplateStep, TemplateStore, TemplatesFile,
-    TicketKey, decide_apply, held_template_steps, render_brief, resolve_inputs, validate_template,
+    PermissionKey, PlanHold, Prerequisite, ReadinessError, StepAfter, StepTicket,
+    TEMPLATE_GOAL_TAG, TargetAction, Template, TemplateApply, TemplateApplyStore, TemplateError,
+    TemplateGoal, TemplateInput, TemplateProblem, TemplateState, TemplateStep, TemplateStore,
+    TemplatesFile, TicketKey, decide_apply, held_template_steps, render_brief, resolve_inputs,
+    validate_template,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -124,14 +125,30 @@ pub struct AcceptTemplate {
 
 /// HS2-36XDDX: an accept's answer: the apply as recorded now and the steps this
 /// accept released (empty when they were accepted before).
+///
+/// HS2-38MFXT: the apply's fields are present when this machine has its record; the
+/// checked-in `hold` when the plan carries one (an accept on another machine than the
+/// one that applied has only the hold).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TemplateAcceptView {
     #[serde(flatten)]
-    pub apply: TemplateApply,
+    pub apply: Option<TemplateApply>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hold: Option<PlanHold>,
     pub released: Vec<String>,
     /// `accepted` when this accept released steps, `existing` when every planned
     /// step was accepted before.
     pub outcome: String,
+}
+
+/// HS2-38MFXT: what one accept found and changed.
+struct AcceptOutcome {
+    apply: Option<TemplateApply>,
+    hold: Option<PlanHold>,
+    /// The goal's live steps this accept released.
+    released: Vec<String>,
+    /// The goal's live steps.
+    steps: Vec<String>,
 }
 
 /// A recent apply, as the list shows it.
@@ -304,6 +321,14 @@ impl OrchestrationRuntime {
                 .then_with(|| b.operation_id.cmp(&a.operation_id))
         });
         applies.truncate(MAX_LISTED_APPLIES);
+        // HS2-38MFXT: an accept made on another machine is on the checked-in hold.
+        let holds = self.plan().holds(owner_id).unwrap_or_default();
+        let accepted_at = |apply: &TemplateApply| {
+            holds
+                .iter()
+                .find(|hold| hold.operation_id == apply.operation_id)
+                .map_or(apply.accepted_at_ms, |hold| hold.accepted_at_ms)
+        };
         Ok(TemplateList {
             revision: document.as_ref().map(|document| document.revision.clone()),
             templates: document
@@ -312,13 +337,13 @@ impl OrchestrationRuntime {
             applies: applies
                 .into_iter()
                 .map(|apply| ApplySummary {
+                    accepted_at_ms: accepted_at(&apply),
                     template_name: apply.snapshot.name.clone(),
                     template_version: apply.snapshot.version,
                     operation_id: apply.operation_id,
                     template_id: apply.template_id,
                     state: apply.state,
                     wait_for_accept: apply.snapshot.wait_for_accept,
-                    accepted_at_ms: apply.accepted_at_ms,
                     goal: apply.goal,
                     created_at_ms: apply.created_at_ms,
                 })
@@ -861,16 +886,46 @@ impl OrchestrationRuntime {
 
     /// HS2-36XDDX: the live plan steps held for a person's accept of their template's
     /// proposed plan, by step id, with the apply to accept. Reads only.
+    ///
+    /// HS2-38MFXT: a hold checked in with the plan holds on every machine that reads
+    /// the plan, so it is authoritative for its operation; this machine's apply record
+    /// holds only an apply that has no checked-in hold (one applied before the hold
+    /// travelled with the plan).
     pub(super) fn template_holds(
         &self,
         owner_id: &str,
     ) -> Result<BTreeMap<String, AcceptWait>, OrchestrationError> {
-        let applies = self.template_applies(owner_id)?.applies()?;
-        if !applies.iter().any(TemplateApply::waits_for_accept) {
-            return Ok(BTreeMap::new());
+        let plan = self.plan();
+        let checked_in = plan.holds(owner_id)?;
+        let mut held: BTreeMap<String, AcceptWait> = plan
+            .held_steps(owner_id)?
+            .into_iter()
+            .map(|(step_id, hold)| {
+                (
+                    step_id,
+                    AcceptWait {
+                        operation_id: hold.operation_id,
+                        template_name: hold.template_name,
+                    },
+                )
+            })
+            .collect();
+        let applies: Vec<TemplateApply> = self
+            .template_applies(owner_id)?
+            .applies()?
+            .into_iter()
+            .filter(|apply| {
+                apply.waits_for_accept()
+                    && !checked_in
+                        .iter()
+                        .any(|hold| hold.operation_id == apply.operation_id)
+            })
+            .collect();
+        if applies.is_empty() {
+            return Ok(held);
         }
-        let records = self.plan().records(owner_id)?;
-        Ok(held_template_steps(
+        let records = plan.records(owner_id)?;
+        for (step_id, apply) in held_template_steps(
             &applies,
             records.iter().map(|record| {
                 (
@@ -879,39 +934,149 @@ impl OrchestrationRuntime {
                     record.step.ticket.native_id.as_str(),
                 )
             }),
-        )
-        .into_iter()
-        .map(|(step_id, apply)| {
-            (
-                step_id,
-                AcceptWait {
-                    operation_id: apply.operation_id.clone(),
-                    template_name: apply.snapshot.name.clone(),
-                },
-            )
-        })
-        .collect())
+        ) {
+            held.entry(step_id).or_insert_with(|| AcceptWait {
+                operation_id: apply.operation_id.clone(),
+                template_name: apply.snapshot.name.clone(),
+            });
+        }
+        Ok(held)
     }
 
-    /// HS2-36XDDX: the live plan steps of one apply's goal, by step id.
-    fn goal_steps(
+    /// HS2-38MFXT: check the apply's Wait for Accept in with the plan, once its goal's
+    /// id is recorded and before the goal ticket opens or the planner runs, so a
+    /// machine that reads one of the goal's steps also reads its hold. A repeat changes
+    /// nothing; a template that does not wait checks nothing in.
+    fn template_hold_check_in(
         &self,
         owner_id: &str,
         apply: &TemplateApply,
-    ) -> Result<Vec<String>, OrchestrationError> {
-        let Some(goal) = apply.goal.as_ref().filter(|goal| goal.created) else {
-            return Ok(Vec::new());
+        tx: &mut Transaction<'_>,
+    ) -> Result<(), OrchestrationError> {
+        let Some(goal) = apply.goal.as_ref() else {
+            return Ok(());
         };
+        if !apply.snapshot.wait_for_accept || apply.state == ApplyState::Denied {
+            return Ok(());
+        }
+        let now = tx.clock.now_ms();
+        self.plan().update_holds(owner_id, tx, |holds, _| {
+            match holds
+                .iter_mut()
+                .find(|hold| hold.operation_id == apply.operation_id)
+            {
+                Some(hold) => {
+                    if hold.goal_slug.is_none() {
+                        hold.goal_slug.clone_from(&goal.slug);
+                    }
+                }
+                None => holds.push(PlanHold {
+                    operation_id: apply.operation_id.clone(),
+                    template_id: apply.template_id.clone(),
+                    template_name: apply.snapshot.name.clone(),
+                    goal: hotsheet_ticketing::orchestration::RunTicket {
+                        connection_id: goal.connection_id.clone(),
+                        native_id: goal.native_id.clone(),
+                    },
+                    goal_slug: goal.slug.clone(),
+                    accepted_steps: apply.accepted_steps.clone(),
+                    accepted_at_ms: apply.accepted_at_ms,
+                    accepted_by: apply.accepted_by.clone(),
+                    created_at_ms: now,
+                }),
+            }
+            Ok(())
+        })
+    }
+
+    /// HS2-36XDDX: the live plan steps of a goal, by step id. HS2-38MFXT: matched by the
+    /// goal's native id, since a Git source's connection id differs per machine.
+    fn goal_steps(
+        &self,
+        owner_id: &str,
+        native_id: &str,
+    ) -> Result<Vec<String>, OrchestrationError> {
         Ok(self
             .plan()
             .records(owner_id)?
             .into_iter()
-            .filter(|record| {
-                record.step.ticket.connection_id == goal.connection_id
-                    && record.step.ticket.native_id == goal.native_id
-            })
+            .filter(|record| record.step.ticket.native_id == native_id)
             .map(|record| record.step.step_id)
             .collect())
+    }
+
+    /// HS2-36XDDX / HS2-38MFXT: record a person's accept of the goal's live steps on
+    /// the checked-in hold (when there is one) and on this machine's apply record (when
+    /// there is one). The caller holds the apply records' lock. Answers the steps this
+    /// accept released, or `None` when the operation is unknown here and in the plan.
+    fn template_accept_locked(
+        &self,
+        owner_id: &str,
+        store: &TemplateApplyStore,
+        operation_id: &str,
+        actor: Option<&MutationActor>,
+        tx: &mut Transaction<'_>,
+    ) -> Result<Option<AcceptOutcome>, OrchestrationError> {
+        let local = store.find(operation_id)?;
+        let hold = self
+            .plan()
+            .holds(owner_id)?
+            .into_iter()
+            .find(|hold| hold.operation_id == operation_id);
+        let goal = match (&hold, &local) {
+            (Some(hold), _) => hold.goal.native_id.clone(),
+            (None, Some(apply)) => match apply.goal.as_ref().filter(|goal| goal.created) {
+                Some(goal) => goal.native_id.clone(),
+                None => {
+                    return Ok(Some(AcceptOutcome {
+                        apply: local,
+                        hold: None,
+                        released: Vec::new(),
+                        steps: Vec::new(),
+                    }));
+                }
+            },
+            (None, None) => return Ok(None),
+        };
+        let steps = self.goal_steps(owner_id, &goal)?;
+        let accepted: &[String] = match (&hold, &local) {
+            (Some(hold), _) => &hold.accepted_steps,
+            (None, Some(apply)) => &apply.accepted_steps,
+            (None, None) => &[],
+        };
+        let released: Vec<String> = steps
+            .iter()
+            .filter(|step| !accepted.contains(step))
+            .cloned()
+            .collect();
+        let by = actor.and_then(|actor| actor.id.as_deref());
+        let now = tx.clock.now_ms();
+        let mut local = local;
+        if let Some(apply) = local.as_mut()
+            && !steps.is_empty()
+            && apply.accept(&steps, by, now)
+        {
+            store.write(apply)?;
+        }
+        let hold = if hold.is_some() && !steps.is_empty() {
+            self.plan().update_holds(owner_id, tx, |holds, _| {
+                Ok(holds
+                    .iter_mut()
+                    .find(|hold| hold.operation_id == operation_id)
+                    .map(|hold| {
+                        hold.accept(&steps, by, now);
+                        hold.clone()
+                    }))
+            })?
+        } else {
+            hold
+        };
+        Ok(Some(AcceptOutcome {
+            apply: local,
+            hold,
+            released,
+            steps,
+        }))
     }
 
     /// HS2-36XDDX: a person accepts the plan the planner proposed for an apply's goal,
@@ -920,6 +1085,10 @@ impl OrchestrationRuntime {
     /// the next accept. Only a person accepts (an AI actor is `forbidden`); a goal with
     /// nothing planned yet is `template_accept_nothing_planned`, and an accept with
     /// nothing new answers `existing`. Audited as `template_accept`.
+    ///
+    /// HS2-38MFXT: any machine that reads the plan accepts: the operation is found on
+    /// this machine's apply record or in the plan's checked-in hold, and the accept is
+    /// checked in, so every machine's scheduler releases the steps.
     pub fn template_accept(
         &self,
         owner_id: &str,
@@ -932,27 +1101,22 @@ impl OrchestrationRuntime {
         let store = self.template_applies(owner_id)?;
         let result = (|| {
             let _lock = store.lock()?;
-            let mut apply = store
-                .find(&request.operation_id)?
+            let outcome = self
+                .template_accept_locked(owner_id, &store, &request.operation_id, actor, tx)?
                 .ok_or(template_error(TemplateError::ApplyNotFound))?;
-            let steps = self.goal_steps(owner_id, &apply)?;
-            if steps.is_empty() {
+            if outcome.steps.is_empty() {
                 return Err(template_error(TemplateError::NothingToAccept));
             }
-            let released: Vec<String> = steps
-                .iter()
-                .filter(|step| !apply.accepted_steps.contains(step))
-                .cloned()
-                .collect();
-            let by = actor.and_then(|actor| actor.id.as_deref());
-            let changed = apply.accept(&steps, by, tx.clock.now_ms());
-            if changed {
-                store.write(&apply)?;
-            }
             Ok(TemplateAcceptView {
-                apply,
-                outcome: if changed { "accepted" } else { "existing" }.into(),
-                released,
+                outcome: if outcome.released.is_empty() {
+                    "existing"
+                } else {
+                    "accepted"
+                }
+                .into(),
+                apply: outcome.apply,
+                hold: outcome.hold,
+                released: outcome.released,
             })
         })();
         self.template_audit(
@@ -980,7 +1144,8 @@ impl OrchestrationRuntime {
     /// HS2-36XDDX: Start Orchestration is a person's review of the whole plan, so it
     /// accepts every template plan held now (Manual placement stays as it was: its
     /// plan waits for Start and then starts). Audited as `template_accept` with
-    /// `start_orchestration`. Answers the operation ids accepted.
+    /// `start_orchestration`. Answers the operation ids accepted. HS2-38MFXT: checked
+    /// in, as [`Self::template_accept`].
     pub(super) fn template_accept_all(
         &self,
         owner_id: &str,
@@ -999,14 +1164,7 @@ impl OrchestrationRuntime {
         {
             let _lock = store.lock()?;
             for operation_id in &operations {
-                let Some(mut apply) = store.find(operation_id)? else {
-                    continue;
-                };
-                let steps = self.goal_steps(owner_id, &apply)?;
-                let by = actor.and_then(|actor| actor.id.as_deref());
-                if apply.accept(&steps, by, tx.clock.now_ms()) {
-                    store.write(&apply)?;
-                }
+                self.template_accept_locked(owner_id, &store, operation_id, actor, tx)?;
             }
         }
         for operation_id in &operations {
@@ -1264,6 +1422,8 @@ impl OrchestrationRuntime {
                 apply.updated_at_ms = tx.clock.now_ms();
                 store.write(apply)?;
             }
+            // HS2-38MFXT: the hold is checked in before the goal opens.
+            self.template_hold_check_in(owner_id, apply, tx)?;
             let goal = apply.goal.clone().ok_or(OrchestrationError::Corrupt)?;
             let ticket_store = owner
                 .verified_git_source(&goal.connection_id)
@@ -1313,6 +1473,9 @@ impl OrchestrationRuntime {
             apply.updated_at_ms = tx.clock.now_ms();
             store.write(apply)?;
         }
+        // HS2-38MFXT: and again with the goal's slug (or for an apply recorded before the
+        // hold was checked in), before the planner defines any step.
+        self.template_hold_check_in(owner_id, apply, tx)?;
         // 3. The planner takes the goal. A proposal asked for and not answered (a
         // crash in between) is asked again under the same id.
         let interrupted = apply.state == ApplyState::WaitingPlanner

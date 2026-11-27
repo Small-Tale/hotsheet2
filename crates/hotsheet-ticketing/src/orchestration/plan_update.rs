@@ -318,6 +318,7 @@ impl PlanUpdateStore {
                 steps.sort_by(|a, b| a.step_id.cmp(&b.step_id));
                 steps
             },
+            holds: Vec::new(),
         };
         let mut bytes =
             serde_json::to_vec_pretty(&document).map_err(|_| OrchestrationError::Corrupt)?;

@@ -1338,6 +1338,90 @@ fn hs2_ecwg50_the_follower_runs_a_pass_on_events_and_never_on_its_own() {
     );
 }
 
+/// HS2-38MFXT: the checked-in plan written by another machine (an accept or steps,
+/// pulled in) moves no run event and no wake marker here; the follower still sees the
+/// new revision and runs a pass, once, and a waiting step is woken by the write.
+#[test]
+fn hs2_38mfxt_a_plan_written_elsewhere_wakes_the_follower() {
+    tx!(tx);
+    let s = setup(true, &mut tx);
+    let owner = s.owner();
+    set_policy(&s.m, policy(true), &mut tx);
+    s.ready("First", &mut tx);
+    let mut state = SchedulerFollowState::default();
+    let step = |state: &mut SchedulerFollowState, wait_ms: u64, tx: &mut Transaction<'_>| {
+        s.m.runtime
+            .scheduler_follow_step(&owner, state, wait_ms, tx)
+    };
+    assert_eq!(step(&mut state, 0, &mut tx).trigger, Some("start"));
+    assert_eq!(step(&mut state, 0, &mut tx).trigger, None);
+    let hold = |operation: &str| hotsheet_ticketing::orchestration::PlanHold {
+        operation_id: operation.into(),
+        template_id: id(700),
+        template_name: "Synthetic template".into(),
+        goal: hotsheet_ticketing::orchestration::RunTicket {
+            connection_id: "elsewhere".into(),
+            native_id: id(701),
+        },
+        goal_slug: None,
+        accepted_steps: Vec::new(),
+        accepted_at_ms: None,
+        accepted_by: None,
+        created_at_ms: 1,
+    };
+    // Another machine: its own home, the same checkout.
+    let elsewhere = tempfile::tempdir().unwrap();
+    let other_plan = |home: std::path::PathBuf| {
+        let root = std::path::PathBuf::from(&s.m.owner.root);
+        hotsheet_ticketing::orchestration::PlanRegistry::new(&home, move |_| Ok(root.clone()))
+    };
+    let write = |operation: &str, tx: &mut Transaction<'_>| {
+        other_plan(elsewhere.path().to_path_buf())
+            .update_holds(&owner, tx, |holds, _| {
+                holds.push(hold(operation));
+                Ok(())
+            })
+            .unwrap();
+    };
+    write("op-elsewhere", &mut tx);
+    assert_eq!(step(&mut state, 0, &mut tx).trigger, Some("plan"));
+    assert_eq!(step(&mut state, 0, &mut tx).trigger, None);
+    // Unchanged again: the same hold written twice keeps the revision.
+    write("op-elsewhere", &mut tx);
+    assert_eq!(step(&mut state, 0, &mut tx).trigger, None);
+    // A write made here is not a reason: it publishes its own events and marker.
+    s.m.runtime
+        .plan()
+        .update_holds(&owner, &mut tx, |holds, _| {
+            holds.push(hold("op-here"));
+            Ok(())
+        })
+        .unwrap();
+    assert_eq!(step(&mut state, 0, &mut tx).trigger, None);
+    // A waiting step is woken by another machine's write itself.
+    let plan = other_plan(elsewhere.path().to_path_buf());
+    let owner_id = owner.clone();
+    let writer = std::thread::spawn(move || {
+        let mut rng = Rng(77);
+        let mut tx = Transaction {
+            clock: &Clock,
+            rng: &mut rng,
+        };
+        plan.update_holds(&owner_id, &mut tx, |holds, _| {
+            holds.push(hold("op-waiting"));
+            Ok(())
+        })
+        .unwrap();
+    });
+    let waited = std::time::Instant::now();
+    let mut woken = None;
+    while woken.is_none() && waited.elapsed() < Duration::from_secs(20) {
+        woken = step(&mut state, 5_000, &mut tx).trigger;
+    }
+    writer.join().unwrap();
+    assert_eq!(woken, Some("plan"));
+}
+
 #[test]
 fn hs2_sqs266_removing_a_step_wakes_the_follower_even_when_the_plan_empties() {
     tx!(tx);

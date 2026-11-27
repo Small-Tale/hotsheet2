@@ -37,6 +37,9 @@ const CORE_SCHEDULER: &str =
     include_str!("../../../../hotsheet-ticketing/src/orchestration/scheduler.rs");
 const CORE_CONTRACT: &str =
     include_str!("../../../../hotsheet-ticketing/src/orchestration/contract.rs");
+// HS2-38MFXT: the checked-in plan carries the template holds.
+const CORE_SHARED_PLAN: &str =
+    include_str!("../../../../hotsheet-ticketing/src/orchestration/shared_plan.rs");
 const CORE_SITES: &str =
     include_str!("../../../../hotsheet-ticketing/src/orchestration/contract/sites.rs");
 
@@ -92,6 +95,11 @@ const REFUSING: &[(&str, &str, &str)] = &[
     ("core contract.rs", CORE_CONTRACT, "RenameTarget"),
     ("core validation.rs", CORE_VALIDATION, "ValidationStep"),
     ("core validation.rs", CORE_VALIDATION, "StepDefinition"),
+    // HS2-38MFXT: the checked-in plan and its Wait for Accept holds. An older binary
+    // refuses a plan holding one (version 2) rather than place a held step.
+    ("core shared_plan.rs", CORE_SHARED_PLAN, "SharedPlan"),
+    ("core shared_plan.rs", CORE_SHARED_PLAN, "SharedStep"),
+    ("core shared_plan.rs", CORE_SHARED_PLAN, "PlanHold"),
 ];
 
 /// Whether the attributes directly above `pub struct name` refuse unknown fields.

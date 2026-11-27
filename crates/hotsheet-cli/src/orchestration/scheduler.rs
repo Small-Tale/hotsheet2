@@ -280,6 +280,9 @@ pub struct SchedulerFollowState {
     started: bool,
     cursor: u64,
     wake: Option<String>,
+    /// HS2-38MFXT: the checked-in plan's revision at the last pass, so a plan written
+    /// elsewhere (another machine's accept or steps, pulled in) wakes the loop.
+    plan_revision: Option<String>,
     digest: Option<u64>,
     pub(super) retry_at_ms: Option<u64>,
 }
@@ -288,7 +291,8 @@ pub struct SchedulerFollowState {
 pub struct SchedulerStep {
     /// The owner's policy enables automatic placement; call again.
     pub active: bool,
-    /// What caused a pass in this step: `start`, `event`, `signal` or `retry`.
+    /// What caused a pass in this step: `start`, `event`, `signal`, `plan` (HS2-38MFXT)
+    /// or `retry`.
     pub trigger: Option<&'static str>,
     /// The pass could not be completed; the host backs off before the next step.
     pub failed: bool,
@@ -1898,9 +1902,18 @@ impl OrchestrationRuntime {
         // background; the reads below run after each wait, which ends at the safety
         // re-check until the stream is live, so a change made while it starts is found
         // within a second instead of after a start that took seconds under load.
+        // HS2-38MFXT: and the checked-in plan's directory, when it exists (a read never
+        // creates it), so an accept checked in by another machine is placed at once.
+        let plan_directory = self
+            .owner(owner_id)
+            .ok()
+            .map(|owner| std::path::Path::new(&owner.root).join(".hotsheet2"))
+            .filter(|directory| directory.is_dir());
         let waiter = (wait_ms > 0)
             .then(|| {
-                hotsheet_jobs::ChangeWaiter::starting(&[journal.directory(), &wake_directory]).ok()
+                let mut directories = vec![journal.directory(), wake_directory.as_path()];
+                directories.extend(plan_directory.as_deref());
+                hotsheet_jobs::ChangeWaiter::starting(&directories).ok()
             })
             .flatten();
         let deadline =
@@ -1931,6 +1944,21 @@ impl OrchestrationRuntime {
             if wake != state.wake {
                 state.wake = wake;
                 trigger = trigger.or(Some("signal"));
+            }
+            // HS2-38MFXT: a plan revision this loop has not passed on yet that this
+            // machine did not write (a write made here publishes its own events and
+            // marker, and a pass ahead of them would decide without them).
+            let plan_revision = self.plan().revision(owner_id).ok().flatten();
+            if plan_revision != state.plan_revision {
+                let elsewhere = plan_revision.is_some()
+                    && plan_revision
+                        != hotsheet_ticketing::orchestration::plan_written_here(
+                            &self.home, owner_id,
+                        );
+                state.plan_revision = plan_revision;
+                if elsewhere && state.started {
+                    trigger = trigger.or(Some("plan"));
+                }
             }
             let now_ms = tx.clock.now_ms();
             if state.retry_at_ms.is_some_and(|at| at <= now_ms) {

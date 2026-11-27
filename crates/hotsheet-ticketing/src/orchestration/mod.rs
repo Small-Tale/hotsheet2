@@ -204,7 +204,10 @@ pub use sessions::{
     SessionState, SessionTransition, SessionUpdate, StopRequest, decide_hand_back,
     decide_safe_point, decide_stop, run_holder, run_worked_elsewhere, session_label,
 };
-pub use shared_plan::{SHARED_PLAN_PATH, SharedPlan, SharedPlanStore, SharedStep, merge_steps};
+pub use shared_plan::{
+    MAX_PLAN_HOLDS, PLAN_HOLD_VERSION, PLAN_WRITTEN_DIR, PlanHold, SHARED_PLAN_PATH, SharedPlan,
+    SharedPlanStore, SharedStep, held_plan_steps, merge_steps, plan_version, plan_written_here,
+};
 pub use summary::{
     BlockedTime, CostAggregate, CostReading, DurationAggregate, Metric, OutcomeTally,
     PROGRESS_ATTRIBUTION, ProgressInput, ProgressRollup, ProgressSummary, RetryTotals, RunProgress,

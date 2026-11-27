@@ -3036,6 +3036,15 @@ beside the runs, gates and validation records readiness is also computed from.
 Damaged or newer data in either file, for example merge markers left by a text merge,
 is an error that is never overwritten.
 
+**Template holds (HS2-38MFXT).** The checked-in file also carries `holds`: each
+template apply whose template waits for an accept (§26.32), so every machine reading the
+steps holds the same ones. The file stays version 1, byte for byte, while it holds none,
+and is written as version 2 while it holds one, so an older Hot Sheet answers
+`upgrade_required` for the plan (and places nothing, and never overwrites the hold)
+instead of reading the steps without it. A version-1 file with holds or a version-2 file
+without is damaged; so are holds out of order by operation id. Every step write keeps the
+holds as they are.
+
 **Merging.** Every change is a read-modify-write of the checked-in file under its
 lock, merged by step id: a step on one side only is kept and an identical step is
 kept; the same step id with a different definition, or one target ticket under two
@@ -4174,6 +4183,11 @@ later operation generation. A step runs a pass:
   finished a turn (§26.19), a plan step's definition changed, a resource the last
   pass deferred work for was released (§26.20), or a target follower learned of a
   session change on another server (§26.9, HS2-257Q2Z);
+- when the checked-in plan's `revision` differs from the one the loop last passed on
+  (trigger `plan`, HS2-38MFXT): a plan written by another machine, such as its accept
+  of a template plan or a step it defined, pulled into this checkout, moves no event and
+  no marker here. The loop also waits on the checkout's `.hotsheet2` directory, when it
+  exists, so such a write wakes a waiting step;
 - when the time the last pass named in `retry_at_ms` has come.
 
 A change that publishes events and also moves the marker publishes first: defining a
@@ -7890,12 +7904,36 @@ applied).
   it always was. Audited as `template_accept`.
 - **Newly planned steps.** A step the planner adds to the goal later (Update Plan, or a
   re-proposal) is held again until the next accept; steps accepted before keep running.
-- **Machine-local.** The accept lives on the apply record in
-  `${HOTSHEET_HOME}/orchestration-template-applies/<owner>.json`, the machine that applied
-  the template and runs its planner and scheduler. A finished apply still waiting for its
-  accept is forgotten last when the records reach their bound, so a hold is not dropped
-  while others can go. An unreadable apply record fails the scheduler's pass rather than
-  place work nobody accepted.
+- **On every machine (HS2-38MFXT).** The hold is checked in with the plan, so another
+  machine running the same project's scheduler (a second checkout of the orchestration
+  project) holds the same steps. When an apply records its goal's id, before the goal
+  ticket opens and before the planner runs, it writes a **hold** into
+  `.hotsheet2/orchestration-plan.json`: the operation id, the template's id and name, the
+  goal ticket (and its slug once known), the accepted step ids, when and by whom. A machine
+  that reads one of the goal's steps therefore also reads its hold (they travel in the same
+  file). A step is held when a hold names its goal, matched by the goal's native id (a Git
+  source's connection id is a per-machine path hash), and does not list it. **Accept Plan**
+  works on any machine that reads the plan: it finds the apply on this machine's record or
+  in the plan's hold, records the accept in the hold (and on the record when there is one)
+  and wakes the scheduler; the other machine's loop runs a pass when the new plan revision
+  arrives (§26.17, trigger `plan`). The answer carries the apply's fields when this machine
+  has its record and `hold` when the plan has one. A checked-in hold is authoritative for
+  its operation; an apply recorded before holds were checked in (no hold in the plan) is
+  still held by this machine's record alone. The plan keeps at most 256 holds: past that the
+  oldest hold that holds no live step is forgotten first, so a bound never releases a held
+  step while another can go.
+- **Older machines.** The plan is version 2 while it carries a hold (§26.15 "Template
+  holds"), so a machine with an older Hot Sheet answers `upgrade_required` for the plan
+  and places nothing for the project until it is upgraded; it never reads the steps
+  without their hold. A hold stays in the plan after its accept, because steps the planner
+  adds later are held again, so every machine running the project's scheduler needs this
+  version once a waiting template was applied.
+- **The apply record.** The apply itself (the snapshot, inputs, planner and permission
+  progress) stays machine-local in
+  `${HOTSHEET_HOME}/orchestration-template-applies/<owner>.json` on the machine that
+  applied the template. A finished apply still waiting for its accept is forgotten last
+  when the records reach their bound. An unreadable apply record or plan fails the
+  scheduler's pass rather than place work nobody accepted.
 - **Shown before applying.** Use Template…'s **Start Work** row says "After someone accepts
   the planned steps, within the Orchestration settings" under Auto with the setting on,
   "Within the Orchestration settings once it is planned, without waiting for an accept"
