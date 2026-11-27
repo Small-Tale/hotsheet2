@@ -18,7 +18,7 @@ use hotsheet_resource_claims::external::SharedSecrets;
 use hotsheet_resource_claims::upstash::transport::{UreqTransport, validate_url};
 use hotsheet_resource_claims::upstash::{self, UpstashBackend, scripts};
 use hotsheet_resource_claims::{
-    AcquireRequest, ClaimBackend, Namespace, ResourceRef, WaitMechanism, WaitOutcome,
+    AcquireRequest, ClaimBackend, Namespace, ResourceRef, WaitCancel, WaitMechanism, WaitOutcome,
 };
 use hotsheet_ticketing::claim_backends::{BackendConfiguration, BackendKind};
 use hotsheet_ticketing::secrets::{SecretError, SecretStore};
@@ -425,6 +425,209 @@ fn hs2_k9j1rk_a_stream_that_keeps_failing_gives_up_instead_of_looping() {
         started.elapsed()
     );
     assert!(fake.count("subscribe") <= 8);
+}
+
+// ---- HS2-P234BH: a cancel during the wait ---------------------------------------------
+
+/// A generous bound for "returned promptly" on a loaded machine; every wait below would
+/// otherwise last at least a minute.
+const PROMPT: Duration = Duration::from_secs(5);
+
+/// The real transport, telling the test when each stream it opened is dropped.
+struct Tracked(UreqTransport, std::sync::mpsc::Sender<()>);
+
+struct TrackedStream(
+    Box<dyn upstash::transport::Subscription>,
+    std::sync::mpsc::Sender<()>,
+);
+
+impl Drop for TrackedStream {
+    fn drop(&mut self) {
+        let _ = self.1.send(());
+    }
+}
+
+impl upstash::transport::Subscription for TrackedStream {
+    fn next(&mut self) -> Result<upstash::transport::Event, upstash::transport::RestError> {
+        self.0.next()
+    }
+}
+
+impl upstash::transport::RestTransport for Tracked {
+    fn command(
+        &self,
+        args: &[serde_json::Value],
+    ) -> Result<serde_json::Value, upstash::transport::RestError> {
+        self.0.command(args)
+    }
+    fn pipeline(
+        &self,
+        commands: &[Vec<serde_json::Value>],
+    ) -> Result<Vec<serde_json::Value>, upstash::transport::RestError> {
+        self.0.pipeline(commands)
+    }
+    fn subscribe(
+        &self,
+        channel: &str,
+        lifetime: Duration,
+    ) -> Result<Box<dyn upstash::transport::Subscription>, upstash::transport::RestError> {
+        Ok(Box::new(TrackedStream(
+            self.0.subscribe(channel, lifetime)?,
+            self.1.clone(),
+        )))
+    }
+}
+
+fn tracked(fake: &Fake) -> (Arc<UpstashBackend>, std::sync::mpsc::Receiver<()>) {
+    let (dropped, streams_ended) = std::sync::mpsc::channel();
+    let backend = UpstashBackend::new(
+        "up",
+        "hs2rc",
+        Arc::new(Tracked(UreqTransport::new(&fake.url, TOKEN), dropped)),
+        None,
+    );
+    (Arc::new(backend), streams_ended)
+}
+
+/// Start a cancellable wait on its own thread; its result arrives on the receiver.
+fn spawn_wait(
+    backend: &Arc<UpstashBackend>,
+    cancel: &WaitCancel,
+    wait: Duration,
+) -> std::sync::mpsc::Receiver<Result<WaitOutcome, hotsheet_resource_claims::ClaimError>> {
+    let (done, result) = std::sync::mpsc::channel();
+    let (backend, cancel) = (backend.clone(), cancel.clone());
+    std::thread::spawn(move || {
+        let _ = done.send(backend.wait_free_cancellable(&target("vms/one"), wait, &cancel));
+    });
+    result
+}
+
+/// Block until the fake has logged `count` requests starting with `prefix`.
+fn until_logged(fake: &Fake, prefix: &str, count: usize) {
+    let started = Instant::now();
+    while fake.count(prefix) < count {
+        assert!(
+            started.elapsed() < Duration::from_secs(20),
+            "never saw {count} x {prefix}: {:?}",
+            fake.log.lock().unwrap()
+        );
+        std::thread::yield_now();
+    }
+}
+
+fn log_since(fake: &Fake, from: usize) -> Vec<String> {
+    fake.log.lock().unwrap()[from..].to_vec()
+}
+
+#[test]
+fn hs2_p234bh_a_cancel_ends_a_parked_stream_wait_and_its_stream_reads_nothing_after() {
+    let fake = Fake::start();
+    let (backend, streams_ended) = tracked(&fake);
+    let held = backend.acquire(&target("vms/one"), &lease(60)).unwrap();
+    let cancel = WaitCancel::new();
+    let parked = spawn_wait(&backend, &cancel, Duration::from_secs(120));
+    // Parked: the first read, the stream, and the read once the stream was confirmed.
+    until_logged(&fake, "eval get", 2);
+    until_logged(&fake, "subscribe", 1);
+    assert_eq!(cancel.registered(), 1);
+    let from = fake.requests();
+
+    let began = Instant::now();
+    cancel.cancel();
+    let error = parked.recv_timeout(PROMPT).unwrap().unwrap_err();
+    assert!(began.elapsed() < PROMPT, "{:?}", began.elapsed());
+    assert_eq!(error.code(), "interrupted");
+    assert_eq!(
+        cancel.registered(),
+        0,
+        "the waker is removed as the wait ends"
+    );
+
+    // The release reaches the abandoned stream, which ends on it without reading state or
+    // subscribing again: the only request after the cancel is the release itself.
+    backend.release(held.renewal_token.expose()).unwrap();
+    streams_ended.recv_timeout(PROMPT).unwrap();
+    assert_eq!(log_since(&fake, from), ["eval release"]);
+    assert!(
+        backend.get(&target("vms/one")).unwrap().is_none(),
+        "nothing claimed"
+    );
+
+    // Cancelled before it starts (and again): no request at all.
+    let from = fake.requests();
+    for _ in 0..2 {
+        let error = backend
+            .wait_free_cancellable(&target("vms/one"), Duration::from_secs(120), &cancel)
+            .unwrap_err();
+        assert_eq!(error.code(), "interrupted");
+    }
+    assert_eq!(fake.requests(), from);
+
+    // A fresh signal waits again and a release still wakes it.
+    let held = backend.acquire(&target("vms/one"), &lease(60)).unwrap();
+    let subscribed = fake.count("subscribe");
+    let again = spawn_wait(&backend, &WaitCancel::new(), Duration::from_secs(120));
+    until_logged(&fake, "subscribe", subscribed + 1);
+    backend.release(held.renewal_token.expose()).unwrap();
+    assert_eq!(
+        again.recv_timeout(PROMPT).unwrap().unwrap(),
+        WaitOutcome::Free
+    );
+}
+
+#[test]
+fn hs2_p234bh_an_abandoned_stream_ends_at_its_lifetime_without_a_request() {
+    let fake = Fake::start();
+    let (backend, streams_ended) = tracked(&fake);
+    // A short lease: the stream lives to its expiry, which would otherwise wake the wait.
+    backend
+        .acquire(
+            &target("vms/one"),
+            &AcquireRequest::new(Duration::from_millis(1500)),
+        )
+        .unwrap();
+    let cancel = WaitCancel::new();
+    let parked = spawn_wait(&backend, &cancel, Duration::from_secs(120));
+    until_logged(&fake, "eval get", 2);
+    let from = fake.requests();
+    cancel.cancel();
+    assert_eq!(
+        parked.recv_timeout(PROMPT).unwrap().unwrap_err().code(),
+        "interrupted"
+    );
+    // The stream reaches its lifetime and is dropped; nothing reads the expiry.
+    streams_ended.recv_timeout(PROMPT).unwrap();
+    assert!(
+        log_since(&fake, from).is_empty(),
+        "{:?}",
+        log_since(&fake, from)
+    );
+}
+
+#[test]
+fn hs2_p234bh_a_cancel_during_the_backoff_after_a_failed_stream_ends_the_wait() {
+    let fake = Fake::start();
+    let backend = Arc::new(backend(&fake));
+    backend.acquire(&target("vms/one"), &lease(60)).unwrap();
+    fake.faults
+        .fail_subscribe
+        .store(100, std::sync::atomic::Ordering::SeqCst);
+    let cancel = WaitCancel::new();
+    let parked = spawn_wait(&backend, &cancel, Duration::from_secs(120));
+    // After the fourth failed stream the backoff is 2 s.
+    until_logged(&fake, "subscribe", 4);
+    let began = Instant::now();
+    cancel.cancel();
+    assert_eq!(
+        parked.recv_timeout(PROMPT).unwrap().unwrap_err().code(),
+        "interrupted"
+    );
+    assert!(
+        began.elapsed() < Duration::from_millis(1500),
+        "the backoff was not waited out: {:?}",
+        began.elapsed()
+    );
 }
 
 // ---- listing and namespaces ---------------------------------------------------------

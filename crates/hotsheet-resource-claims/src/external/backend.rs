@@ -13,8 +13,9 @@ use hotsheet_ticketing::secrets::SecretStore;
 
 use super::approval::{self, plugin_root};
 use super::manifest::{ManifestWait, PluginManifest, SettingType, valid_plugin_id};
-use super::runner::{CommandRunner, LiveRunner, tail};
+use super::runner::{CommandRunner, LiveRunner, RunError, tail};
 use crate::backend::ClaimBackend;
+use crate::cancel::WaitCancel;
 use crate::codec::{KeyProvider, MetadataCodecs};
 use crate::config::CredentialKeyProvider;
 use crate::error::ClaimError;
@@ -298,7 +299,7 @@ impl ExternalBackend {
     /// Run one operation. The plugin's approval is re-checked first, so edited code never
     /// runs.
     fn call(&self, op: &str, request: Value, timeout: Duration) -> Result<Value, ClaimError> {
-        self.call_with(op, None, request, timeout)
+        self.call_with(op, None, request, timeout, None)
     }
 
     /// [`Self::call`] about `target`, so a `held_by` holder attaches to it.
@@ -309,7 +310,7 @@ impl ExternalBackend {
         request: Value,
         timeout: Duration,
     ) -> Result<Value, ClaimError> {
-        self.call_with(op, Some(target), request, timeout)
+        self.call_with(op, Some(target), request, timeout, None)
     }
 
     fn call_with(
@@ -318,6 +319,7 @@ impl ExternalBackend {
         target: Option<&ResourceRef>,
         request: Value,
         timeout: Duration,
+        cancel: Option<&WaitCancel>,
     ) -> Result<Value, ClaimError> {
         approval::require(&self.home, &self.manifest.id, &self.manifest.dir)?;
         let input = json!({
@@ -329,17 +331,18 @@ impl ExternalBackend {
             "request": request,
         })
         .to_string();
-        let output = self
-            .runner
-            .run(
-                &self.manifest.program,
-                &self.manifest.args,
-                input.as_bytes(),
-                timeout,
-            )
-            .map_err(|e| {
-                ClaimError::BackendUnreachable(format!("plugin '{}': {e}", self.manifest.id))
-            })?;
+        let (program, args) = (&self.manifest.program, &self.manifest.args);
+        let output = match cancel {
+            None => self.runner.run(program, args, input.as_bytes(), timeout),
+            Some(cancel) => {
+                self.runner
+                    .run_cancellable(program, args, input.as_bytes(), timeout, cancel)
+            }
+        }
+        .map_err(|e| match e {
+            RunError::Cancelled { .. } => ClaimError::Interrupted,
+            e => ClaimError::BackendUnreachable(format!("plugin '{}': {e}", self.manifest.id)),
+        })?;
         let reply: Option<Reply> = String::from_utf8_lossy(&output.stdout)
             .lines()
             .rev()
@@ -455,6 +458,58 @@ impl ExternalBackend {
             ClaimError::Invalid(format!("plugin '{}' returned no claim", self.manifest.id))
         })?;
         self.claim_from(Some(target), wire)
+    }
+
+    /// [`ClaimBackend::wait_free`], ended early by `cancel` (HS2-P234BH). The protocol
+    /// already ends a plugin process by stopping it (an operation that outlives its timeout
+    /// is killed), so a cancel stops the `wait` process the same way and its answer is
+    /// never read: no protocol change, and a plugin must already tolerate being stopped.
+    fn wait_until(
+        &self,
+        target: &ResourceRef,
+        timeout: Duration,
+        cancel: Option<&WaitCancel>,
+    ) -> Result<WaitOutcome, ClaimError> {
+        if cancel.is_some_and(WaitCancel::is_cancelled) {
+            return Err(ClaimError::Interrupted);
+        }
+        let timeout_ms = wait_ms(timeout)?;
+        if self.manifest.wait == ManifestWait::None || timeout.is_zero() {
+            return match self.get(target)? {
+                None => Ok(WaitOutcome::Free),
+                Some(holder) if timeout.is_zero() => Ok(WaitOutcome::TimedOut {
+                    holder: Box::new(holder),
+                }),
+                Some(_) => Err(ClaimError::Unsupported(format!(
+                    "plugin '{}' cannot wait; check again later",
+                    self.manifest.id
+                ))),
+            };
+        }
+        // One blocking invocation: the plugin parks on its own push signal. The process
+        // may run as long as the wait plus its ordinary operation allowance.
+        let result = self.call_with(
+            "wait",
+            Some(target),
+            json!({ "target": target.to_string(), "timeout_ms": timeout_ms }),
+            timeout + self.timeout(),
+            cancel,
+        )?;
+        if result.get("free").and_then(Value::as_bool) == Some(true) {
+            return Ok(WaitOutcome::Free);
+        }
+        let holder: WireClaim = serde_json::from_value(
+            result.get("holder").cloned().unwrap_or(Value::Null),
+        )
+        .map_err(|_| {
+            ClaimError::Invalid(format!(
+                "plugin '{}' ended a wait without saying free or naming the holder",
+                self.manifest.id
+            ))
+        })?;
+        Ok(WaitOutcome::TimedOut {
+            holder: Box::new(self.claim_from(Some(target), holder)?),
+        })
     }
 
     fn timeout(&self) -> Duration {
@@ -643,42 +698,16 @@ impl ClaimBackend for ExternalBackend {
         target: &ResourceRef,
         timeout: Duration,
     ) -> Result<WaitOutcome, ClaimError> {
-        let timeout_ms = wait_ms(timeout)?;
-        if self.manifest.wait == ManifestWait::None || timeout.is_zero() {
-            return match self.get(target)? {
-                None => Ok(WaitOutcome::Free),
-                Some(holder) if timeout.is_zero() => Ok(WaitOutcome::TimedOut {
-                    holder: Box::new(holder),
-                }),
-                Some(_) => Err(ClaimError::Unsupported(format!(
-                    "plugin '{}' cannot wait; check again later",
-                    self.manifest.id
-                ))),
-            };
-        }
-        // One blocking invocation: the plugin parks on its own push signal. The process
-        // may run as long as the wait plus its ordinary operation allowance.
-        let result = self.call_for(
-            target,
-            "wait",
-            json!({ "target": target.to_string(), "timeout_ms": timeout_ms }),
-            timeout + self.timeout(),
-        )?;
-        if result.get("free").and_then(Value::as_bool) == Some(true) {
-            return Ok(WaitOutcome::Free);
-        }
-        let holder: WireClaim = serde_json::from_value(
-            result.get("holder").cloned().unwrap_or(Value::Null),
-        )
-        .map_err(|_| {
-            ClaimError::Invalid(format!(
-                "plugin '{}' ended a wait without saying free or naming the holder",
-                self.manifest.id
-            ))
-        })?;
-        Ok(WaitOutcome::TimedOut {
-            holder: Box::new(self.claim_from(Some(target), holder)?),
-        })
+        self.wait_until(target, timeout, None)
+    }
+
+    fn wait_free_cancellable(
+        &self,
+        target: &ResourceRef,
+        timeout: Duration,
+        cancel: &WaitCancel,
+    ) -> Result<WaitOutcome, ClaimError> {
+        self.wait_until(target, timeout, Some(cancel))
     }
 
     fn verify_fencing(&self, target: &ResourceRef, fencing_token: u64) -> Result<(), ClaimError> {

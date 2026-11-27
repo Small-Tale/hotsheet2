@@ -20,8 +20,8 @@ use hotsheet_resource_claims::external::{
     self, ExternalBackend, LiveRunner, PluginManifest, SharedSecrets, approve, load_all,
 };
 use hotsheet_resource_claims::{
-    AcquireRequest, ClaimBackend, ClaimError, Namespace, OfflinePolicy, ResourceRef, WaitMechanism,
-    resolve,
+    AcquireRequest, ClaimBackend, ClaimError, Namespace, OfflinePolicy, ResourceRef, WaitCancel,
+    WaitMechanism, WaitOutcome, resolve,
 };
 use hotsheet_ticketing::FileLock;
 use hotsheet_ticketing::claim_backends::{BackendConfiguration, BackendKind};
@@ -73,6 +73,7 @@ fn fake_plugin_main() {
         "stdin": input,
         "args": std::env::args().collect::<Vec<_>>(),
         "env": std::env::vars().map(|(k, v)| format!("{k}={v}")).collect::<Vec<_>>(),
+        "pid": std::process::id(),
     });
     let mut log = std::fs::OpenOptions::new()
         .create(true)
@@ -505,6 +506,123 @@ fn hs2_322zsz_a_wait_is_one_blocking_invocation_not_a_loop_of_requests() {
         ops.iter().filter(|op| *op == "acquire").count() <= 3,
         "no per-tick requests: {ops:?}"
     );
+}
+
+// ---- HS2-P234BH: a cancel during the wait ---------------------------------------------
+
+/// A generous bound for "returned promptly" on a loaded machine; the waits below would
+/// otherwise last two minutes.
+const PROMPT: Duration = Duration::from_secs(5);
+
+impl Plugin {
+    fn ops(&self) -> Vec<String> {
+        self.runs()
+            .iter()
+            .map(|run| {
+                let envelope: Value = serde_json::from_str(run["stdin"].as_str().unwrap()).unwrap();
+                envelope["op"].as_str().unwrap().to_owned()
+            })
+            .collect()
+    }
+
+    /// Block until the plugin has started `count` runs of `op`; the pid of the last one.
+    fn until_running(&self, op: &str, count: usize) -> u32 {
+        let started = Instant::now();
+        loop {
+            let runs = self.runs();
+            let matching: Vec<&Value> = runs
+                .iter()
+                .filter(|run| {
+                    run["stdin"]
+                        .as_str()
+                        .unwrap()
+                        .contains(&format!("\"op\":\"{op}\""))
+                })
+                .collect();
+            if matching.len() >= count {
+                return u32::try_from(matching[count - 1]["pid"].as_u64().unwrap()).unwrap();
+            }
+            assert!(
+                started.elapsed() < Duration::from_secs(20),
+                "no {op} run: {:?}",
+                self.ops()
+            );
+            std::thread::yield_now();
+        }
+    }
+}
+
+fn process_alive(pid: u32) -> bool {
+    std::process::Command::new("kill")
+        .args(["-0", &pid.to_string()])
+        .stderr(std::process::Stdio::null())
+        .status()
+        .unwrap()
+        .success()
+}
+
+fn spawn_plugin_wait(
+    backend: &Arc<dyn ClaimBackend>,
+    cancel: &WaitCancel,
+) -> std::sync::mpsc::Receiver<Result<WaitOutcome, ClaimError>> {
+    let (done, result) = std::sync::mpsc::channel();
+    let (backend, cancel) = (backend.clone(), cancel.clone());
+    std::thread::spawn(move || {
+        let _ = done.send(backend.wait_free_cancellable(
+            &target("vms/one"),
+            Duration::from_secs(120),
+            &cancel,
+        ));
+    });
+    result
+}
+
+#[test]
+fn hs2_p234bh_a_cancel_stops_the_plugin_wait_process_and_nothing_runs_after() {
+    let plugin = install("fake", "blocking", 20);
+    let backend = plugin.approved_backend("fake");
+    let held = backend.acquire(&target("vms/one"), &lease(60)).unwrap();
+    let cancel = WaitCancel::new();
+    let parked = spawn_plugin_wait(&backend, &cancel);
+    let pid = plugin.until_running("wait", 1);
+    let before = plugin.ops().len();
+
+    let began = Instant::now();
+    cancel.cancel();
+    let error = parked.recv_timeout(PROMPT).unwrap().unwrap_err();
+    assert!(began.elapsed() < PROMPT, "{:?}", began.elapsed());
+    assert_eq!(error.code(), "interrupted");
+    // Stopped and reaped like a timed-out operation, not left to finish its wait.
+    assert!(!process_alive(pid), "the wait process {pid} was stopped");
+
+    // The release runs; nothing from the cancelled wait runs after it or claims.
+    backend.release(held.renewal_token.expose()).unwrap();
+    assert_eq!(plugin.ops()[before..], ["release"]);
+    assert!(backend.get(&target("vms/one")).unwrap().is_none());
+
+    // Cancelled before it starts (and again): the plugin never runs.
+    let before = plugin.ops().len();
+    for _ in 0..2 {
+        let error = backend
+            .wait_free_cancellable(&target("vms/one"), Duration::from_secs(120), &cancel)
+            .unwrap_err();
+        assert_eq!(error.code(), "interrupted");
+    }
+    assert_eq!(plugin.ops().len(), before);
+
+    // A fresh signal waits again and a release still wakes it with one invocation.
+    let held = backend.acquire(&target("vms/one"), &lease(60)).unwrap();
+    let again = spawn_plugin_wait(&backend, &WaitCancel::new());
+    plugin.until_running("wait", 2);
+    backend.release(held.renewal_token.expose()).unwrap();
+    assert_eq!(
+        again
+            .recv_timeout(Duration::from_secs(20))
+            .unwrap()
+            .unwrap(),
+        WaitOutcome::Free
+    );
+    assert_eq!(plugin.ops().iter().filter(|op| *op == "wait").count(), 2);
 }
 
 // ---- approval -----------------------------------------------------------------------

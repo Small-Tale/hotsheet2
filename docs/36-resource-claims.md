@@ -195,8 +195,11 @@ wait, with `interrupted`: the local backend registers a waker that sends one dat
 socket, reads the flag after registering it and after every wake-up, so a cancel is never lost, and
 removes its registration as it returns. A cancel made before the wait starts reads nothing and registers
 nothing. The orchestration runtime's claim follow passes one tied to its stop token, so a stopping server
-joins that thread at once (§26). The Upstash and external-plugin backends honour only a cancel made
-before their wait starts until HS2-P234BH.
+joins that thread at once (§26). The Upstash and external-plugin backends end their waits on the same
+cancel (HS2-P234BH): Upstash reads its stream on a helper thread and the wait returns at once, leaving
+the stream to end on its next event or at its lifetime without a read or a resubscribe (§36.17); a
+plugin's `wait` process is stopped the way a timed-out operation is (§36.16). Neither adds a request
+or a timer.
 
 ## 36.7 Offline behavior
 
@@ -707,6 +710,10 @@ expiry cannot precede acquisition, and metadata keeps its codec prefixes and bou
   `unsupported`. `wait = "blocking"` means the plugin implements `wait`: one invocation parks on
   the plugin's own push signal until the resource is free or `timeout_ms` passes, and Hot Sheet
   allows that process the wait plus one operation's timeout. Hot Sheet never loops on a timer.
+  A wait another thread cancels (HS2-P234BH, §36.6) stops the `wait` process exactly as a timeout
+  does (killed and reaped, its output never read) and fails `interrupted`; nothing runs for that wait
+  afterwards. The protocol has no abort message and none is added: a plugin must already survive
+  being stopped, and a `wait` only reads. A process the plugin started itself is not stopped with it.
 - **Credentials only on stdin.** A `secret` setting is stored in the OS credential store under
   `resource-claims.<configuration>.<key>` (`hotsheet-cli resource backend secret <id> <key>`,
   value on standard input) and appears in the envelope's `settings` and nowhere else: not in
@@ -785,6 +792,12 @@ pruned with HS2-FYXHA6.
   publishes `released`; a renewal that shortens a lease publishes `shortened`. Nothing polls on a
   timer: a parked wait sends no request, and a stream that fails backs off 250 ms, 500 ms … up to
   5 s, at most six times, then fails with `backend_unreachable`.
+- **A cancelled wait (HS2-P234BH).** `ureq` gives no handle to close a response's socket from
+  another thread, so a cancellable wait reads each stream on a helper thread and blocks on a channel
+  that the `WaitCancel` waker also feeds. A cancel ends the wait at once with `interrupted`, also
+  during a backoff. The abandoned stream ends on its next event or at its lifetime (the wait's or the
+  holder's lease left), whichever comes first, and reads no state and subscribes to nothing after
+  the cancel. A wait without a cancel reads its stream on its own thread as before.
 - **Rate limits and errors.** A 429 is retried at most three times after the `Retry-After` delay
   (capped at 2 s); more is `backend_unreachable` naming the configuration. A 401 is `unsupported`
   and names `resource backend secret <id> token`; a refused command is a storage error; an unreachable
