@@ -54,9 +54,10 @@ capabilities = ["ticket_source"]
 [executable]
 program = "bin/hs-plugin-github"         # relative to the plugin directory
 args = []
-# Optional per-target overrides, keyed by Rust target triple:
+# Optional per-platform overrides, keyed by `<os>-<arch>` as Rust names them
+# (std::env::consts: macos-aarch64, linux-x86_64, windows-x86_64):
 [executable.targets]
-"x86_64-pc-windows-msvc" = "bin/hs-plugin-github.exe"
+"windows-x86_64" = "bin/hs-plugin-github.exe"
 
 [[settings]]                              # typed, as in notifier/claim-backend manifests
 key = "api_base"
@@ -219,6 +220,9 @@ On the JSON transport the error is the JSON-RPC `error` object. Its `code` is
   - Five crashes within 10 minutes open a circuit: affected connections report
     `disabled` with the plugin's last stderr lines, until the user re-enables them or
     the plugin's digest changes.
+- **Built (HS2-XY0VTN).** `hotsheet-plugin-host` implements this section and §38.7:
+  `PluginHost::call`/`stream`, status and `wait_for_status`, `reset`, `stop`. Its tests
+  drive the `hs-plugin-diagnostics` test plugin through every transition above.
 - **One supervisor.** The `hotsheet-plugin-host` crate owns the supervisor (spawn,
   handshake, multiplexing, backoff and shutdown) for every capability. It replaces the
   duplicated notifier and claim-backend runners and the two near-identical JSON-RPC

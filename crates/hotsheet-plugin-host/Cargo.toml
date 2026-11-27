@@ -1,0 +1,36 @@
+[package]
+name = "hotsheet-plugin-host"
+description = "Hot Sheet 2 out-of-process plugin host: code-bearing manifests, trust gate, process supervisor (docs/38)."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+# A test and verification plugin that answers the `diagnostics` capability over both
+# transports, with fault injection for the supervisor's lifecycle tests (HS2-XY0VTN).
+[[bin]]
+name = "hs-plugin-diagnostics"
+path = "src/bin/hs-plugin-diagnostics.rs"
+
+[dependencies]
+hotsheet-plugin-protocol.workspace = true
+# HS2-XY0VTN: the directory digest shared with notifier and claim-backend approvals.
+hotsheet-ticketing.workspace = true
+prost.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+toml.workspace = true
+tempfile.workspace = true
+tracing.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true
+
+# The kill-on-close job object that holds a plugin's process tree (HS2-CYDK9Z).
+[target.'cfg(windows)'.dependencies]
+hotsheet-process-journal.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

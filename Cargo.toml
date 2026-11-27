@@ -18,6 +18,7 @@ members = [
     "crates/hotsheet-resource-claims",
     "crates/hotsheet-jobs",
     "crates/hotsheet-plugin-protocol",
+    "crates/hotsheet-plugin-host",
 ]
 
 [workspace.package]
@@ -111,3 +112,4 @@ hotsheet-notify = { path = "crates/hotsheet-notify" }
 hotsheet-resource-claims = { path = "crates/hotsheet-resource-claims" }
 hotsheet-jobs = { path = "crates/hotsheet-jobs" }
 hotsheet-plugin-protocol = { path = "crates/hotsheet-plugin-protocol" }
+hotsheet-plugin-host = { path = "crates/hotsheet-plugin-host" }

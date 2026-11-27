@@ -1265,6 +1265,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "hotsheet-plugin-host"
+version = "0.0.0"
+dependencies = [
+ "hotsheet-plugin-protocol",
+ "hotsheet-process-journal",
+ "hotsheet-ticketing",
+ "libc",
+ "prost",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "toml 0.8.23",
+ "tracing",
+]
+
+[[package]]
 name = "hotsheet-plugin-protocol"
 version = "0.0.0"
 dependencies = [
