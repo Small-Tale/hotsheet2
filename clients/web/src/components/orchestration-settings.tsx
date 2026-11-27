@@ -272,16 +272,22 @@ export function OrchestrationSettings({
                 }
               />
             </Row>
-            {unavailableReason ? (
-              <Text tone="quiet" size="compact" flush>
-                {unavailableReason}
-              </Text>
-            ) : null}
-            {message ? (
-              <Text tone="danger" size="compact" role="alert" flush>
-                {message}
-              </Text>
-            ) : null}
+            {/* HS2-Y2H7BP: both message slots are always present (hidden when empty), so a background read that
+                starts or stops failing never shifts the project rows below, which closed a row's open menu. */}
+            <List hidden={!unavailableReason} rootAttributes={{ 'data-orchestration-unavailable': '' }}>
+              {unavailableReason ? (
+                <Text tone="quiet" size="compact" flush>
+                  {unavailableReason}
+                </Text>
+              ) : null}
+            </List>
+            <List hidden={!message} rootAttributes={{ 'data-orchestration-message': '' }}>
+              {message ? (
+                <Text tone="danger" size="compact" role="alert" flush>
+                  {message}
+                </Text>
+              ) : null}
+            </List>
             {loading && rows.length === 0 ? (
               <List gap={rem(0.125)}>
                 <ListActionRow
