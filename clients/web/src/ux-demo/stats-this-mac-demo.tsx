@@ -57,6 +57,7 @@ export function StatsThisMacSettings() {
           { value: 'crossed', label: 'Disk, CPU, and Network Crossed' },
           { value: 'unsupported', label: 'Unsupported Platform' },
           { value: 'disks', label: 'Several Disks and a New One' },
+          { value: 'long-process', label: 'Long Top Process Name' },
           { value: 'loading', label: 'Loading' },
           { value: 'failed', label: 'First Read Failed' },
           { value: 'stale', label: 'Stale Snapshot' },

@@ -2,14 +2,14 @@ import { describe, expect, it } from 'vitest';
 
 import { parseHostHealth } from './host-health';
 import { cpuTrend, formatBytes, hostPlatform, thisMacCards } from './stats-this-mac';
-import { hostHealthFixture } from './ux-demo/host-health-fixtures';
+import { hostHealthFixture, LONG_PROCESS_NAME } from './ux-demo/host-health-fixtures';
 
 const card = (scenario: Parameters<typeof hostHealthFixture>[0], id: string) =>
   thisMacCards(hostHealthFixture(scenario)).find((item) => item.id === id);
 
 describe('HS2-NS0AYR This Mac cards', () => {
   it('fixtures match the server contract', () => {
-    for (const scenario of ['normal', 'crossed', 'unsupported'] as const)
+    for (const scenario of ['normal', 'crossed', 'unsupported', 'long-process'] as const)
       expect(() => parseHostHealth(hostHealthFixture(scenario))).not.toThrow();
   });
 
@@ -105,6 +105,35 @@ describe('HS2-NS0AYR This Mac cards', () => {
     expect(cpuTrend(history([null, 40]))).toBeUndefined();
     // An unsupported or unavailable CPU card never shows a trend.
     expect(card('unsupported', 'cpu')?.trend).toBeUndefined();
+  });
+
+  it('HS2-2TEAFA marks the line naming the top process, keeping its CPU share whole', () => {
+    expect(card('long-process', 'cpu')).toMatchObject({
+      details: [`top: ${LONG_PROCESS_NAME} (97%)`],
+      processLine: { index: 0, keep: ' (97%)'.length },
+    });
+    expect(card('crossed', 'cpu')?.processLine).toEqual({ index: 0, keep: ' (410%)'.length });
+    // With the live core count first, the same line still holds the name.
+    const live = {
+      seq: 1,
+      status: 'live' as const,
+      sampled_at: null,
+      busy_percent: 50,
+      core_percent: [50, 50],
+      interval_ms: 2000,
+    };
+    expect(thisMacCards(hostHealthFixture('long-process'), live)[2]).toMatchObject({
+      details: [`2 cores · top: ${LONG_PROCESS_NAME} (97%)`],
+      processLine: { index: 0, keep: 6 },
+    });
+    // A name without a share keeps no suffix; no name marks no line.
+    const snapshot = hostHealthFixture('long-process');
+    snapshot.signals.cpu = { ...snapshot.signals.cpu, top_process_percent: null };
+    expect(thisMacCards(snapshot)[2]?.processLine).toEqual({ index: 0, keep: 0 });
+    snapshot.signals.cpu = { ...snapshot.signals.cpu, top_process: null };
+    expect(thisMacCards(snapshot)[2]?.processLine).toBeUndefined();
+    expect(thisMacCards(snapshot, live)[2]?.processLine).toBeUndefined();
+    expect(card('unsupported', 'cpu')?.processLine).toBeUndefined();
   });
 
   it('HS2-CPFBWP replaces the sampled CPU with a live frame and adds the core count and per-core values', () => {

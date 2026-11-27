@@ -24,6 +24,12 @@ export interface ThisMacCard {
   headline: string;
   /** Rate, projection, or context lines, quiet under the headline. */
   details: string[];
+  /**
+   * HS2-2TEAFA: the detail line that names a process, which can be one long unbroken name. It
+   * stays on one line and truncates in the middle, keeping its last `keep` characters (the
+   * process's CPU share, or none), with the full line as its title.
+   */
+  processLine?: { index: number; keep: number };
   /** A sparkline under the headline (the CPU's last hour, HS2-RBFR94), when there is one. */
   trend?: { values: number[]; label: string };
   /** Each logical core's busy percent from the live feed (HS2-CPFBWP), for the per-core meter. */
@@ -162,6 +168,8 @@ function cpuCard(cpu: HostHealthSignals['cpu'], live?: HostCpuFrame): ThisMacCar
         : `top: ${cpu.top_process} (${Math.round(cpu.top_process_percent)}%)`;
   const cores = now?.cores.length ? `${now.cores.length} cores` : undefined;
   if (cores !== undefined || top !== undefined) details.push([cores, top].filter(Boolean).join(' · '));
+  const share = cpu.top_process_percent === null ? '' : ` (${Math.round(cpu.top_process_percent)}%)`;
+  const processLine = top === undefined ? undefined : { index: 0, keep: share.length };
   if ((cpu.status === 'warning' || cpu.status === 'critical') && cpu.busy_for_seconds !== null)
     details.push(`busy for ${formatDuration(cpu.busy_for_seconds * 1000)}`);
   const trend = cpuTrend(cpu.history);
@@ -177,6 +185,7 @@ function cpuCard(cpu: HostHealthSignals['cpu'], live?: HostCpuFrame): ThisMacCar
           ? 'Unknown'
           : `${Math.round(cpu.busy_percent)}%`,
     details,
+    ...(processLine === undefined ? {} : { processLine }),
     ...(trend === undefined ? {} : { trend }),
     ...(now?.cores.length ? { cores: now.cores } : {}),
   };
