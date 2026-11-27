@@ -338,6 +338,39 @@ fn hs2_n1qdzw_waiters_start_the_platform_watcher_only_through_the_shared_one() {
     assert_eq!(shared.matches("watcher.watch(").count(), 1);
 }
 
+/// Policy (HS2-236XY3): the Linux per-directory inotify watcher is the shared watcher's own
+/// backend. Only `inotify_tree.rs` creates an inotify watcher directly, and only
+/// `PathWatcher::start_excluding` starts it, so consumers keep going through `PathWatcher`.
+#[test]
+fn hs2_236xy3_the_linux_tree_watcher_is_started_only_by_the_shared_watcher() {
+    let crates = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+    let mut files = Vec::new();
+    for package in [
+        "hotsheet-jobs",
+        "hotsheet-cli",
+        "hotsheet-aitools",
+        "hotsheet-server",
+    ] {
+        rust_sources(&crates.join(package).join("src"), &mut files);
+    }
+    let users = |needle: &str| -> Vec<String> {
+        files
+            .iter()
+            .filter(|file| std::fs::read_to_string(file).unwrap().contains(needle))
+            .map(|file| slashed(file.strip_prefix(crates).unwrap()))
+            .collect()
+    };
+    assert_eq!(
+        users("INotifyWatcher"),
+        ["hotsheet-jobs/src/inotify_tree.rs"]
+    );
+    assert_eq!(users("TreeWatcher::start("), ["hotsheet-jobs/src/watch.rs"]);
+    let shared = std::fs::read_to_string(crates.join("hotsheet-jobs/src/watch.rs")).unwrap();
+    let excluding = &shared[shared.find("pub fn start_excluding").unwrap()..];
+    let excluding = &excluding[..excluding.find("\n    }\n").unwrap()];
+    assert!(excluding.contains("TreeWatcher::start("));
+}
+
 /// HS2-WD475E: a waiter that starts its platform watcher in the background answers at
 /// once and never waits longer than the safety re-check, whatever the platform does;
 /// one dropped before its start finishes leaves nothing behind. HS2-6RQVFY: this test

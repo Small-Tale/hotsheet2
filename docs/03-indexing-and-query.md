@@ -285,8 +285,39 @@ stopped off-thread, and the status is read once more. An exclusion Git no longer
 `.gitignore` edit or a forced add) is dropped at once; a new ignored tree (a first build) is added
 at once; any other swap waits 30 s after the last replacement, so churn alternating among more than
 eight trees cannot restart the stream often. The exclusions are paths, so they survive the checkout
-root being removed and recreated. Linux and Windows have no exclusion API here: they keep notify's
-watcher and the event filter, and Linux inotify still watches each directory under ignored trees.
+root being removed and recreated.
+
+**On Linux the repository watcher takes no inotify watches under ignored trees (HS2-236XY3).**
+inotify has no recursive watch: notify's recursive mode adds one kernel watch per directory, so
+every directory under `target/`, `node_modules/` and agent worktrees counted against the per-user
+watch limit and delivered its churn. `PathWatcher::start_excluding` on Linux watches each directory
+outside the excluded trees on its own (non-recursive, with notify's per-directory mask, so tracked
+paths report what they did before) and accepts up to 64 exclusions, picked by the same ranking. The
+planning is platform-neutral (`crates/hotsheet-jobs/src/tree_plan.rs`) and the inotify adapter is
+small (`inotify_tree.rs`):
+
+- The start walks the tree, watching a directory before listing it, pruning excluded subtrees and
+  never following a symlink below a root (notify's recursive walk followed them).
+- A directory created or renamed into a watched directory is walked and watched with everything
+  under it. Entries already inside it (created before its watch) are reported as one create event,
+  so a `mkdir -p` followed by a write is not missed. A directory inside an excluded tree is never
+  watched; one renamed out of an excluded tree into a tracked directory is.
+- A directory removed or renamed away is forgotten with every watched directory under it, so a
+  rename within the tree reports under the new path only. Removed and recreated, it is watched again.
+- A queue overflow drops every watch and walks the tree again, after the rescan event already tells
+  the monitor to re-read.
+- A watch refused for a directory that vanished or cannot be read skips that subtree. Exhausting
+  the watch limit fails the start (the monitor then falls back to its Git-status poll, as before);
+  after the start it is delivered as an error, which the monitor treats as a change and re-reads.
+- notify runs its handler on its event-loop thread and `watch` waits for that thread, so the handler
+  only queues what an event means and a manager thread adds and removes watches.
+- Two deviations: a removed or moved tracked subdirectory also reports its own removal or
+  rename-from (same path, a second kind), because notify gives every directory watched on its own
+  the root's self flags; and, as before on Linux, a removed root is not followed when recreated.
+
+Windows `ReadDirectoryChangesW` watches a whole tree through one directory handle and has no way to
+leave a subtree out (nor any per-directory watch cost to save), so Windows keeps notify's recursive
+watcher and the event filter drops ignored events.
 The store watcher's former stream over a store's parent directory (HS2-R6FZ54) was a separate
 source of the same cost; on macOS it is replaced by the kqueue root watch above (HS2-AZFCB6).
 

@@ -4,7 +4,8 @@
 //! The repository watcher watches the whole working tree. Build output that Git ignores
 //! (`target/`, `node_modules/`, agent worktrees under `.claude/worktrees/`) is written far
 //! more often than anything else, and its events never change the checkout's Git status. On
-//! macOS a watch stream can name up to eight directories the file-event service drops itself
+//! macOS a watch stream can name up to eight directories the file-event service drops itself;
+//! on Linux (HS2-236XY3) the per-directory inotify watcher skips up to 64 excluded trees
 //! (`hotsheet_jobs::watch::MAX_EXCLUDED_PATHS`). This module picks them from the ignored
 //! set the event filter already reads, and decides when a changed pick is worth replacing
 //! the stream.
@@ -369,8 +370,8 @@ mod monitor_tests {
         assert_eq!(monitor.probe.streams(), 2);
         assert!(monitor.probe.excluded().contains(&root.join("target")));
 
-        // Churn in both excluded trees, then a tracked change: announced, and on macOS the
-        // churn never reached the monitor.
+        // Churn in both excluded trees, then a tracked change: announced, and on macOS and
+        // Linux (HS2-236XY3) the churn never reached the monitor.
         while monitor.changes.try_recv().is_ok() {}
         let before = monitor.probe.delivered();
         churn(&root.join("target/debug/deps"), 400);
@@ -378,7 +379,7 @@ mod monitor_tests {
         std::fs::write(root.join("tracked.txt"), "visible").unwrap();
         monitor.announced("a tracked change beside the churn");
         let delivered = monitor.probe.delivered() - before;
-        if cfg!(target_os = "macos") {
+        if cfg!(any(target_os = "macos", target_os = "linux")) {
             assert!(
                 delivered < 40,
                 "{delivered} deliveries for 800 excluded writes"
@@ -442,6 +443,8 @@ mod monitor_tests {
             });
             std::thread::sleep(Duration::from_secs(2));
             while monitor.changes.try_recv().is_ok() {}
+            // HS2-236XY3: the kernel watches this process holds once the stream is live.
+            let watches = inotify_watches();
             let cpu_before = cpu_seconds();
             let delivered_before = monitor.probe.delivered();
             let started = Instant::now();
@@ -464,12 +467,32 @@ mod monitor_tests {
             let delivered = monitor.probe.delivered() - delivered_before;
             let cpu = cpu_seconds() - cpu_before;
             println!(
-                "HS2-2HZN2C exclude={exclude} writes={} delivered={delivered} monitor_process_cpu={cpu:.3}s wall={:.2}s excluded={:?}",
+                "HS2-2HZN2C exclude={exclude} writes={} delivered={delivered} monitor_process_cpu={cpu:.3}s wall={:.2}s inotify_watches={watches:?} excluded={:?}",
                 files * 3,
                 elapsed.as_secs_f64(),
                 monitor.probe.excluded()
             );
         }
+    }
+
+    /// HS2-236XY3: how many inotify watches this process holds (Linux), read from the
+    /// kernel's per-descriptor `fdinfo`; `None` elsewhere.
+    #[cfg(unix)]
+    fn inotify_watches() -> Option<usize> {
+        if !cfg!(target_os = "linux") {
+            return None;
+        }
+        let descriptors = std::fs::read_dir("/proc/self/fdinfo").ok()?;
+        let count = descriptors
+            .flatten()
+            .filter_map(|entry| std::fs::read_to_string(entry.path()).ok())
+            .map(|info| {
+                info.lines()
+                    .filter(|line| line.starts_with("inotify wd:"))
+                    .count()
+            })
+            .sum();
+        Some(count)
     }
 
     /// This process's user and system CPU seconds (children excluded).

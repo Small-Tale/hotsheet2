@@ -11,6 +11,12 @@
 //! therefore the ones of the library in use on the platform; both expose the same
 //! names, and the macOS backends of the two versions filter and translate events with
 //! the same code.
+//!
+//! HS2-236XY3: [`PathWatcher::start_excluding`] leaves ignored trees out at the source on
+//! macOS (FSEvents exclusion paths) and Linux (one inotify watch per directory, none under
+//! an excluded one; see `tree_plan.rs` and `inotify_tree.rs`). Windows `ReadDirectoryChangesW`
+//! watches a whole tree through one directory handle and has no way to leave a subtree out,
+//! so there it is a plain watcher and consumers filter excluded paths themselves.
 
 use std::path::Path;
 
@@ -21,13 +27,20 @@ use notify_batched as backend;
 
 use backend::Watcher;
 pub use backend::{Error, Event, EventKind, RecursiveMode};
+#[cfg(any(target_os = "linux", test))]
+pub(crate) use backend::{ErrorKind, event};
 
 /// What a watcher hands its handler: an event, or the reason the platform lost some.
 pub type Delivery = Result<Event, Error>;
 
 /// HS2-2HZN2C: the most directories one watcher can leave out at the source
 /// ([`PathWatcher::start_excluding`]); the limit of macOS `FSEventStreamSetExclusionPaths`.
+#[cfg(not(target_os = "linux"))]
 pub const MAX_EXCLUDED_PATHS: usize = 8;
+/// HS2-236XY3: on Linux an exclusion is a subtree the per-directory watcher never walks,
+/// which costs one path comparison per directory, so far more are accepted than macOS takes.
+#[cfg(target_os = "linux")]
+pub const MAX_EXCLUDED_PATHS: usize = 64;
 
 /// A platform file watcher over a fixed set of paths, started once.
 pub struct PathWatcher {
@@ -48,6 +61,9 @@ enum Inner {
         excluded: Vec<std::path::PathBuf>,
         handler: SharedHandler,
     },
+    /// HS2-236XY3: per-directory inotify watches that leave excluded subtrees out.
+    #[cfg(target_os = "linux")]
+    Tree(crate::inotify_tree::TreeWatcher),
 }
 
 impl std::fmt::Debug for PathWatcher {
@@ -86,8 +102,12 @@ impl PathWatcher {
     /// HS2-2HZN2C: [`PathWatcher::start`], except that nothing inside `excluded` (at most
     /// [`MAX_EXCLUDED_PATHS`] directories) is reported. On macOS the file-event service
     /// drops those events itself, so a busy ignored build tree costs neither `fseventsd`'s
-    /// routing to this process nor its callback. Elsewhere the platform has no such filter
-    /// and this is [`PathWatcher::start`]: consumers still filter excluded paths themselves.
+    /// routing to this process nor its callback. HS2-236XY3: on Linux each directory outside
+    /// the excluded trees gets its own inotify watch, so those trees take no kernel watches
+    /// and report nothing; symlinked directories below a root are not followed. An excluded
+    /// directory's own creation and removal are still reported by its parent on both.
+    /// Elsewhere (Windows) the platform has no such filter and this is
+    /// [`PathWatcher::start`]: consumers still filter excluded paths themselves.
     pub fn start_excluding<F>(
         paths: &[(&Path, RecursiveMode)],
         excluded: &[&Path],
@@ -97,7 +117,17 @@ impl PathWatcher {
         F: FnMut(Delivery) + Send + 'static,
     {
         if excluded.len() > MAX_EXCLUDED_PATHS {
-            return Err(Error::generic("more than 8 excluded paths"));
+            return Err(Error::generic(&format!(
+                "more than {MAX_EXCLUDED_PATHS} excluded paths"
+            )));
+        }
+        #[cfg(target_os = "linux")]
+        if !excluded.is_empty() {
+            let tree = crate::inotify_tree::TreeWatcher::start(paths, excluded, Box::new(handler))?;
+            return Ok(Self {
+                watcher: Inner::Tree(tree),
+                starts: 1,
+            });
         }
         #[cfg(target_os = "macos")]
         if !excluded.is_empty() {
@@ -158,6 +188,8 @@ impl PathWatcher {
                 *stream = start_excluding_stream(&wanted, excluded, handler)?;
                 *paths = wanted;
             }
+            #[cfg(target_os = "linux")]
+            Inner::Tree(tree) => tree.change(removed, added)?,
         }
         self.starts += 1;
         Ok(())
@@ -1056,7 +1088,8 @@ mod tests {
             200,
             &root.join("src/tracked.rs"),
         );
-        if cfg!(target_os = "macos") {
+        // HS2-236XY3: Linux leaves excluded trees out too.
+        if cfg!(any(target_os = "macos", target_os = "linux")) {
             // An excluded directory's own entry belongs to its parent; nothing inside it is
             // reported.
             let inside = |path: &PathBuf, dir: PathBuf| path.starts_with(&dir) && *path != dir;
@@ -1077,8 +1110,8 @@ mod tests {
 
     /// HS2-2HZN2C: the exclusions are paths, so they keep applying when the watched root is
     /// removed and created again; tracked writes in the new root are still reported.
-    /// macOS only: an FSEvents stream follows the path, while the plain watcher used elsewhere
-    /// (Linux inotify) watches the removed root's inode and reports nothing in its successor.
+    /// macOS only: an FSEvents stream follows the path, while Linux inotify watches the removed
+    /// root's inode and reports nothing in its successor (HS2-236XY3 keeps that).
     #[cfg(target_os = "macos")]
     #[test]
     fn hs2_2hzn2c_exclusions_survive_the_root_being_recreated() {
@@ -1123,8 +1156,15 @@ mod tests {
             .unwrap();
         assert_eq!(watcher.starts(), 2);
         let seen = churn_then_marker(&receiver, &[two.join("target")], 50, &two.join("marker"));
-        if cfg!(target_os = "macos") {
-            assert!(!seen.iter().any(|path| path.starts_with(two.join("target"))));
+        if cfg!(any(target_os = "macos", target_os = "linux")) {
+            // The excluded directory's own entry belongs to its parent (FSEvents may still
+            // report its creation just before the start); nothing inside it is reported.
+            let target = two.join("target");
+            let leaked: Vec<_> = seen
+                .iter()
+                .filter(|path| path.starts_with(&target) && **path != target)
+                .collect();
+            assert!(leaked.is_empty(), "excluded events delivered: {leaked:?}");
         }
         let left = one.join("left");
         fs::write(&left, b"x").unwrap();
@@ -1144,5 +1184,106 @@ mod tests {
         let nine: Vec<&Path> = nine.iter().map(PathBuf::as_path).collect();
         let watched = [(root.as_path(), RecursiveMode::Recursive)];
         assert!(PathWatcher::start_excluding(&watched, &nine, |_| {}).is_err());
+    }
+
+    /// HS2-236XY3: on Linux the excluding watcher keeps one inotify watch per tracked
+    /// directory and follows the tree: a directory created after the start (with entries
+    /// made before its watch), renamed within the tree, removed; nothing inside an excluded
+    /// tree, created before or after the start; and no symlinked directory.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn hs2_236xy3_linux_tree_watcher_follows_the_tree_and_skips_excluded_ones() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = real(temp.path()).join("checkout");
+        let outside = real(temp.path()).join("outside");
+        for dir in ["src/a/b", "target/debug/deps", "node_modules/pkg"] {
+            fs::create_dir_all(root.join(dir)).unwrap();
+        }
+        fs::create_dir_all(&outside).unwrap();
+        std::os::unix::fs::symlink(&outside, root.join("src/link")).unwrap();
+        let excluded = [root.join("target"), root.join("node_modules")];
+        let excluded: Vec<&Path> = excluded.iter().map(PathBuf::as_path).collect();
+        let (watcher, receiver) = watching_excluding(&root, &excluded);
+        let Inner::Tree(tree) = &watcher.watcher else {
+            panic!("Linux exclusions use the tree watcher");
+        };
+        let tracked = |extra: &[&str]| {
+            let mut dirs: Vec<PathBuf> = ["", "src", "src/a", "src/a/b"]
+                .iter()
+                .chain(extra)
+                .map(|dir| {
+                    if dir.is_empty() {
+                        root.clone()
+                    } else {
+                        root.join(dir)
+                    }
+                })
+                .collect();
+            dirs.sort();
+            dirs
+        };
+        let settles = |expected: Vec<PathBuf>| {
+            let deadline = Instant::now() + Duration::from_secs(10);
+            while tree.watched() != expected {
+                assert!(Instant::now() < deadline, "watched {:?}", tree.watched());
+                std::thread::sleep(Duration::from_millis(20));
+            }
+        };
+        assert_eq!(tree.watched(), tracked(&[]));
+
+        // Excluded churn, an excluded tree created later and the symlink's target report
+        // nothing before a tracked marker.
+        fs::create_dir_all(root.join("target/later/x")).unwrap();
+        fs::write(outside.join("unseen"), b"x").unwrap();
+        let seen = churn_then_marker(
+            &receiver,
+            &[
+                root.join("target/debug/deps"),
+                root.join("node_modules/pkg"),
+            ],
+            50,
+            &root.join("src/marker"),
+        );
+        let leaked: Vec<_> = seen
+            .iter()
+            .filter(|path| {
+                excluded
+                    .iter()
+                    .any(|dir| path.starts_with(dir) && path.as_path() != *dir)
+                    || path.starts_with(&outside)
+            })
+            .collect();
+        assert!(leaked.is_empty(), "{leaked:?}");
+        assert_eq!(tree.watched(), tracked(&[]));
+
+        // Created after the start, nested at once: every level is watched and reports.
+        fs::create_dir_all(root.join("src/new/deep")).unwrap();
+        settles(tracked(&["src/new", "src/new/deep"]));
+        let file = root.join("src/new/deep/file");
+        fs::write(&file, b"x").unwrap();
+        assert!(sees(&receiver, &file));
+
+        // Renamed within the tree: reported under the new path only.
+        fs::rename(root.join("src/new"), root.join("src/a/moved")).unwrap();
+        settles(tracked(&["src/a/moved", "src/a/moved/deep"]));
+        let moved = root.join("src/a/moved/deep/again");
+        fs::write(&moved, b"x").unwrap();
+        assert!(sees(&receiver, &moved));
+
+        // Removed, then recreated empty and refilled.
+        fs::remove_dir_all(root.join("src/a/moved")).unwrap();
+        settles(tracked(&[]));
+        fs::create_dir(root.join("src/a/moved")).unwrap();
+        settles(tracked(&["src/a/moved"]));
+        let refilled = root.join("src/a/moved/refilled");
+        fs::write(&refilled, b"x").unwrap();
+        assert!(sees(&receiver, &refilled));
+
+        // An excluded tree renamed into a tracked directory is watched from then on.
+        fs::rename(root.join("target/later"), root.join("src/later")).unwrap();
+        settles(tracked(&["src/a/moved", "src/later", "src/later/x"]));
+        let inside = root.join("src/later/x/file");
+        fs::write(&inside, b"x").unwrap();
+        assert!(sees(&receiver, &inside));
     }
 }

@@ -38,6 +38,8 @@ mod fixture;
 mod fsevent_stream;
 mod github;
 mod gitlab;
+#[cfg(target_os = "linux")]
+mod inotify_tree;
 mod jenkins;
 mod lock;
 mod model;
@@ -51,6 +53,8 @@ mod slot;
 mod state;
 mod steps;
 mod store;
+#[cfg(any(target_os = "linux", test))]
+mod tree_plan;
 pub mod watch;
 
 pub use ancestry::{HostRepository, RepositoryHosts, remote_host_path};
