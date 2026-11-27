@@ -158,10 +158,11 @@ pub use sessions::{
 pub use target_lines::MAX_TARGET_LINE_OWNERS;
 pub use tasks::{RuntimeTasks, StopHook, TasksShutdown};
 pub use templates::{
-    AccessNeed, ApplyRef, ApplySummary, ApplyTemplate, MAX_LISTED_APPLIES, MAX_RESUME_BACKOFF_MS,
-    PreviewTarget, PreviewTemplate, ProfilesCheck, ResumeMemory, ResumeReport, ResumedApply,
-    SaveGoalTemplate, SetTemplates, TemplateApplyView, TemplateList, TemplatePreview, TemplateRef,
-    TemplateValidation, ValidateTemplate,
+    AcceptTemplate, AccessNeed, ApplyRef, ApplySummary, ApplyTemplate, MAX_LISTED_APPLIES,
+    MAX_RESUME_BACKOFF_MS, PreviewTarget, PreviewTemplate, ProfilesCheck, ResumeMemory,
+    ResumeReport, ResumedApply, SaveGoalTemplate, SetTemplates, TemplateAcceptView,
+    TemplateApplyView, TemplateList, TemplatePreview, TemplateRef, TemplateValidation,
+    ValidateTemplate,
 };
 pub use ticket_list::{
     DEFAULT_TARGET_TICKET_PAGE, ListTargetTickets, MAX_TARGET_TICKET_PAGE, TargetTicketPage,
@@ -708,9 +709,12 @@ pub fn error_status(error: &OrchestrationError) -> u16 {
             match error {
                 E::NotFound | E::ApplyNotFound => 404,
                 E::Invalid | E::InputsInvalid => 422,
-                E::Retired | E::Conflict | E::TargetUnknown | E::ApplyConflict | E::GoalEmpty => {
-                    409
-                }
+                E::Retired
+                | E::Conflict
+                | E::TargetUnknown
+                | E::ApplyConflict
+                | E::GoalEmpty
+                | E::NothingToAccept => 409,
             }
         }
         // HS2-KXKA7X: an unknown trigger is absent; a definition that does not fit is

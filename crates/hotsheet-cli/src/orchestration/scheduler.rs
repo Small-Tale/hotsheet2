@@ -436,12 +436,16 @@ impl OrchestrationRuntime {
         }
         // HS2-HV9ED3: a step whose run a person cancelled is held, not placed again.
         let all_runs = self.run_list(owner_id, false)?;
-        let held: BTreeSet<String> = plan
+        let mut held: BTreeSet<String> = plan
             .steps
             .iter()
             .filter(|view| super::cancel_hold::held_by(&view.readiness.step, &all_runs).is_some())
             .map(|view| view.readiness.step.step_id.clone())
             .collect();
+        // HS2-36XDDX: a step of a template's goal waits for a person to accept the
+        // proposed plan. An unreadable apply record fails the pass rather than place
+        // work nobody accepted.
+        held.extend(self.template_holds(owner_id)?.into_keys());
         let mut work: Vec<WorkItem> = self
             .ready_work(owner_id, tx)?
             .into_iter()
@@ -1239,6 +1243,16 @@ impl OrchestrationRuntime {
             ReadinessLevel::Finished => answer.standing = "finished".into(),
             ReadinessLevel::Blocked | ReadinessLevel::Stale | ReadinessLevel::Cyclic => {
                 answer.standing = "not_ready".into();
+            }
+            // HS2-36XDDX: its template's plan waits for a person's accept.
+            ReadinessLevel::Confirmed | ReadinessLevel::Provisional
+                if self
+                    .template_holds(owner_id)?
+                    .contains_key(&step.readiness.step.step_id) =>
+            {
+                answer.standing = "not_placed".into();
+                answer.reason =
+                    hotsheet_ticketing::orchestration::TEMPLATE_PLAN_NOT_ACCEPTED.into();
             }
             // HS2-HV9ED3: a person cancelled the step's run; it waits for them.
             ReadinessLevel::Confirmed | ReadinessLevel::Provisional

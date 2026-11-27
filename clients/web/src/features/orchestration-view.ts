@@ -45,6 +45,7 @@ import {
   type SchedulerDecisionPage,
 } from '../orchestration-scheduler';
 import {
+  acceptedText,
   initialInputs,
   inputsToSend,
   newApplyOperationId,
@@ -1281,6 +1282,29 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     }
   }
 
+  /**
+   * HS2-36XDDX: a person accepts the template plan the selected card waits for (`templates/accept`). The
+   * scheduler places the released steps and the timeline's own wait shows them move; nothing polls.
+   */
+  async function acceptPlan(operationId: string) {
+    const current = dependencies.project();
+    if (!current || busy.value) return;
+    busy.value = true;
+    try {
+      const answer = await clientFor(current).orchestrationTemplates(
+        current.id,
+        'accept',
+        { operation_id: operationId },
+        dependencies.personId(),
+      );
+      dependencies.showToast(acceptedText(answer));
+    } catch (reason) {
+      dependencies.showToast(`The plan could not be accepted: ${describeRefusal(reason)}`);
+    } finally {
+      busy.value = false;
+    }
+  }
+
   /** HS2-0D60T8: a person reopens the selected card's built-ahead work; the record and note follow. */
   async function reopen(reason: string) {
     const current = dependencies.project(),
@@ -2146,6 +2170,7 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     },
     showRequest,
     openGoal,
+    acceptPlan,
     chooseProjects: () => {
       dependencies.openOrchestrationSettings();
     },

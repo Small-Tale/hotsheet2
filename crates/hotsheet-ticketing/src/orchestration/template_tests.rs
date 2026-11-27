@@ -448,11 +448,11 @@ fn hs2_a4rvya_the_checked_in_file_follows_the_plan_file_rules() {
 
     // A newer schema is refused, never overwritten.
     let mut newer = on_disk.clone();
-    newer["schema_version"] = json!(2);
+    newer["schema_version"] = json!(3);
     std::fs::write(&path, serde_json::to_vec(&newer).unwrap()).unwrap();
     assert!(matches!(
         store.read(),
-        Err(OrchestrationError::UnsupportedVersion { found: 2 })
+        Err(OrchestrationError::UnsupportedVersion { found: 3 })
     ));
     // Damaged content: merge markers, an unknown field, an invalid template, unsorted ids.
     let damaged: Vec<Vec<u8>> = vec![
@@ -518,6 +518,9 @@ fn apply(state: ApplyState) -> TemplateApply {
         attempts: 0,
         permission_requests: Vec::new(),
         reason: None,
+        accepted_steps: Vec::new(),
+        accepted_at_ms: None,
+        accepted_by: None,
         created_at_ms: 1,
         updated_at_ms: 1,
     }
@@ -639,4 +642,250 @@ fn hs2_a4rvya_every_template_error_has_a_distinct_code() {
     codes.dedup();
     assert_eq!(codes.len(), all);
     assert!(codes.iter().all(|code| code.starts_with("template_")));
+}
+
+/// The goal an apply opened, as the plan names it.
+fn goal_of(apply: &mut TemplateApply, native: &str) {
+    apply.goal = Some(ApplyGoal {
+        connection_id: "git-1".into(),
+        native_id: native.into(),
+        slug: Some("LCH-9".into()),
+        created: true,
+    });
+}
+
+#[test]
+fn hs2_36xddx_wait_for_accept_is_on_by_default_and_written_only_when_off() {
+    // A template written before the setting existed waits (the maintainer's default).
+    let template = feature();
+    assert!(template.wait_for_accept);
+    let value = serde_json::to_value(&template).unwrap();
+    assert!(
+        value.get("wait_for_accept").is_none(),
+        "on is the default and omitted"
+    );
+    let mut off = template.clone();
+    off.wait_for_accept = false;
+    assert_eq!(
+        serde_json::to_value(&off).unwrap()["wait_for_accept"],
+        json!(false)
+    );
+    // Turning it off is a changed definition, so it is a new version when set.
+    assert!(!template.same_definition(&off));
+    assert_eq!(
+        serde_json::from_value::<Template>(serde_json::to_value(&off).unwrap()).unwrap(),
+        off
+    );
+    // A template explicitly on reads back as the default.
+    let mut explicit = serde_json::to_value(&template).unwrap();
+    explicit["wait_for_accept"] = json!(true);
+    assert!(
+        serde_json::from_value::<Template>(explicit)
+            .unwrap()
+            .wait_for_accept
+    );
+    // The brief tells the planner the plan waits for a person, only while it does.
+    let resolved = inputs(json!({"feature": "Rate limits", "api": "api-1", "web": "web-1"}));
+    let (resolved, problems) = resolve_inputs(&template, &resolved);
+    assert!(problems.is_empty(), "{problems:?}");
+    let active = BTreeMap::new();
+    let waits = render_brief(&template, &resolved, &BTreeMap::new(), "op-1", &active);
+    assert!(waits.goal_details.contains("waits for an accept"));
+    let starts = render_brief(&off, &resolved, &BTreeMap::new(), "op-1", &active);
+    assert!(!starts.goal_details.contains("waits for an accept"));
+}
+
+#[test]
+fn hs2_36xddx_the_file_is_version_2_only_while_a_template_does_not_wait() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = TemplateStore::new(dir.path());
+    let path = dir.path().join(TEMPLATES_PATH);
+    let mut rng = Rng(300);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let waiting = feature();
+    let mut off = feature();
+    off.template_id = id(9);
+    off.wait_for_accept = false;
+    let on_disk = |path: &std::path::Path| -> Value {
+        serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap()
+    };
+    // Every template waits: version 1, byte-compatible with older binaries.
+    let lock = store.lock().unwrap();
+    let first = store
+        .write_locked(None, vec![waiting.clone()], &mut tx)
+        .unwrap();
+    assert_eq!(first.schema_version, 1);
+    assert_eq!(on_disk(&path)["schema_version"], 1);
+    assert!(
+        on_disk(&path)["templates"][0]
+            .get("wait_for_accept")
+            .is_none()
+    );
+    // One that does not wait: version 2, so an older binary refuses it as
+    // upgrade_required instead of reading it as damaged or overwriting it.
+    let second = store
+        .write_locked(Some(&first), vec![waiting.clone(), off.clone()], &mut tx)
+        .unwrap();
+    assert_eq!(second.schema_version, TEMPLATES_ACCEPT_VERSION);
+    assert_eq!(on_disk(&path)["schema_version"], 2);
+    assert_eq!(
+        on_disk(&path)["templates"][1]["wait_for_accept"],
+        json!(false)
+    );
+    assert_eq!(store.read().unwrap().unwrap(), second);
+    // Back to waiting everywhere: version 1 again.
+    let mut back = off.clone();
+    back.wait_for_accept = true;
+    let third = store
+        .write_locked(Some(&second), vec![waiting, back], &mut tx)
+        .unwrap();
+    drop(lock);
+    assert_eq!(third.schema_version, 1);
+    assert_eq!(templates_version(&third.templates), 1);
+    // A version-1 file that turns the setting off was not written by Hot Sheet: an
+    // older reader would have dropped the field.
+    let mut forged = on_disk(&path);
+    forged["templates"][1]["wait_for_accept"] = json!(false);
+    std::fs::write(&path, serde_json::to_vec(&forged).unwrap()).unwrap();
+    assert!(matches!(store.read(), Err(OrchestrationError::Corrupt)));
+    // So is a version-2 file where every template waits.
+    let mut padded = on_disk(&path);
+    padded["templates"][1]["wait_for_accept"] = json!(true);
+    padded["schema_version"] = json!(2);
+    std::fs::write(&path, serde_json::to_vec(&padded).unwrap()).unwrap();
+    assert!(matches!(store.read(), Err(OrchestrationError::Corrupt)));
+}
+
+#[test]
+fn hs2_36xddx_a_goals_new_steps_are_held_until_accepted() {
+    let steps = [
+        ("step-a", "git-1", "goal-1"),
+        ("step-b", "git-1", "goal-1"),
+        ("step-other", "git-1", "goal-2"),
+    ];
+    // Planning, goal opened, template waits: every step of that goal is held.
+    let mut waiting = apply(ApplyState::Planning);
+    goal_of(&mut waiting, "goal-1");
+    assert!(waiting.waits_for_accept());
+    let applies = [waiting.clone()];
+    let held = held_template_steps(&applies, steps);
+    assert_eq!(held.keys().collect::<Vec<_>>(), ["step-a", "step-b"]);
+    assert_eq!(held["step-a"].operation_id, "op-1");
+    // No goal yet, a goal not created, a denied apply, or a template that does not
+    // wait: nothing is held.
+    for (label, mut variant) in [
+        ("no goal", apply(ApplyState::WaitingPermission)),
+        ("denied", {
+            let mut denied = apply(ApplyState::Denied);
+            goal_of(&mut denied, "goal-1");
+            denied
+        }),
+        ("not created", {
+            let mut planned = apply(ApplyState::WaitingPlanner);
+            goal_of(&mut planned, "goal-1");
+            planned.goal.as_mut().unwrap().created = false;
+            planned
+        }),
+        ("off", {
+            let mut off = waiting.clone();
+            off.snapshot.wait_for_accept = false;
+            off
+        }),
+    ] {
+        variant.operation_id = format!("op-{label}");
+        assert!(held_template_steps(&[variant], steps).is_empty(), "{label}");
+    }
+    // A waiting planner whose goal is open holds too (the goal may be planned by a
+    // later Propose Plan).
+    let mut queued = apply(ApplyState::WaitingPlanner);
+    goal_of(&mut queued, "goal-1");
+    assert_eq!(held_template_steps(&[queued], steps).len(), 2);
+
+    // Accept: the steps shown are released; a repeat changes nothing.
+    let mut accepted = waiting.clone();
+    assert!(accepted.accept(&["step-a".into(), "step-b".into()], Some("maintainer"), 50));
+    assert_eq!(accepted.accepted_at_ms, Some(50));
+    assert_eq!(accepted.accepted_by.as_deref(), Some("maintainer"));
+    assert!(!accepted.accept(&["step-b".into()], Some("someone"), 60));
+    assert_eq!(
+        accepted.accepted_at_ms,
+        Some(50),
+        "a repeat keeps the first accept"
+    );
+    assert!(held_template_steps(&[accepted.clone()], steps).is_empty());
+    // A step the planner adds later (a re-plan) is held again, alone.
+    let replanned = [
+        ("step-a", "git-1", "goal-1"),
+        ("step-b", "git-1", "goal-1"),
+        ("step-c", "git-1", "goal-1"),
+    ];
+    let again = [accepted.clone()];
+    let held = held_template_steps(&again, replanned);
+    assert_eq!(held.keys().collect::<Vec<_>>(), ["step-c"]);
+    // Accepting it releases it, out of order with the first accept.
+    assert!(accepted.accept(&["step-c".into()], Some("maintainer"), 70));
+    assert_eq!(accepted.accepted_steps, ["step-a", "step-b", "step-c"]);
+    assert!(held_template_steps(&[accepted.clone()], replanned).is_empty());
+    // Accepting before anything was planned (an empty list) changes nothing.
+    let mut empty = waiting.clone();
+    assert!(!empty.accept(&[], Some("maintainer"), 80));
+    assert_eq!(empty.accepted_at_ms, None);
+    // The record round-trips, and an unaccepted one keeps the old wire shape.
+    let value = serde_json::to_value(&waiting).unwrap();
+    assert!(value.get("accepted_steps").is_none());
+    assert!(value.get("accepted_at_ms").is_none());
+    let value = serde_json::to_value(&accepted).unwrap();
+    assert_eq!(
+        value["accepted_steps"],
+        json!(["step-a", "step-b", "step-c"])
+    );
+    assert_eq!(
+        serde_json::from_value::<TemplateApply>(value).unwrap(),
+        accepted
+    );
+}
+
+#[test]
+fn hs2_36xddx_records_still_waiting_for_an_accept_are_forgotten_last() {
+    let home = tempfile::tempdir().unwrap();
+    let store = TemplateApplyStore::new(home.path(), "launch-0123456789ab").unwrap();
+    // The oldest finished apply still waits for its accept.
+    let mut held = apply(ApplyState::Planning);
+    held.operation_id = "op-held".into();
+    goal_of(&mut held, "goal-1");
+    store.write(&held).unwrap();
+    // An older-written accepted one, then one that never waited.
+    let mut accepted = held.clone();
+    accepted.operation_id = "op-accepted".into();
+    accepted.accept(&["step-a".into()], Some("maintainer"), 5);
+    store.write(&accepted).unwrap();
+    for n in 0..MAX_TEMPLATE_APPLIES - 1 {
+        let mut next = apply(ApplyState::Planning);
+        next.operation_id = format!("op-fill-{n}");
+        store.write(&next).unwrap();
+    }
+    let kept: Vec<String> = store
+        .applies()
+        .unwrap()
+        .into_iter()
+        .map(|known| known.operation_id)
+        .collect();
+    assert!(kept.contains(&"op-held".to_owned()), "the hold is kept");
+    assert!(
+        !kept.contains(&"op-accepted".to_owned()),
+        "an accepted one goes first"
+    );
+    // When only waiting records are finished, the oldest of them goes after all.
+    let full = TemplateApplyStore::new(home.path(), "other-0123456789ab").unwrap();
+    for n in 0..=MAX_TEMPLATE_APPLIES {
+        let mut waiting = held.clone();
+        waiting.operation_id = format!("op-wait-{n}");
+        full.write(&waiting).unwrap();
+    }
+    let kept = full.applies().unwrap();
+    assert_eq!(kept.len(), MAX_TEMPLATE_APPLIES);
+    assert_eq!(kept[0].operation_id, "op-wait-1");
 }

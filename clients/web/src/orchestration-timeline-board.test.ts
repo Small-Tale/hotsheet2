@@ -121,6 +121,18 @@ describe('orchestration timeline on the ticket board (HS2-J89JC7)', () => {
     expect(stateWords(bare, false)?.label).toBe('Waits on a prerequisite');
     expect(stateWords({ ...bare, state: 'waits_for_decision' }, false)?.label).toBe('Waits for your decision');
     expect(stateWords({ ...bare, state: 'provisional' }, false)?.label).toBe('Provisional');
+    // HS2-36XDDX: a step its template holds for a person's accept, proposed or running alike.
+    const held: TimelineItem = {
+      ...bare,
+      state: 'waits_for_accept',
+      accept: { operation_id: 'op', template_name: 'T' },
+    };
+    for (const proposed of [false, true])
+      expect(stateWords(held, proposed)).toEqual({
+        label: 'Waits for the plan to be accepted',
+        tone: 'warning',
+      });
+    expect(stateBadge(held)).toEqual({ label: 'Waits for accept', tone: 'warning' });
   });
 
   it('maps an item onto the shared ticket summary with its orchestration line', () => {

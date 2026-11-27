@@ -1012,6 +1012,10 @@ impl OrchestrationRuntime {
                         value(self.template_apply(owner, decode(body)?, actor.as_ref(), tx)?)
                     }
                     "apply_show" => value(self.template_apply_show(owner, &decode(body)?)?),
+                    // HS2-36XDDX: a person accepts the plan proposed for an apply's goal.
+                    "accept" => {
+                        value(self.template_accept(owner, &decode(body)?, actor.as_ref(), tx)?)
+                    }
                     // HS2-AMJNER: one resume pass, as the server runs on its own.
                     "resume" => {
                         decode::<super::PlanRequest>(body)?;

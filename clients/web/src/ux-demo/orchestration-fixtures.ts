@@ -308,6 +308,19 @@ export function demoTimeline(phase: TimelinePhase): OrchestrationTimeline {
   };
 }
 
+/**
+ * HS2-36XDDX: a ready card held for its template's accept: the step a template's goal planned, which placement
+ * starts once someone accepts the proposed plan.
+ */
+export function demoTemplateHeld(item: TimelineItem): TimelineItem {
+  return {
+    ...item,
+    state: 'waits_for_accept',
+    placement: undefined,
+    accept: { operation_id: 'tpl-docs-1', template_name: 'Document a feature' },
+  };
+}
+
 /** A fixed 24-hour clock for demo captures, independent of the viewer's locale and time zone. */
 export const demoClock = (ms: number) => {
   const date = new Date(ms);
@@ -514,6 +527,7 @@ export function demoTemplates(): PlanTemplate[] {
         },
       ],
       goal_title: '{{feature}}: API and Web',
+      wait_for_accept: true,
       steps: [
         {
           key: 'api',
@@ -549,6 +563,7 @@ export function demoTemplates(): PlanTemplate[] {
       version: 1,
       inputs: [{ key: 'project', label: 'Project', kind: 'target', required: true, choices: [] }],
       goal_title: 'Repair CI',
+      wait_for_accept: true,
       steps: [
         {
           key: 'fix',
@@ -568,6 +583,8 @@ export function demoTemplates(): PlanTemplate[] {
       version: 2,
       inputs: [],
       goal_title: 'Bump dependencies',
+      // HS2-36XDDX: a routine bump starts without waiting for an accept.
+      wait_for_accept: false,
       steps: [
         { key: 'bump', target: 'api', title: 'Bump dependencies', ticket: 'search', after: [], validation: ['unit'] },
       ],
@@ -631,6 +648,7 @@ export function demoTemplatePreview(): TemplatePreview {
     ],
     planning: 'propose',
     placement_automatic: true,
+    wait_for_accept: true,
   };
 }
 

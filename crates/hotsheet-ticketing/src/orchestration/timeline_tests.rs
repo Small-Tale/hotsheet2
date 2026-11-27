@@ -179,6 +179,8 @@ struct Fixture {
     hints: BTreeMap<String, PlacementHint>,
     permissions: BTreeMap<String, PermissionWait>,
     decisions: BTreeMap<(String, String), DecisionWait>,
+    /// HS2-36XDDX
+    accepts: BTreeMap<String, AcceptWait>,
     tickets: BTreeMap<TicketKey, TicketLabel>,
     policy: TimelinePolicy,
     now_ms: u64,
@@ -238,6 +240,7 @@ impl Fixture {
             hints: &self.hints,
             permissions: &self.permissions,
             decisions: &self.decisions,
+            accepts: &self.accepts,
             goals: &goals,
             tickets: &self.tickets,
             policy: &self.policy,
@@ -1355,4 +1358,79 @@ fn hs2_jgncar_a_session_freed_by_another_worker_is_not_the_steps() {
         .unwrap();
     assert!(!done.worked_elsewhere);
     assert_eq!(done.session_id, Some(id(701)));
+}
+
+#[test]
+fn hs2_36xddx_a_step_held_for_its_templates_accept_reads_so_before_anything_else() {
+    use ItemState as S;
+    let wait = AcceptWait {
+        operation_id: "op-tpl".into(),
+        template_name: "Repair failing CI".into(),
+    };
+    // (level, permission, decision) with the hold -> state. Started or finished work
+    // is not held: the hold only keeps placement from starting it.
+    let table: &[(ReadinessLevel, bool, bool, ItemState)] = &[
+        (L::Confirmed, false, false, S::WaitsForAccept),
+        (L::Confirmed, true, false, S::WaitsForAccept),
+        (L::Provisional, false, true, S::WaitsForAccept),
+        (L::Blocked, false, false, S::WaitsForAccept),
+        (L::Stale, true, true, S::WaitsForAccept),
+        (L::Cyclic, false, false, S::WaitsForAccept),
+        (L::InProgress, false, false, S::Running),
+        (L::Finished, false, false, S::Done),
+    ];
+    for (level, permission_wait, decision, expected) in table.iter().copied() {
+        let mut fixture = Fixture::new(vec![step(2, level, &[])]);
+        if level == L::InProgress {
+            fixture.runs.push(run(1, 2, RunState::Dispatched, 10, None));
+        }
+        if permission_wait {
+            fixture.permissions.insert("step-2".into(), permission());
+        }
+        if decision {
+            fixture.decisions.insert(
+                ("owner-source".into(), id(900)),
+                DecisionWait {
+                    note_id: Some(id(77)),
+                },
+            );
+        }
+        fixture.accepts.insert("step-2".into(), wait.clone());
+        let view = fixture.view();
+        let item = view
+            .waves
+            .iter()
+            .flat_map(|wave| &wave.items)
+            .next()
+            .unwrap();
+        let label = format!("{level:?} permission={permission_wait} decision={decision}");
+        assert_eq!(item.state, expected, "{label}");
+        assert_eq!(
+            item.accept.as_ref(),
+            (expected == S::WaitsForAccept).then_some(&wait),
+            "{label}"
+        );
+        assert_eq!(view.counts.get(expected.code()), Some(&1), "{label}");
+        // Its wire spelling.
+        assert_eq!(
+            serde_json::to_value(item).unwrap()["state"],
+            serde_json::json!(expected.code()),
+            "{label}"
+        );
+    }
+    // An accept moves the item on, and the version with it.
+    let mut fixture = Fixture::new(vec![step(2, L::Confirmed, &[])]);
+    fixture.accepts.insert("step-2".into(), wait);
+    let held = fixture.view();
+    fixture.accepts.clear();
+    let accepted = fixture.view();
+    let item = accepted
+        .waves
+        .iter()
+        .flat_map(|wave| &wave.items)
+        .next()
+        .unwrap();
+    assert_eq!(item.state, S::Ready);
+    assert!(item.accept.is_none());
+    assert_ne!(held.version, accepted.version);
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  acceptedText,
   accessText,
   applyBanner,
   applyProblems,
@@ -19,6 +20,7 @@ import {
   savableGoalLabel,
   savableGoals,
   saveProblem,
+  startWorkText,
   stepNumbers,
   stepText,
   unverifiedProfilesText,
@@ -148,9 +150,9 @@ describe('plan templates in the Orchestration view (HS2-A4RVYA)', () => {
     expect(
       permissionRows({ ...preview, targets: [{ ...preview.targets[0], apply: 'asks' }] }).map((row) => row.label),
     ).toEqual(['Create Tickets in API', 'Apply for API']);
-    expect(planningRows(preview).map((row) => row.value)).toEqual([
+    expect(planningRows({ ...preview, wait_for_accept: false }).map((row) => row.value)).toEqual([
       'Proposes a plan for the new goal (Propose Plan)',
-      'Within the Orchestration settings once it is planned',
+      'Within the Orchestration settings once it is planned, without waiting for an accept',
     ]);
     expect(
       planningRows({ ...preview, planning: 'update', placement_automatic: false }).map((row) => row.value),
@@ -320,5 +322,47 @@ describe('plan templates in the Orchestration view (HS2-A4RVYA)', () => {
           goal: { title: template.goal_title },
         }),
       ).toEqual(template);
+  });
+});
+
+describe('HS2-36XDDX Wait for Accept in Use Template…', () => {
+  it('reads the setting as on unless the template turns it off', () => {
+    const template = parseTemplateList(wire).templates[0];
+    expect(template.wait_for_accept).toBe(true);
+    const off = parseTemplateList({ ...wire, templates: [{ ...wire.templates[0], wait_for_accept: false }] });
+    expect(off.templates[0].wait_for_accept).toBe(false);
+    expect(parseTemplatePreview({}).wait_for_accept).toBe(true);
+    expect(parseTemplatePreview({ wait_for_accept: false }).wait_for_accept).toBe(false);
+  });
+
+  it('says when the planned work starts for every placement and setting', () => {
+    expect(startWorkText({ placement_automatic: false, wait_for_accept: true })).toBe(
+      'After you review the plan and start orchestration',
+    );
+    expect(startWorkText({ placement_automatic: false, wait_for_accept: false })).toBe(
+      'After you review the plan and start orchestration',
+    );
+    expect(startWorkText({ placement_automatic: true, wait_for_accept: true })).toBe(
+      'After someone accepts the planned steps, within the Orchestration settings',
+    );
+    expect(startWorkText({ placement_automatic: true, wait_for_accept: false })).toBe(
+      'Within the Orchestration settings once it is planned, without waiting for an accept',
+    );
+    const preview = demoTemplatePreview();
+    expect(planningRows(preview).at(-1)).toEqual({
+      label: 'Start Work',
+      value: 'After someone accepts the planned steps, within the Orchestration settings',
+    });
+  });
+
+  it('words the accept answer', () => {
+    expect(acceptedText({ outcome: 'accepted', released: ['s1'] })).toBe(
+      'Plan accepted: 1 step starts within the Orchestration settings.',
+    );
+    expect(acceptedText({ outcome: 'accepted', released: ['s1', 's2'] })).toBe(
+      'Plan accepted: 2 steps start within the Orchestration settings.',
+    );
+    expect(acceptedText({ outcome: 'existing', released: [] })).toBe('The plan was already accepted.');
+    expect(acceptedText(undefined)).toBe('The plan was already accepted.');
   });
 });

@@ -270,6 +270,11 @@ export const ORCHESTRATION_REFUSALS: Readonly<Record<string, RefusalText>> = {
     message: 'That goal has no plan steps to save.',
     next: 'Propose a plan for it first.',
   },
+  // HS2-36XDDX: Accept Plan before the planner defined any step for the template's goal.
+  template_accept_nothing_planned: {
+    message: 'The planner has not planned any step for this template’s goal yet.',
+    next: 'Wait until its proposed plan shows, then accept it.',
+  },
   // TriggerError (HS2-KXKA7X)
   trigger_not_found: { message: 'That trigger no longer exists on this machine.', next: READ_AGAIN },
   trigger_invalid: {

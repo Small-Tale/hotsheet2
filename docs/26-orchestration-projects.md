@@ -6165,15 +6165,16 @@ later generations), the unfinished one first. Before a run exists the item repor
 site the step names. Items sort, and the view's cards gather, by that site in declaration
 order, so during a two-machine run each machine's work is grouped under its own site.
 
-| State                    | When                                                                                    |
-| ------------------------ | --------------------------------------------------------------------------------------- |
-| `done`                   | Its ticket is confirmed finished                                                        |
-| `running`                | An unfinished run stands on it                                                          |
-| `provisional`            | An unfinished run stands on it ahead of a pending gate (§26.22)                         |
-| `waits_for_permission`   | The orchestrator's action on it waits for a person (see below)                          |
-| `waits_for_decision`     | It is provisional or stale and its goal ticket has an unanswered `FEEDBACK NEEDED` note |
-| `ready`                  | Confirmed and nothing waits                                                             |
-| `waits_for_prerequisite` | Provisional, blocked, stale or cyclic otherwise                                         |
+| State                    | When                                                                                     |
+| ------------------------ | ---------------------------------------------------------------------------------------- |
+| `done`                   | Its ticket is confirmed finished                                                         |
+| `running`                | An unfinished run stands on it                                                           |
+| `provisional`            | An unfinished run stands on it ahead of a pending gate (§26.22)                          |
+| `waits_for_accept`       | Placement is on and its template's plan waits for a person's accept (§26.32, HS2-36XDDX) |
+| `waits_for_permission`   | The orchestrator's action on it waits for a person (see below)                           |
+| `waits_for_decision`     | It is provisional or stale and its goal ticket has an unanswered `FEEDBACK NEEDED` note  |
+| `ready`                  | Confirmed and nothing waits                                                              |
+| `waits_for_prerequisite` | Provisional, blocked, stale or cyclic otherwise                                          |
 
 A target ticket's slug, title, status, priority and category are read from its store when
 the target is a checkout on this machine. For a remote target the timeline has the slug
@@ -7726,6 +7727,7 @@ retired, not deleted); the same id with two definitions is `template_conflict`. 
         }
       ],
       "instructions": "Keep {{feature}} behind a flag.",
+      "wait_for_accept": false,
       "created_at_ms": 0,
       "updated_at_ms": 0,
       "updated_by": "maintainer"
@@ -7752,6 +7754,11 @@ retired, not deleted); the same id with two definitions is `template_conflict`. 
   `steps[1].target`, …).
 - `version` starts at 1 and grows with every changed definition; the bookkeeping fields
   are written by Hot Sheet.
+- `wait_for_accept` (HS2-36XDDX, below) is on unless it is `false`, and is written only
+  when `false`. The file stays `schema_version: 1` while every template waits and is
+  written as version 2 while one does not, so an older Hot Sheet answers
+  `upgrade_required` instead of dropping the setting; a version-1 file with the field
+  `false`, or a version-2 file without one, is damaged.
 
 Changing templates changes only the orchestration project (the "own records" row of
 §26.7), so `set`, `retire` and `save_goal` never ask; each is audited as `template_set`.
@@ -7849,6 +7856,52 @@ false `when` leaves out is not checked. In Use Template… the problem names the
 project (`Step 1 names the test profile “lint”, which API does not offer.`), and an
 unverified project shows a quiet line under the steps.
 
+### Wait for Accept (HS2-36XDDX)
+
+The maintainer's decision: **per template**, a **Wait for Accept** setting, on by default.
+With it on, under Auto placement a template goal's newly planned steps are held until a
+person accepts the planner's proposed plan through the plan review that exists; then
+placement starts them as usual. Off is the behaviour before the setting: the steps start
+within the policy as soon as they are ready. Manual placement is unchanged, and a trigger
+that applies a template follows the template's setting (the apply keeps the template as
+applied).
+
+- **On by default, for old templates too.** A template written before the setting has no
+  field and waits, which is the maintainer's default and the safe direction: nothing a
+  template planned starts before a person saw it unless the template says so. New
+  templates and Save a Goal as Template… wait as well.
+- **Held.** While placement is on (`placement.automatic` true, or Auto with a plan), a live
+  plan step whose goal is the goal of an apply on this machine whose template waits, and
+  that no person accepted yet, is left out of the scheduler's ready work, as a person's
+  cancel holds a step (HS2-HV9ED3). `scheduler explain` answers `not_placed` with
+  `template_plan_not_accepted`; the timeline item is `waits_for_accept` with `accept`
+  (the apply's `operation_id` and template name). Its card reads **Waits for the plan to
+  be accepted**, and the inspector's **Waits for Accept** section says "Waiting for someone
+  to accept the template's plan (<template>)" with **Accept Plan** and **Open <goal>**.
+  Work that already started (a run dispatched by hand) is not held. The planner's brief
+  says the plan waits, so its `## Proposed plan` note asks nobody to start it.
+- **Accepting is the plan review.** **Accept Plan** (`templates/accept` with the apply's
+  `operation_id`) records the goal's live steps as accepted on the apply, with when and by
+  whom, wakes the scheduler, and placement starts them within the policy. Only a person
+  accepts (an AI actor is `forbidden`); a goal with nothing planned yet is
+  `template_accept_nothing_planned`; an accept with nothing new answers `existing`. Under
+  Manual placement the review is **Start Orchestration**, so Start accepts every template
+  plan held then (audited `start_orchestration`), and a Manual plan reads as the dry run
+  it always was. Audited as `template_accept`.
+- **Newly planned steps.** A step the planner adds to the goal later (Update Plan, or a
+  re-proposal) is held again until the next accept; steps accepted before keep running.
+- **Machine-local.** The accept lives on the apply record in
+  `${HOTSHEET_HOME}/orchestration-template-applies/<owner>.json`, the machine that applied
+  the template and runs its planner and scheduler. A finished apply still waiting for its
+  accept is forgotten last when the records reach their bound, so a hold is not dropped
+  while others can go. An unreadable apply record fails the scheduler's pass rather than
+  place work nobody accepted.
+- **Shown before applying.** Use Template…'s **Start Work** row says "After someone accepts
+  the planned steps, within the Orchestration settings" under Auto with the setting on,
+  "Within the Orchestration settings once it is planned, without waiting for an accept"
+  with it off, and "After you review the plan and start orchestration" under Manual.
+  `preview` answers `wait_for_accept`; `list` names it and `accepted_at_ms` for each apply.
+
 ### Save a Goal as Template…
 
 `template_save_goal` turns an open goal's current plan steps into a new template, oldest
@@ -7903,7 +7956,8 @@ The editor (`clients/web/src/components/orchestration-template-editor.tsx`) is a
 **Goal**, each input under **Inputs** and each step under **Steps**, with **Add Input** and
 **Add Step**), and the selected part's fields on the right:
 
-- **Template**: name, description and instructions for the planner.
+- **Template**: name, description, instructions for the planner, and **Wait for Accept**
+  (on by default; off writes `wait_for_accept: false`, HS2-36XDDX).
 - **Goal**: goal title, details and tags (separated by commas).
 - **Input**: label, key, kind (Text, Number, Yes or No, Choice, Priority, Project, AI
   Tool), Required, choices (one per line, for a choice input), a default suited to the kind
@@ -7958,20 +8012,22 @@ hotsheet-cli ... orchestration template preview <template-id> [--input key=value
 hotsheet-cli ... orchestration template apply <template-id> --tool <tool> --operation-id <id> \
   [--input key=value]... [--inputs <json>] [--create <step>]... [--model <m>] [--effort <e>] --project <owner>
 hotsheet-cli ... orchestration template apply-show <operation-id> --project <owner>
+hotsheet-cli ... orchestration template accept <operation-id> --project <owner>
 ```
 
 `set --file` takes one template, an object with `templates`, or a whole templates file.
 `--input` reads a value that parses as JSON (`true`, `3`) as that value and anything
 else as text.
 
-| Route                                                                                                           | Methods and purpose                                                                         |
-| --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| `/checkouts/{owner}/orchestration/templates/{list,show,validate,set,retire,save_goal,preview,apply,apply_show}` | POST; machine-local (it reads this machine's permission ledger and starts the planner here) |
+| Route                                                                                                                  | Methods and purpose                                                                         |
+| ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `/checkouts/{owner}/orchestration/templates/{list,show,validate,set,retire,save_goal,preview,apply,apply_show,accept}` | POST; machine-local (it reads this machine's permission ledger and starts the planner here) |
 
 MCP `hotsheet_targets` adds `template_list`, `template_show`, `template_validate`,
 `template_set`, `template_retire`, `template_save_goal`, `template_preview`,
-`template_apply` (with `template_id`, `inputs`, `choices`, `tool`, `operation_id`) and
-`template_apply_show`. The `hotsheet-planner` skill (version 7) plans a goal tagged
+`template_apply` (with `template_id`, `inputs`, `choices`, `tool`, `operation_id`),
+`template_apply_show` and `template_accept` (with `operation_id`; refused for an AI actor,
+HS2-36XDDX). The `hotsheet-planner` skill (version 7) plans a goal tagged
 `orchestration-template` from its brief (§26.25 "What the planner does"): it adapts the
 steps to the projects as they are now, searches first for a find-or-create step and,
 when it reuses a ticket, asks once with a `CHOICE` per reused step whether to keep it
@@ -7990,7 +8046,9 @@ A **trigger** is a reviewed binding of **when** to **what**:
 - **What:** **apply one plan template** (§26.32) with fixed inputs plus inputs filled
   from the event (`commit`, `ci_run`, `ticket`, `branch`, `occurrence`, `gate`), and/or
   **start or pause placement** (the orchestration's Start/Pause, HS2-TZJYKH). A template
-  is applied first, then placement is set.
+  is applied first, then placement is set. The steps the planner defines for an applied template
+  follow its Wait for Accept (§26.32, HS2-36XDDX): with it on they wait for a person's
+  Accept Plan while placement is on, and a trigger's Start does not accept them.
 
 A trigger never dispatches, pushes or deploys. A template apply opens one goal and hands
 it to the planner; the scheduler places the steps within the policy's limits (the

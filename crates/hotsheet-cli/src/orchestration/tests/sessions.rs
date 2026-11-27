@@ -287,7 +287,7 @@ fn scope(tool: &str) -> ToolScope {
     }
 }
 /// Target 1 runs codex and target 2 runs claude, two sessions each, four per machine.
-fn policy() -> PolicyBody {
+pub(super) fn policy() -> PolicyBody {
     let target = |n: u128, tool: &str| TargetPolicy {
         target_id: id(n),
         enabled: true,

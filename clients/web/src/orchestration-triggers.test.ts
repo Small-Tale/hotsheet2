@@ -467,6 +467,7 @@ describe('HS2-KXKA7X the setup form', () => {
       version: 1,
       goal_title: 'Repair',
       steps: [],
+      wait_for_accept: true,
       inputs: [
         { key: 'project', label: 'Project', kind: 'target' as const, required: true, default: 'api', choices: [] },
         { key: 'urgent', label: 'Urgent', kind: 'boolean' as const, required: false, choices: [] },

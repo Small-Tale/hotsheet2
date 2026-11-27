@@ -19,12 +19,12 @@ use std::collections::{BTreeMap, BTreeSet};
 use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::ops;
 use hotsheet_ticketing::orchestration::{
-    ApplyDecision, ApplyGoal, ApplyState, AuditOutcome, AuditRecord, DeclarationState,
+    AcceptWait, ApplyDecision, ApplyGoal, ApplyState, AuditOutcome, AuditRecord, DeclarationState,
     DenialReason, GateRequirement, InputKind, MAX_APPLY_OPERATION_ID, PermissionAction,
     PermissionKey, Prerequisite, ReadinessError, StepAfter, StepTicket, TEMPLATE_GOAL_TAG,
     TargetAction, Template, TemplateApply, TemplateApplyStore, TemplateError, TemplateGoal,
     TemplateInput, TemplateProblem, TemplateState, TemplateStep, TemplateStore, TemplatesFile,
-    TicketKey, decide_apply, render_brief, resolve_inputs, validate_template,
+    TicketKey, decide_apply, held_template_steps, render_brief, resolve_inputs, validate_template,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -115,6 +115,25 @@ pub struct ApplyRef {
     pub operation_id: String,
 }
 
+/// HS2-36XDDX: a person accepts the plan the planner proposed for an apply's goal.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AcceptTemplate {
+    pub operation_id: String,
+}
+
+/// HS2-36XDDX: an accept's answer: the apply as recorded now and the steps this
+/// accept released (empty when they were accepted before).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TemplateAcceptView {
+    #[serde(flatten)]
+    pub apply: TemplateApply,
+    pub released: Vec<String>,
+    /// `accepted` when this accept released steps, `existing` when every planned
+    /// step was accepted before.
+    pub outcome: String,
+}
+
 /// A recent apply, as the list shows it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApplySummary {
@@ -125,6 +144,10 @@ pub struct ApplySummary {
     pub state: ApplyState,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub goal: Option<ApplyGoal>,
+    /// HS2-36XDDX: the template as applied waits for an accept.
+    pub wait_for_accept: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accepted_at_ms: Option<u64>,
     pub created_at_ms: u64,
 }
 
@@ -215,6 +238,9 @@ pub struct TemplatePreview {
     /// Whether placement starts planned work by itself; otherwise the proposed plan
     /// waits for Start Orchestration.
     pub placement_automatic: bool,
+    /// HS2-36XDDX: the template's Wait for Accept: with placement on, the planned
+    /// steps wait for a person to accept the proposed plan.
+    pub wait_for_accept: bool,
 }
 
 /// Where one apply stands.
@@ -291,6 +317,8 @@ impl OrchestrationRuntime {
                     operation_id: apply.operation_id,
                     template_id: apply.template_id,
                     state: apply.state,
+                    wait_for_accept: apply.snapshot.wait_for_accept,
+                    accepted_at_ms: apply.accepted_at_ms,
                     goal: apply.goal,
                     created_at_ms: apply.created_at_ms,
                 })
@@ -624,6 +652,8 @@ impl OrchestrationRuntime {
             },
             steps: template_steps,
             instructions: None,
+            // HS2-36XDDX: a saved goal's template waits for an accept, as any new one.
+            wait_for_accept: true,
             created_at_ms: 0,
             updated_at_ms: 0,
             updated_by: None,
@@ -777,6 +807,7 @@ impl OrchestrationRuntime {
             goal_title: brief.goal_title,
             steps: brief.steps,
             skipped: brief.skipped,
+            wait_for_accept: template.wait_for_accept,
             template,
             inputs,
             problems,
@@ -826,6 +857,170 @@ impl OrchestrationRuntime {
                 (target_id.clone(), seen)
             })
             .collect()
+    }
+
+    /// HS2-36XDDX: the live plan steps held for a person's accept of their template's
+    /// proposed plan, by step id, with the apply to accept. Reads only.
+    pub(super) fn template_holds(
+        &self,
+        owner_id: &str,
+    ) -> Result<BTreeMap<String, AcceptWait>, OrchestrationError> {
+        let applies = self.template_applies(owner_id)?.applies()?;
+        if !applies.iter().any(TemplateApply::waits_for_accept) {
+            return Ok(BTreeMap::new());
+        }
+        let records = self.plan().records(owner_id)?;
+        Ok(held_template_steps(
+            &applies,
+            records.iter().map(|record| {
+                (
+                    record.step.step_id.as_str(),
+                    record.step.ticket.connection_id.as_str(),
+                    record.step.ticket.native_id.as_str(),
+                )
+            }),
+        )
+        .into_iter()
+        .map(|(step_id, apply)| {
+            (
+                step_id,
+                AcceptWait {
+                    operation_id: apply.operation_id.clone(),
+                    template_name: apply.snapshot.name.clone(),
+                },
+            )
+        })
+        .collect())
+    }
+
+    /// HS2-36XDDX: the live plan steps of one apply's goal, by step id.
+    fn goal_steps(
+        &self,
+        owner_id: &str,
+        apply: &TemplateApply,
+    ) -> Result<Vec<String>, OrchestrationError> {
+        let Some(goal) = apply.goal.as_ref().filter(|goal| goal.created) else {
+            return Ok(Vec::new());
+        };
+        Ok(self
+            .plan()
+            .records(owner_id)?
+            .into_iter()
+            .filter(|record| {
+                record.step.ticket.connection_id == goal.connection_id
+                    && record.step.ticket.native_id == goal.native_id
+            })
+            .map(|record| record.step.step_id)
+            .collect())
+    }
+
+    /// HS2-36XDDX: a person accepts the plan the planner proposed for an apply's goal,
+    /// as they review any plan: the goal's live plan steps are released, and placement
+    /// starts them within the policy as usual. Steps the planner adds later wait for
+    /// the next accept. Only a person accepts (an AI actor is `forbidden`); a goal with
+    /// nothing planned yet is `template_accept_nothing_planned`, and an accept with
+    /// nothing new answers `existing`. Audited as `template_accept`.
+    pub fn template_accept(
+        &self,
+        owner_id: &str,
+        request: &AcceptTemplate,
+        actor: Option<&MutationActor>,
+        tx: &mut Transaction<'_>,
+    ) -> Result<TemplateAcceptView, OrchestrationError> {
+        access::person(actor)?;
+        self.owner(owner_id)?;
+        let store = self.template_applies(owner_id)?;
+        let result = (|| {
+            let _lock = store.lock()?;
+            let mut apply = store
+                .find(&request.operation_id)?
+                .ok_or(template_error(TemplateError::ApplyNotFound))?;
+            let steps = self.goal_steps(owner_id, &apply)?;
+            if steps.is_empty() {
+                return Err(template_error(TemplateError::NothingToAccept));
+            }
+            let released: Vec<String> = steps
+                .iter()
+                .filter(|step| !apply.accepted_steps.contains(step))
+                .cloned()
+                .collect();
+            let by = actor.and_then(|actor| actor.id.as_deref());
+            let changed = apply.accept(&steps, by, tx.clock.now_ms());
+            if changed {
+                store.write(&apply)?;
+            }
+            Ok(TemplateAcceptView {
+                apply,
+                outcome: if changed { "accepted" } else { "existing" }.into(),
+                released,
+            })
+        })();
+        self.template_audit(
+            owner_id,
+            actor,
+            "template_accept",
+            Some(&request.operation_id),
+            match &result {
+                Ok(view) if view.outcome == "accepted" => {
+                    (AuditOutcome::Succeeded, Some("template_accepted"))
+                }
+                Ok(_) => (AuditOutcome::Succeeded, Some("template_accept_existing")),
+                Err(error) => (AuditOutcome::Failed, Some(error.code())),
+            },
+            tx,
+        )?;
+        let view = result?;
+        if view.outcome == "accepted" {
+            // The scheduler places the released steps; a timeline reader sees them move.
+            Self::scheduler_wake_at(&self.home);
+        }
+        Ok(view)
+    }
+
+    /// HS2-36XDDX: Start Orchestration is a person's review of the whole plan, so it
+    /// accepts every template plan held now (Manual placement stays as it was: its
+    /// plan waits for Start and then starts). Audited as `template_accept` with
+    /// `start_orchestration`. Answers the operation ids accepted.
+    pub(super) fn template_accept_all(
+        &self,
+        owner_id: &str,
+        actor: Option<&MutationActor>,
+        tx: &mut Transaction<'_>,
+    ) -> Result<Vec<String>, OrchestrationError> {
+        let held = self.template_holds(owner_id)?;
+        let operations: BTreeSet<String> = held
+            .values()
+            .map(|wait| wait.operation_id.clone())
+            .collect();
+        if operations.is_empty() {
+            return Ok(Vec::new());
+        }
+        let store = self.template_applies(owner_id)?;
+        {
+            let _lock = store.lock()?;
+            for operation_id in &operations {
+                let Some(mut apply) = store.find(operation_id)? else {
+                    continue;
+                };
+                let steps = self.goal_steps(owner_id, &apply)?;
+                let by = actor.and_then(|actor| actor.id.as_deref());
+                if apply.accept(&steps, by, tx.clock.now_ms()) {
+                    store.write(&apply)?;
+                }
+            }
+        }
+        for operation_id in &operations {
+            self.template_audit(
+                owner_id,
+                actor,
+                "template_accept",
+                Some(operation_id),
+                (AuditOutcome::Succeeded, Some("start_orchestration")),
+                tx,
+            )?;
+        }
+        Self::scheduler_wake_at(&self.home);
+        Ok(operations.into_iter().collect())
     }
 
     /// One apply as recorded (`template_apply_not_found`).
@@ -945,6 +1140,9 @@ impl OrchestrationRuntime {
                     attempts: 0,
                     permission_requests: Vec::new(),
                     reason: None,
+                    accepted_steps: Vec::new(),
+                    accepted_at_ms: None,
+                    accepted_by: None,
                     created_at_ms: now,
                     updated_at_ms: now,
                 }

@@ -1,7 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { findTimelineItem } from '../orchestration-timeline-board';
-import { demoClock, demoDecisions, demoSummary, demoTimeline } from '../ux-demo/orchestration-fixtures';
+import {
+  demoClock,
+  demoDecisions,
+  demoSummary,
+  demoTemplateHeld,
+  demoTimeline,
+} from '../ux-demo/orchestration-fixtures';
 import { OrchestrationDecisionsDialog } from './orchestration-decisions-dialog';
 import { OrchestrationInspector, orchestrationInspectorPanel } from './orchestration-inspector';
 import { OrchestrationOverview } from './orchestration-overview';
@@ -485,6 +491,34 @@ describe('OrchestrationInspector (HS2-J89JC7)', () => {
     const decision = inspector('step-7');
     expect(decision).toContain('data-action="open-orchestration-goal"');
     expect(decision).toContain('Open LCH-1');
+    // HS2-36XDDX: a card its template holds offers Accept Plan with the apply, and opens its goal.
+    const heldItem = demoTemplateHeld(item('step-8'));
+    const held = String(
+      OrchestrationInspector({ item: heldItem, timeline: demoTimeline('running'), clock: demoClock }),
+    );
+    expect(held).toContain('data-orchestration-section="Waits for Accept"');
+    expect(held).toContain('data-action="accept-orchestration-template-plan"');
+    expect(held).toContain('data-operation-id="tpl-docs-1"');
+    expect(held).toContain('Waiting for someone to accept the template’s plan (Document a feature)');
+    expect(held).toContain('Open LCH-1');
+    const busyHeld = String(
+      OrchestrationInspector({ item: heldItem, timeline: demoTimeline('running'), clock: demoClock, busy: true }),
+    );
+    expect(busyHeld).toMatch(
+      /data-action="accept-orchestration-template-plan"[^>]*disabled|disabled[^>]*data-action="accept-orchestration-template-plan"/,
+    );
+    // Without the apply named (an older answer), there is nothing to accept.
+    expect(
+      String(
+        OrchestrationInspector({
+          item: { ...heldItem, accept: undefined },
+          timeline: demoTimeline('running'),
+          clock: demoClock,
+        }),
+      ),
+    ).toMatch(
+      /data-action="accept-orchestration-template-plan"[^>]*disabled|disabled[^>]*data-action="accept-orchestration-template-plan"/,
+    );
     expect(inspector('step-9')).toContain('API-15');
     expect(inspector('step-8')).toContain('target cap');
     // HS2-0D60T8: provisional work has its Built Ahead section instead of a banner.
@@ -884,6 +918,7 @@ describe('wireOrchestrationTimeline (HS2-J89JC7)', () => {
       openGoal: () => calls.push('goal'),
       runValidation: () => calls.push('validate'),
       linkGate: (gate: string) => calls.push(`link ${gate}`),
+      acceptPlan: (operation: string) => calls.push(`accept ${operation}`),
       reopen: (reason: string) => calls.push(`reopen ${reason}`),
       showDecisions: () => calls.push('decisions'),
       loadEarlierDecisions: () => calls.push('earlier'),
@@ -918,6 +953,8 @@ describe('wireOrchestrationTimeline (HS2-J89JC7)', () => {
     run('click', 'orchestration-run-control', target({ control: 'correct', runState: 'failed' }));
     run('click', 'show-orchestration-request', target({ requestId: 'request-6' }));
     run('click', 'open-orchestration-goal', target({}));
+    run('click', 'accept-orchestration-template-plan', target({ operationId: 'tpl-9' }));
+    run('click', 'accept-orchestration-template-plan', target({}));
     run('click', 'run-orchestration-validation', target({}));
     run('click', 'link-orchestration-gate', target({ gateId: 'gate-7' }));
     run('click', 'link-orchestration-gate', target({}));
@@ -948,6 +985,7 @@ describe('wireOrchestrationTimeline (HS2-J89JC7)', () => {
       'run correct failed',
       'request request-6',
       'goal',
+      'accept tpl-9',
       'validate',
       'link gate-7',
       'reopen fix_changed_contract',
@@ -1019,6 +1057,7 @@ describe('arrow keys on the Orchestration board (HS2-T4V1TX)', () => {
       runControl: noop,
       showRequest: noop,
       openGoal: noop,
+      acceptPlan: noop,
       runValidation: noop,
       linkGate: noop,
       reopen: noop,

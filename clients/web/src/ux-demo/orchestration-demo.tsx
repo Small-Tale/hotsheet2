@@ -36,6 +36,7 @@ import {
   demoRoles,
   demoSummary,
   demoTemplateApply,
+  demoTemplateHeld,
   demoTemplatePreview,
   demoTemplates,
   demoTimeline,
@@ -158,9 +159,21 @@ function withDoneCi(timeline: OrchestrationTimeline): OrchestrationTimeline {
   };
 }
 
+/** HS2-36XDDX: DOC-9 held for its template's accept, when the settings choose that wait. */
+function withHeldTemplate(timeline: OrchestrationTimeline): OrchestrationTimeline {
+  if (orchestrationDemoSettings.docWait.value !== 'template_plan_not_accepted') return timeline;
+  return {
+    ...timeline,
+    waves: timeline.waves.map((wave) => ({
+      ...wave,
+      items: wave.items.map((item) => (item.step_id === 'step-8' ? demoTemplateHeld(item) : item)),
+    })),
+  };
+}
+
 /** HS2-FXY5QM: the running timeline with API-12's run in the chosen condition. */
 function runningTimeline(phase: TimelinePhase = 'running') {
-  const timeline = withDoneCi(demoTimeline(phase)),
+  const timeline = withHeldTemplate(withDoneCi(demoTimeline(phase))),
     condition = orchestrationDemoSettings.runCondition.value;
   if (!condition) return timeline;
   if (condition === 'elsewhere')
@@ -213,6 +226,8 @@ const DOC_WAITS = [
   { value: 'resource_held', label: 'A Held Resource' },
   { value: 'model_unresolved', label: 'Models Not Reported' },
   { value: 'no_matching_model', label: 'No Matching Model' },
+  // HS2-36XDDX: its template holds it until someone accepts the proposed plan.
+  { value: 'template_plan_not_accepted', label: 'Its Template’s Accept' },
 ];
 
 const CI_GATES = [
@@ -600,28 +615,30 @@ export function OrchestrationInspectorDemo() {
             explanation:
               orchestrationDemoSettings.selected.value !== 'step-8'
                 ? undefined
-                : orchestrationDemoSettings.docWait.value !== 'resource_held'
-                  ? {
-                      // HS2-747WQA: a pattern-only Models list on both of Docs's sites resolves to no model.
-                      standing: 'not_placed',
-                      reason: 'no_tool_available',
-                      detail: orchestrationDemoSettings.docWait.value,
-                      retry_at_ms: timeline.now_ms + 10 * 60_000,
-                      sites: [{ target_id: 'api', reason: 'no_tool_available', detail: 'model_unresolved' }],
-                    }
-                  : {
-                      standing: 'not_placed',
-                      reason: 'resource_held',
-                      retry_at_ms: timeline.now_ms + 40 * 60_000,
-                      resources: [
-                        {
-                          namespace: 'vm',
-                          resource: 'macos-vm',
-                          state: 'held',
-                          expires_at_ms: timeline.now_ms + 40 * 60_000,
-                        },
-                      ],
-                    },
+                : orchestrationDemoSettings.docWait.value === 'template_plan_not_accepted'
+                  ? { standing: 'not_placed', reason: 'template_plan_not_accepted' }
+                  : orchestrationDemoSettings.docWait.value !== 'resource_held'
+                    ? {
+                        // HS2-747WQA: a pattern-only Models list on both of Docs's sites resolves to no model.
+                        standing: 'not_placed',
+                        reason: 'no_tool_available',
+                        detail: orchestrationDemoSettings.docWait.value,
+                        retry_at_ms: timeline.now_ms + 10 * 60_000,
+                        sites: [{ target_id: 'api', reason: 'no_tool_available', detail: 'model_unresolved' }],
+                      }
+                    : {
+                        standing: 'not_placed',
+                        reason: 'resource_held',
+                        retry_at_ms: timeline.now_ms + 40 * 60_000,
+                        resources: [
+                          {
+                            namespace: 'vm',
+                            resource: 'macos-vm',
+                            state: 'held',
+                            expires_at_ms: timeline.now_ms + 40 * 60_000,
+                          },
+                        ],
+                      },
             // HS2-0D60T8: DOC-7 was built ahead of WEB-33's CI, which failed.
             builtAhead:
               orchestrationDemoSettings.selected.value === 'step-5'
@@ -776,6 +793,7 @@ function wireOrchestrationDemo(root: HTMLElement): () => void {
       runControl: () => undefined,
       showRequest: () => undefined,
       openGoal: () => undefined,
+      acceptPlan: () => undefined,
       runValidation: () => undefined,
       linkGate: () => undefined,
       reopen: () => undefined,

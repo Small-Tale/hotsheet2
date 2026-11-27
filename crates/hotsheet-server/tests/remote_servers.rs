@@ -524,6 +524,10 @@ mod e2e_home_outage;
 #[cfg(unix)]
 #[path = "remote_servers/e2e_roles.rs"]
 mod e2e_roles;
+// HS2-36XDDX: a template's Wait for Accept holds its steps until a person accepts.
+#[cfg(unix)]
+#[path = "remote_servers/e2e_templates.rs"]
+mod e2e_templates;
 // HS2-CC7TCB: a reported GitHub Actions run followed to its end by the Job monitor.
 #[path = "remote_servers/ci_follow.rs"]
 mod ci_follow;

@@ -322,3 +322,25 @@ describe('HS2-1XCW6N template editor model', () => {
     expect(templateSummary({ inputs: [{}], steps: [{}] })).toBe('1 input · 1 step');
   });
 });
+
+describe('HS2-36XDDX Wait for Accept in the template editor', () => {
+  it('is on for a new template and for one written before the setting, and round-trips both ways', () => {
+    const fresh = newTemplateDraft('api');
+    expect(fresh.waitForAccept).toBe(true);
+    expect(templateFromDraft(fresh)).not.toHaveProperty('wait_for_accept');
+    const old = draftFromTemplate({ template_id: 'T', name: 'Old', goal: { title: 'G' }, steps: [] });
+    expect(old.waitForAccept).toBe(true);
+    // The control turns it off, and the server gets `false`; on again leaves the field out.
+    const off = editDraft(fresh, 'wait_for_accept', false);
+    expect(off.waitForAccept).toBe(false);
+    expect(templateFromDraft(off).wait_for_accept).toBe(false);
+    expect(draftChanged(off, fresh)).toBe(true);
+    const reopened = draftFromTemplate(templateFromDraft(off));
+    expect(reopened.waitForAccept).toBe(false);
+    const on = editDraft(reopened, 'wait_for_accept', true);
+    expect(templateFromDraft(on)).not.toHaveProperty('wait_for_accept');
+    expect(draftChanged(on, fresh)).toBe(false);
+    // Repeated edits settle; other fields leave it alone.
+    expect(editDraft(editDraft(off, 'wait_for_accept', false), 'name', 'X').waitForAccept).toBe(false);
+  });
+});

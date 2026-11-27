@@ -266,8 +266,26 @@ impl OrchestrationRuntime {
 
     /// HS2-D9KP86: Start or Pause, `placement.automatic` on or off in the stored policy.
     /// With none saved, the default policy is saved with it in the same write, which the
-    /// answer reports as `saved_default`. A repeat changes nothing.
+    /// answer reports as `saved_default`. A repeat changes nothing. HS2-36XDDX: a person's
+    /// Start is their review of the plan, so it accepts the template plans held now.
     pub fn set_automatic(
+        &self,
+        owner_id: &str,
+        request: SetAutomatic,
+        actor: Option<&MutationActor>,
+        tx: &mut Transaction<'_>,
+    ) -> Result<AutomaticSet, OrchestrationError> {
+        let automatic = request.automatic;
+        let set = self.set_automatic_unreviewed(owner_id, request, actor, tx)?;
+        if automatic {
+            self.template_accept_all(owner_id, actor, tx)?;
+        }
+        Ok(set)
+    }
+
+    /// HS2-36XDDX: Start or Pause that is nobody's review of the plan (a trigger's
+    /// placement action): held template plans stay held.
+    pub(super) fn set_automatic_unreviewed(
         &self,
         owner_id: &str,
         request: SetAutomatic,

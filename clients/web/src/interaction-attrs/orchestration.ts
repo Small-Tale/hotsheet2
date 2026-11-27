@@ -25,6 +25,8 @@ export const ORCHESTRATION_ACTIONS = {
   /** HS2-A7YCB2: Link Again on an unknown CI gate, with the gate's `data-gate-id`. */
   linkOrchestrationGate: action('link-orchestration-gate'),
   openOrchestrationGoal: action('open-orchestration-goal'),
+  /** HS2-36XDDX: accept the template plan a held card waits for, with the apply's `data-operation-id`. */
+  acceptOrchestrationTemplatePlan: action('accept-orchestration-template-plan'),
   /** HS2-9XJEZC: run every validation step of the selected card that has not passed. */
   runOrchestrationValidation: action('run-orchestration-validation'),
   /** HS2-0D60T8: reopen the selected card's built-ahead work with the item's `data-reopen-reason`. */

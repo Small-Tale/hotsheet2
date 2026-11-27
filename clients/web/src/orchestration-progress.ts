@@ -167,7 +167,7 @@ export function costText(cost: CostTotals | undefined): string {
 
 const DONE = new Set(['done']),
   WORKING = new Set(['running', 'provisional']),
-  FOR_YOU = new Set(['waits_for_permission', 'waits_for_decision']);
+  FOR_YOU = new Set(['waits_for_permission', 'waits_for_decision', 'waits_for_accept']);
 
 function tally(items: readonly TimelineItem[]) {
   return {

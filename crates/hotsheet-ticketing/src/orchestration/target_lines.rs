@@ -68,7 +68,9 @@ pub struct TargetLines {
 fn rank(state: ItemState) -> u8 {
     match state {
         ItemState::Running | ItemState::Provisional => 0,
-        ItemState::WaitsForPermission | ItemState::WaitsForDecision => 1,
+        ItemState::WaitsForPermission | ItemState::WaitsForDecision | ItemState::WaitsForAccept => {
+            1
+        }
         ItemState::Ready | ItemState::WaitsForPrerequisite => 2,
         ItemState::Done => 3,
     }

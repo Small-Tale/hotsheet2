@@ -1428,3 +1428,326 @@ fn hs2_amjner_a_waiting_apply_resumes_once_the_planner_is_free() {
     assert_eq!(f.goals().len(), 1);
     assert_eq!(f.host.launches().len(), 1);
 }
+
+/// HS2-36XDDX: the planner's step for a goal, on a new ticket of target 1.
+fn plan_step(f: &Fixture, goal_slug: &str, title: &str, tx: &mut Transaction<'_>) -> String {
+    let target = ops::create(
+        &f.m.target_store,
+        ulid::Ulid::new(),
+        "TGT",
+        NOW.into(),
+        NewTicket {
+            title: title.into(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    f.m.runtime
+        .readiness_define(
+            &f.owner(),
+            serde_json::from_value(json!({
+                "ticket": {"native_id": goal_slug},
+                "target_id": id(1), "connection_id": f.m.target_connection(),
+                "native_id": target.slug,
+            }))
+            .unwrap(),
+            Some(&worker()),
+            tx,
+        )
+        .unwrap()
+        .readiness
+        .step
+        .step_id
+}
+
+/// HS2-36XDDX: why the scheduler leaves a step unplaced, and the state its card shows.
+fn standing(f: &Fixture, step_id: &str, tx: &mut Transaction<'_>) -> (String, String) {
+    let explained =
+        f.m.runtime
+            .scheduler_explain(
+                &f.owner(),
+                &serde_json::from_value(json!({"step_id": step_id})).unwrap(),
+                Some(&human()),
+                tx,
+            )
+            .unwrap();
+    let timeline =
+        f.m.runtime
+            .orchestration_timeline(&f.owner(), None, 0, tx)
+            .unwrap();
+    let item = timeline
+        .waves
+        .iter()
+        .flat_map(|wave| &wave.items)
+        .find(|item| item.step_id == step_id)
+        .unwrap();
+    (explained.reason, item.state.code().to_owned())
+}
+
+fn accept(
+    f: &Fixture,
+    operation_id: &str,
+    actor: &MutationActor,
+    tx: &mut Transaction<'_>,
+) -> Result<TemplateAcceptView, OrchestrationError> {
+    f.m.runtime.template_accept(
+        &f.owner(),
+        &serde_json::from_value(json!({"operation_id": operation_id})).unwrap(),
+        Some(actor),
+        tx,
+    )
+}
+
+fn set_automatic(f: &Fixture, automatic: bool, tx: &mut Transaction<'_>) {
+    f.m.runtime
+        .set_automatic(
+            &f.owner(),
+            serde_json::from_value(json!({"automatic": automatic})).unwrap(),
+            Some(&human()),
+            tx,
+        )
+        .unwrap();
+}
+
+/// HS2-36XDDX: with Wait for Accept on (the default) and placement Auto, the steps the
+/// planner defines for the template's goal are held until a person accepts the plan;
+/// a step added later is held again; Pause shows the plain dry run, and Start
+/// Orchestration accepts what is held. Only a person accepts.
+#[test]
+fn hs2_36xddx_a_templates_steps_wait_for_a_persons_accept_under_auto_placement() {
+    let mut rng = Rng(3600);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let f = Fixture::new(2, &mut tx);
+    f.m.runtime
+        .set_policy(
+            &f.owner(),
+            hotsheet_ticketing::orchestration::SetPolicy {
+                expected_revision: None,
+                policy: super::sessions::policy(),
+            },
+            Some(&human()),
+            &mut tx,
+        )
+        .unwrap();
+    let template = f.define("Feature across API and Web", &mut tx);
+    assert!(template.wait_for_accept, "on by default");
+    let preview = f
+        .m
+        .runtime
+        .template_preview(
+            &f.owner(),
+            &serde_json::from_value(
+                json!({"template_id": template.template_id, "inputs": {"feature": "Rate limits"}}),
+            )
+            .unwrap(),
+            Some(&human()),
+            &mut tx,
+        )
+        .unwrap();
+    assert!(preview.wait_for_accept);
+    let applied = f
+        .apply(
+            &template,
+            json!({"feature": "Rate limits"}),
+            "op-1",
+            &human(),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(applied.apply.state, ApplyState::Planning);
+    let goal = applied.apply.goal.clone().unwrap().slug.unwrap();
+    // Nothing planned yet: nothing to accept.
+    assert_eq!(
+        code(accept(&f, "op-1", &human(), &mut tx)),
+        "template_accept_nothing_planned"
+    );
+    assert_eq!(
+        f.m.last_audit(),
+        (
+            "template_accept".into(),
+            AuditOutcome::Failed,
+            Some("template_accept_nothing_planned".into())
+        )
+    );
+
+    // The planner proposes a step: placement is Auto now, and the step is held.
+    let first = plan_step(&f, &goal, "Add rate limit headers", &mut tx);
+    assert_eq!(
+        standing(&f, &first, &mut tx),
+        (
+            "template_plan_not_accepted".into(),
+            "waits_for_accept".into()
+        )
+    );
+    let timeline =
+        f.m.runtime
+            .orchestration_timeline(&f.owner(), None, 0, &mut tx)
+            .unwrap();
+    assert!(
+        timeline.automatic,
+        "Auto placement is on once the plan has a step"
+    );
+    let item = timeline
+        .waves
+        .iter()
+        .flat_map(|wave| &wave.items)
+        .next()
+        .unwrap();
+    let wait = item.accept.clone().unwrap();
+    assert_eq!(wait.operation_id, "op-1");
+    assert_eq!(wait.template_name, "Feature across API and Web");
+
+    // An AI actor never accepts; an unknown apply is not found.
+    assert_eq!(code(accept(&f, "op-1", &worker(), &mut tx)), "forbidden");
+    assert_eq!(
+        code(accept(&f, "op-missing", &human(), &mut tx)),
+        "template_apply_not_found"
+    );
+    assert_eq!(
+        standing(&f, &first, &mut tx).1,
+        "waits_for_accept",
+        "a refused accept releases nothing"
+    );
+
+    // Pause: a Manual plan is the plain dry run it was; the work waits for Start.
+    set_automatic(&f, false, &mut tx);
+    assert_ne!(standing(&f, &first, &mut tx).1, "waits_for_accept");
+    // A trigger's Start is nobody's review: the step stays held.
+    f.m.runtime
+        .set_automatic_unreviewed(
+            &f.owner(),
+            serde_json::from_value(json!({"automatic": true})).unwrap(),
+            Some(&human()),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(
+        standing(&f, &first, &mut tx),
+        (
+            "template_plan_not_accepted".into(),
+            "waits_for_accept".into()
+        )
+    );
+    set_automatic(&f, false, &mut tx);
+    // Start Orchestration is the person's review of the plan: it accepts what is held.
+    set_automatic(&f, true, &mut tx);
+    let (reason, state) = standing(&f, &first, &mut tx);
+    assert_ne!(reason, "template_plan_not_accepted");
+    assert_ne!(state, "waits_for_accept");
+    let record =
+        f.m.runtime
+            .template_apply_show(
+                &f.owner(),
+                &serde_json::from_value(json!({"operation_id": "op-1"})).unwrap(),
+            )
+            .unwrap();
+    assert_eq!(record.apply.accepted_steps, std::slice::from_ref(&first));
+    assert_eq!(record.apply.accepted_by.as_deref(), human().id.as_deref());
+    let journal = f.m.runtime.audit(&f.owner(), 0, 500).unwrap().entries;
+    assert!(
+        journal
+            .iter()
+            .any(|entry| entry.record.action == "template_accept"
+                && entry.record.reason.as_deref() == Some("start_orchestration"))
+    );
+
+    // The planner re-plans the goal and adds a step: only the new one is held.
+    let second = plan_step(&f, &goal, "Show rate limit errors", &mut tx);
+    assert_eq!(
+        standing(&f, &second, &mut tx).0,
+        "template_plan_not_accepted"
+    );
+    assert_ne!(standing(&f, &first, &mut tx).1, "waits_for_accept");
+    // A person accepts through the plan review: the new step is released, once.
+    let accepted = accept(&f, "op-1", &human(), &mut tx).unwrap();
+    assert_eq!(accepted.outcome, "accepted");
+    assert_eq!(accepted.released, std::slice::from_ref(&second));
+    assert_eq!(
+        f.m.last_audit(),
+        (
+            "template_accept".into(),
+            AuditOutcome::Succeeded,
+            Some("template_accepted".into())
+        )
+    );
+    assert_ne!(
+        standing(&f, &second, &mut tx).0,
+        "template_plan_not_accepted"
+    );
+    let again = accept(&f, "op-1", &human(), &mut tx).unwrap();
+    assert_eq!(again.outcome, "existing");
+    assert!(again.released.is_empty());
+    assert_eq!(again.apply.accepted_at_ms, accepted.apply.accepted_at_ms);
+    // The list names the setting and the accept.
+    let listed = f.m.runtime.template_list(&f.owner()).unwrap();
+    assert!(listed.applies[0].wait_for_accept);
+    assert!(listed.applies[0].accepted_at_ms.is_some());
+}
+
+/// HS2-36XDDX: a template with Wait for Accept off keeps today's behaviour: its steps
+/// are placed within the policy as soon as they are ready.
+#[test]
+fn hs2_36xddx_a_template_that_does_not_wait_places_its_steps_at_once() {
+    let mut rng = Rng(3700);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let f = Fixture::new(2, &mut tx);
+    f.m.runtime
+        .set_policy(
+            &f.owner(),
+            hotsheet_ticketing::orchestration::SetPolicy {
+                expected_revision: None,
+                policy: super::sessions::policy(),
+            },
+            Some(&human()),
+            &mut tx,
+        )
+        .unwrap();
+    let mut template = f.define("Repair failing CI", &mut tx);
+    template.wait_for_accept = false;
+    let saved =
+        f.m.runtime
+            .template_set(
+                &f.owner(),
+                SetTemplates {
+                    templates: vec![template.clone()],
+                    expected_revision: None,
+                },
+                Some(&human()),
+                &mut tx,
+            )
+            .unwrap();
+    // A changed definition is the next version; the file is version 2 while it is off.
+    assert_eq!(saved.templates[0].version, 2);
+    assert!(!saved.templates[0].wait_for_accept);
+    let on_disk: Value = serde_json::from_slice(
+        &std::fs::read(std::path::Path::new(&f.m.owner.root).join(TEMPLATES_PATH)).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(on_disk["schema_version"], 2);
+    let template = saved.templates[0].clone();
+    let applied = f
+        .apply(
+            &template,
+            json!({"feature": "Flaky login"}),
+            "op-off",
+            &human(),
+            &mut tx,
+        )
+        .unwrap();
+    let goal = applied.apply.goal.clone().unwrap().slug.unwrap();
+    let step = plan_step(&f, &goal, "Repair the login test", &mut tx);
+    let (reason, state) = standing(&f, &step, &mut tx);
+    assert_ne!(reason, "template_plan_not_accepted");
+    assert_ne!(state, "waits_for_accept");
+    // Nothing waits, so an accept has nothing new to release.
+    let accepted = accept(&f, "op-off", &human(), &mut tx).unwrap();
+    assert_eq!(accepted.released, [step]);
+    let listed = f.m.runtime.template_list(&f.owner()).unwrap();
+    assert!(!listed.applies[0].wait_for_accept);
+}

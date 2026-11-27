@@ -16,6 +16,8 @@ export type TimelineItemState =
   | 'waits_for_prerequisite'
   | 'waits_for_permission'
   | 'waits_for_decision'
+  /** HS2-36XDDX: a step of a template's goal waits for a person to accept the proposed plan. */
+  | 'waits_for_accept'
   | 'done';
 export type TargetLocation = 'local' | 'remote' | 'unbound';
 /**
@@ -119,6 +121,8 @@ export interface TimelineItem {
   run?: TimelineRun;
   permission?: TimelinePermission;
   decision?: { note_id?: string };
+  /** HS2-36XDDX: with `waits_for_accept`, the template apply whose proposed plan a person accepts. */
+  accept?: { operation_id: string; template_name: string };
   placement?: TimelinePlacement;
   started_at_ms?: number;
   finished_at_ms?: number;
@@ -207,6 +211,7 @@ const STATES: readonly TimelineItemState[] = [
   'waits_for_prerequisite',
   'waits_for_permission',
   'waits_for_decision',
+  'waits_for_accept',
   'done',
 ];
 const LOCATIONS: readonly TargetLocation[] = ['local', 'remote', 'unbound'];
@@ -262,6 +267,12 @@ function item(value: unknown): TimelineItem {
     one(entry.kind, ['permission']);
     text(entry.request_id);
     text(entry.action);
+    return entry;
+  });
+  optional(row.accept, (accept) => {
+    const entry = record(accept);
+    text(entry.operation_id);
+    text(entry.template_name);
     return entry;
   });
   for (const key of ['started_at_ms', 'finished_at_ms', 'estimated_start_ms'] as const) optional(row[key], count);

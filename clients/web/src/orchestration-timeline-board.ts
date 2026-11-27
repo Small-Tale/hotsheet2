@@ -75,10 +75,19 @@ export function stateWords(item: TimelineItem, proposed: boolean): { label: stri
         label: item.goal_slug ? `Waits for your decision on ${item.goal_slug}` : 'Waits for your decision',
         tone: 'warning',
       };
+    // HS2-36XDDX: a step its template holds for a person's accept; the inspector says it in full.
+    case 'waits_for_accept':
+      return { label: 'Waits for the plan to be accepted', tone: 'warning' };
     default:
       return item.state satisfies never;
   }
 }
+
+/**
+ * HS2-36XDDX: a held template step's plain-language reason, in full in the inspector. The card's line says it
+ * shorter so it fits the card at every width.
+ */
+export const TEMPLATE_ACCEPT_WAIT = 'Waiting for someone to accept the template’s plan';
 
 /**
  * HS2-H5H9QP: work started ahead of a pending gate words its ledger state exactly as a worker's card does
@@ -248,6 +257,8 @@ export function stateBadge(item: TimelineItem): { label: string; tone: SemanticT
       return { label: 'Waits for permission', tone: 'warning' };
     case 'waits_for_decision':
       return { label: 'Waits for your decision', tone: 'warning' };
+    case 'waits_for_accept':
+      return { label: 'Waits for accept', tone: 'warning' };
     case 'done': {
       // HS2-89578K, HS2-GPABYY: done work whose CI, deployment or review failed needs repair.
       const repair = doneRepair(item);

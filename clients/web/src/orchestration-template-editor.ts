@@ -80,6 +80,8 @@ export interface TemplateDraft {
   goalTags: string;
   steps: StepDraft[];
   instructions: string;
+  /** HS2-36XDDX: Wait for Accept, on by default. */
+  waitForAccept: boolean;
   /** The next local id. */
   next: number;
 }
@@ -147,6 +149,8 @@ export function draftFromTemplate(value: unknown): TemplateDraft {
     goalTags: texts(goal.tags).join(', '),
     steps,
     instructions: text(raw.instructions),
+    // HS2-36XDDX: absent is on (the default).
+    waitForAccept: raw.wait_for_accept !== false,
     next,
   };
 }
@@ -165,6 +169,7 @@ export function newTemplateDraft(firstProject = ''): TemplateDraft {
     goalTags: '',
     steps: [blankStep('s1', 'step-1', firstProject)],
     instructions: '',
+    waitForAccept: true,
     next: 2,
   };
 }
@@ -255,6 +260,8 @@ export function templateFromDraft(draft: TemplateDraft): Raw {
       ...optional('when', step.when),
     })),
     ...optional('instructions', draft.instructions),
+    // HS2-36XDDX: written only when off, as the server writes it.
+    ...(draft.waitForAccept ? {} : { wait_for_accept: false }),
   };
 }
 
@@ -279,7 +286,7 @@ function renameReferences(steps: StepDraft[], from: string, to: string): StepDra
 }
 
 /**
- * Set one field, named as the editor's controls name it: `name`, `description`, `instructions`,
+ * Set one field, named as the editor's controls name it: `name`, `description`, `instructions`, `wait_for_accept`,
  * `goal.title`, `goal.details`, `goal.tags`, `input.<id>.<field>`, `step.<id>.<field>` or
  * `step.<id>.after.<n>.step|gates`. Renaming an input's key or a step's key follows the references that
  * name it whole; an unknown field changes nothing.
@@ -293,6 +300,8 @@ export function editDraft(draft: TemplateDraft, field: string, value: string | b
       return { ...draft, description: textValue };
     case 'instructions':
       return { ...draft, instructions: textValue };
+    case 'wait_for_accept':
+      return { ...draft, waitForAccept: value === true || value === 'true' };
     case 'goal.title':
       return { ...draft, goalTitle: textValue };
     case 'goal.details':

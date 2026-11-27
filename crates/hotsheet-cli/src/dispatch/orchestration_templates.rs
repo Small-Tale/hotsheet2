@@ -98,6 +98,11 @@ enum TemplateCmd {
     },
     /// One apply on this machine by its operation id.
     ApplyShow { operation_id: String },
+    /// HS2-36XDDX: accept the plan the planner proposed for an apply's goal, as a
+    /// person reviewing it. With the template's Wait for Accept on, the goal's planned
+    /// steps wait for this before placement starts them; steps planned later wait for
+    /// the next accept. A person's action: an AI actor is refused.
+    Accept { operation_id: String },
     /// HS2-AMJNER: continue every apply that waits and can go on now (a person
     /// answered its permission request, or the planner is free), under its own
     /// operation id and as the actor who applied it. A server does this on its own.
@@ -235,6 +240,11 @@ pub(super) fn route(
             format!("{base}/apply_show"),
             json!({"operation_id": operation_id}),
         ),
+        TemplateCmd::Accept { operation_id } => (
+            "POST",
+            format!("{base}/accept"),
+            json!({"operation_id": operation_id}),
+        ),
         TemplateCmd::Resume => ("POST", format!("{base}/resume"), json!({})),
     })
 }
@@ -335,6 +345,14 @@ mod tests {
         assert_eq!(
             request(&["resume"]).unwrap(),
             ("POST", format!("{base}/resume"), json!({}))
+        );
+        assert_eq!(
+            request(&["accept", "op-1"]).unwrap(),
+            (
+                "POST",
+                format!("{base}/accept"),
+                json!({"operation_id": "op-1"})
+            )
         );
         assert_eq!(
             request(&["apply-show", "op-1"]).unwrap(),

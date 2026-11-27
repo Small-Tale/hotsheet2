@@ -82,6 +82,9 @@ pub enum ItemState {
     WaitsForPermission,
     /// A judgment call waits on the goal ticket's `FEEDBACK NEEDED` note.
     WaitsForDecision,
+    /// HS2-36XDDX: a step of a template's goal waits for a person to accept the
+    /// planner's proposed plan before placement starts it.
+    WaitsForAccept,
     Done,
 }
 
@@ -94,6 +97,7 @@ impl ItemState {
             Self::WaitsForPrerequisite => "waits_for_prerequisite",
             Self::WaitsForPermission => "waits_for_permission",
             Self::WaitsForDecision => "waits_for_decision",
+            Self::WaitsForAccept => "waits_for_accept",
             Self::Done => "done",
         }
     }
@@ -145,6 +149,14 @@ pub struct PermissionWait {
 pub struct DecisionWait {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub note_id: Option<String>,
+}
+
+/// HS2-36XDDX: the template apply whose proposed plan a held step waits for a person
+/// to accept (`templates/accept` with this operation id).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AcceptWait {
+    pub operation_id: String,
+    pub template_name: String,
 }
 
 /// A ticket's display identity as read from a store on this machine.
@@ -280,6 +292,10 @@ pub struct TimelineInput<'a> {
     pub permissions: &'a BTreeMap<String, PermissionWait>,
     /// Goal tickets `(connection_id, native_id)` with an unanswered decision.
     pub decisions: &'a BTreeMap<(String, String), DecisionWait>,
+    /// HS2-36XDDX: the steps held for a person's accept of their template's plan, by
+    /// step id. Only filled while placement is on: a Manual plan waits for Start
+    /// Orchestration, which accepts them.
+    pub accepts: &'a BTreeMap<String, AcceptWait>,
     pub goals: &'a BTreeMap<(String, String), TicketLabel>,
     pub tickets: &'a BTreeMap<TicketKey, TicketLabel>,
     pub policy: &'a TimelinePolicy,
@@ -392,6 +408,9 @@ pub struct TimelineItem {
     pub permission: Option<PermissionWait>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub decision: Option<DecisionWait>,
+    /// HS2-36XDDX: the template plan the step waits for a person to accept.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accept: Option<AcceptWait>,
     /// The scheduler's latest word on the step, when it logged one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub placement: Option<PlacementHint>,
@@ -511,11 +530,15 @@ fn state_of(
     step: &TimelineStep,
     permission: Option<&PermissionWait>,
     decision: Option<&DecisionWait>,
+    accept: Option<&AcceptWait>,
 ) -> ItemState {
     match step.readiness.level {
         ReadinessLevel::Finished => ItemState::Done,
         ReadinessLevel::InProgress if step.provisional_work => ItemState::Provisional,
         ReadinessLevel::InProgress => ItemState::Running,
+        // HS2-36XDDX: nothing starts it before a person accepts its template's plan,
+        // whatever else it waits on, so the person's part shows first.
+        _ if accept.is_some() => ItemState::WaitsForAccept,
         _ if permission.is_some() => ItemState::WaitsForPermission,
         // HS2-XHQ1EH: going ahead on an unconfirmed prerequisite is a judgment call
         // asked on the goal ticket.
@@ -680,7 +703,8 @@ fn item(
         )
     });
     let decision = input.decisions.get(&goal_key);
-    let state = state_of(step, permission, decision);
+    let accept = input.accepts.get(&plan.step_id);
+    let state = state_of(step, permission, decision, accept);
     let run = run_of(input, &plan.step_id, &plan.target);
     // HS2-6GE7WM: where the work runs is the site of its run, which the scheduler may
     // have placed on another site of the project; before a run, the site the step names.
@@ -796,6 +820,9 @@ fn item(
         permission: permission.cloned(),
         decision: (state == ItemState::WaitsForDecision)
             .then(|| decision.cloned())
+            .flatten(),
+        accept: (state == ItemState::WaitsForAccept)
+            .then(|| accept.cloned())
             .flatten(),
         placement: hint.cloned(),
         // The live run's start, or for finished work the start of its last run.

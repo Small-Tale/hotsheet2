@@ -3944,7 +3944,12 @@ paths:
         `template_retired`, `template_inputs_invalid` or `template_target_unknown` before anything opens. Audited as
         `template_set` and `template_apply`. HS2-AMJNER: `resume` continues every apply that waits and can go on now
         (each permission request answered, or the planner free) under its own operation id and as the actor who applied
-        it, as the server does on its own; it answers the applies it continued."
+        it, as the server does on its own; it answers the applies it continued. HS2-36XDDX: `accept` is a person's
+        accept of the plan proposed for an apply's goal (an AI actor is `forbidden`): the goal's live plan steps are
+        released (`released`, `outcome` `accepted`, or `existing` when nothing was new), and while the template's
+        `wait_for_accept` is on and placement is on, a step of the goal not accepted is not placed
+        (`template_plan_not_accepted`); a goal with nothing planned yet is `template_accept_nothing_planned`. Audited as
+        `template_accept`."
       requestBody:
         required: true
         content:
@@ -3965,6 +3970,7 @@ paths:
                   - $ref: '#/components/schemas/TemplateValidation'
                   - $ref: '#/components/schemas/TemplatePreview'
                   - $ref: '#/components/schemas/TemplateApply'
+                  - $ref: '#/components/schemas/TemplateAccept'
                   - $ref: '#/components/schemas/TemplateResumeReport'
         default:
           description:
@@ -4000,6 +4006,7 @@ paths:
             - preview
             - apply
             - apply_show
+            - accept
             - resume
   /checkouts/{owner}/orchestration/triggers/{operation}:
     description:
@@ -26925,8 +26932,8 @@ components:
         Body of a template operation (HS2-A4RVYA). `show` and `retire` take `template_id`; `validate` takes `template`;
         `set` takes `templates` and an optional `expected_revision`; `save_goal` takes `goal`, `name`, `description` and
         `targets_as_inputs`; `preview` takes `template_id`, `inputs` and `choices`; `apply` adds `tool`, `model`,
-        `effort` and a retained `operation_id` (at most 140 characters); `apply_show` takes `operation_id`; `resume`
-        takes nothing.
+        `effort` and a retained `operation_id` (at most 140 characters); `apply_show` and `accept` take `operation_id`;
+        `resume` takes nothing.
       type: object
       properties:
         actor:
@@ -27112,6 +27119,11 @@ components:
         instructions:
           type: string
           maxLength: 4000
+        wait_for_accept:
+          description:
+            HS2-36XDDX. While placement is on, the steps planned for a goal this template opened wait for a person to
+            accept the proposed plan. Absent is on (the default); written only when false.
+          type: boolean
         created_at_ms:
           type: integer
         updated_at_ms:
@@ -27127,7 +27139,10 @@ components:
         - templates
       properties:
         schema_version:
-          const: 1
+          description: 1, or 2 while a template sets `wait_for_accept` false (HS2-36XDDX).
+          enum:
+            - 1
+            - 2
         revision:
           type: string
         templates:
@@ -27221,6 +27236,9 @@ components:
             - update
         placement_automatic:
           type: boolean
+        wait_for_accept:
+          description: HS2-36XDDX. The template's Wait for Accept.
+          type: boolean
     TemplateApply:
       description:
         One apply as recorded on this machine (HS2-A4RVYA). `state` is `waiting_permission`, `waiting_planner`,
@@ -27276,6 +27294,15 @@ components:
             type: string
         reason:
           type: string
+        accepted_steps:
+          description: HS2-36XDDX. The goal's plan steps a person accepted.
+          type: array
+          items:
+            type: string
+        accepted_at_ms:
+          type: integer
+        accepted_by:
+          type: string
         outcome:
           enum:
             - applied
@@ -27284,6 +27311,20 @@ components:
           type: integer
         updated_at_ms:
           type: integer
+    TemplateAccept:
+      description:
+        A person's accept of the plan proposed for an apply's goal (HS2-36XDDX). The apply as recorded now, the steps
+        this accept released, and `outcome` `accepted` or `existing`.
+      allOf:
+        - $ref: '#/components/schemas/TemplateApply'
+        - type: object
+          required:
+            - released
+          properties:
+            released:
+              type: array
+              items:
+                type: string
     TriggerOperation:
       description:
         Body of a trigger operation (HS2-KXKA7X). `show`, `on`, `dry_run`, `pause`, `resume` and `remove` take
@@ -28074,6 +28115,7 @@ components:
             - waits_for_prerequisite
             - waits_for_permission
             - waits_for_decision
+            - waits_for_accept
             - done
         level:
           type: string
@@ -28093,6 +28135,19 @@ components:
           type: object
           properties:
             note_id:
+              type: string
+        accept:
+          description:
+            HS2-36XDDX. With `waits_for_accept`, the template apply whose proposed plan a person accepts
+            (`templates/accept`).
+          type: object
+          required:
+            - operation_id
+            - template_name
+          properties:
+            operation_id:
+              type: string
+            template_name:
               type: string
         placement:
           $ref: '#/components/schemas/OrchestrationPlacementHint'

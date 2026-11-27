@@ -37,6 +37,8 @@ export interface OrchestrationTimelineBindings {
   /** HS2-A7YCB2: Link Again on the selected run's unknown CI gate. */
   readonly linkGate: (gateId: string) => void;
   readonly openGoal: () => void;
+  /** HS2-36XDDX: Accept Plan on a card its template holds, with the apply's operation id. */
+  readonly acceptPlan: (operationId: string) => void;
   /** HS2-9XJEZC: Run Validation on the selected card. */
   readonly runValidation: () => void;
   /** HS2-0D60T8: Reopen… with the chosen reason code. */
@@ -443,6 +445,12 @@ export function wireOrchestrationTimeline(root: HTMLElement, bindings: Orchestra
   lifetime.add(
     delegate(root, 'click', ORCHESTRATION_ACTIONS.openOrchestrationGoal.selector, () => {
       bindings.openGoal();
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'click', ORCHESTRATION_ACTIONS.acceptOrchestrationTemplatePlan.selector, (_event, target) => {
+      const operationId = (target as HTMLElement).dataset.operationId;
+      if (operationId) bindings.acceptPlan(operationId);
     }),
   );
   lifetime.add(

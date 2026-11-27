@@ -49,6 +49,13 @@ const MAX_APPLY_BYTES: usize = 4 * 1024 * 1024;
 pub const MAX_APPLY_OPERATION_ID: usize = 140;
 /// The tag every goal a template opened carries.
 pub const TEMPLATE_GOAL_TAG: &str = "orchestration-template";
+/// HS2-36XDDX: the templates file's version while a template turns Wait for Accept off.
+/// Version 1 never carries the field, so an older binary keeps reading a file whose
+/// templates all wait (the default) and answers `upgrade_required` for one that does
+/// not, before it could misread or overwrite it.
+pub const TEMPLATES_ACCEPT_VERSION: u32 = 2;
+/// HS2-36XDDX: why the scheduler leaves a step of a template's goal unplaced.
+pub const TEMPLATE_PLAN_NOT_ACCEPTED: &str = "template_plan_not_accepted";
 
 /// Why a template request was refused.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -72,10 +79,12 @@ pub enum TemplateError {
     ApplyNotFound,
     /// The goal to save is not an open goal ticket, or it has no plan steps.
     GoalEmpty,
+    /// HS2-36XDDX: the apply's goal has no plan step to accept yet.
+    NothingToAccept,
 }
 
 impl TemplateError {
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 10] = [
         Self::NotFound,
         Self::Retired,
         Self::Invalid,
@@ -85,6 +94,7 @@ impl TemplateError {
         Self::ApplyConflict,
         Self::ApplyNotFound,
         Self::GoalEmpty,
+        Self::NothingToAccept,
     ];
 
     pub fn code(self) -> &'static str {
@@ -98,6 +108,7 @@ impl TemplateError {
             Self::ApplyConflict => "template_apply_conflict",
             Self::ApplyNotFound => "template_apply_not_found",
             Self::GoalEmpty => "template_goal_empty",
+            Self::NothingToAccept => "template_accept_nothing_planned",
         }
     }
 }
@@ -243,12 +254,28 @@ pub struct Template {
     /// Free guidance the planner reads with the steps; may hold placeholders.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub instructions: Option<String>,
+    /// HS2-36XDDX: while placement is on, the steps the planner defines for a goal this
+    /// template opened wait until a person accepts the proposed plan. On by default
+    /// (the maintainer's decision), so a template written before the setting existed
+    /// waits; written only when off.
+    #[serde(default = "accept_by_default", skip_serializing_if = "is_on")]
+    pub wait_for_accept: bool,
     #[serde(default)]
     pub created_at_ms: u64,
     #[serde(default)]
     pub updated_at_ms: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub updated_by: Option<String>,
+}
+
+#[allow(clippy::unnecessary_wraps)] // serde's default needs a function.
+const fn accept_by_default() -> bool {
+    true
+}
+
+#[allow(clippy::trivially_copy_pass_by_ref)] // serde's skip_serializing_if passes a reference.
+const fn is_on(value: &bool) -> bool {
+    *value
 }
 
 impl Template {
@@ -857,6 +884,10 @@ pub fn render_brief(
     text.push_str(&format!(
         "\n### Rules\n\n- A step marked \"find or create\" searches its project's open tickets (`ticket list`) first. When one matches, reuse it (`ticket link`), name it in the `## Proposed plan` note as found by search, and ask once, in one `FEEDBACK NEEDED` note on this goal with a `CHOICE` per reused step, whether to keep reusing it or create a new ticket for that step; plan the rest meanwhile.\n- A step marked \"create a new ticket\" creates one without reusing a match.\n- Create a step's ticket under the operation id `tpl-{operation_id}-<step key>`, so proposing again never creates a second ticket.\n- Define one plan step per target ticket for this goal, with the `after` steps as prerequisites (their gates as written) and the preferred tool.\n- Attach each named validation profile to this goal as a validation step for that step's project.\n"
     ));
+    // HS2-36XDDX: the planner says in its proposal that the plan waits for a person.
+    if template.wait_for_accept {
+        text.push_str("- This template waits for an accept: the steps you define for this goal start only after a person accepts the proposed plan in the Orchestration view, so finish as usual with the `## Proposed plan` note and do not ask anyone to start them.\n");
+    }
     Brief {
         goal_title,
         goal_details: text,
@@ -904,6 +935,29 @@ pub fn merge_templates(
     }
 }
 
+/// HS2-36XDDX: version 1 while every template waits for an accept (the default);
+/// [`TEMPLATES_ACCEPT_VERSION`] once one does not.
+pub fn templates_version(templates: &[Template]) -> u32 {
+    if templates.iter().any(|template| !template.wait_for_accept) {
+        TEMPLATES_ACCEPT_VERSION
+    } else {
+        ORCHESTRATION_VERSION
+    }
+}
+
+/// The version is read before the strict field set, as every orchestration file does.
+fn decode_templates(bytes: &[u8]) -> Result<TemplatesFile, OrchestrationError> {
+    let value: Value = serde_json::from_slice(bytes).map_err(|_| OrchestrationError::Corrupt)?;
+    let found = value
+        .get("schema_version")
+        .and_then(Value::as_u64)
+        .ok_or(OrchestrationError::Corrupt)?;
+    if found != u64::from(ORCHESTRATION_VERSION) && found != u64::from(TEMPLATES_ACCEPT_VERSION) {
+        return Err(OrchestrationError::UnsupportedVersion { found });
+    }
+    serde_json::from_value(value).map_err(|_| OrchestrationError::Corrupt)
+}
+
 /// The checked-in templates of one orchestration project's checkout.
 #[derive(Clone)]
 pub struct TemplateStore {
@@ -924,8 +978,12 @@ impl TemplateStore {
         let Some(bytes) = self.storage.read(MAX_TEMPLATES_BYTES)? else {
             return Ok(None);
         };
-        let document: TemplatesFile = decode(&bytes)?;
+        let document = decode_templates(&bytes)?;
         valid_token(&document.revision).map_err(|_| OrchestrationError::Corrupt)?;
+        // Version 1 never turns Wait for Accept off, so an older reader never ignores it.
+        if document.schema_version != templates_version(&document.templates) {
+            return Err(OrchestrationError::Corrupt);
+        }
         if document.templates.len() > MAX_TEMPLATES
             || document
                 .templates
@@ -975,7 +1033,7 @@ impl TemplateStore {
             return Err(OrchestrationError::Conflict);
         }
         let document = TemplatesFile {
-            schema_version: ORCHESTRATION_VERSION,
+            schema_version: templates_version(&templates),
             revision: fresh_token(tx, previous.map(|document| document.revision.as_str()))?,
             templates,
         };
@@ -1071,8 +1129,86 @@ pub struct TemplateApply {
     /// Why it waits or was denied, as a refusal code.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
+    /// HS2-36XDDX: the plan steps of the goal a person accepted, by step id. While
+    /// the snapshot waits for an accept, a step of the goal not listed here is held.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub accepted_steps: Vec<String>,
+    /// HS2-36XDDX: the latest accept: when, and the person's actor id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accepted_at_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accepted_by: Option<String>,
     pub created_at_ms: u64,
     pub updated_at_ms: u64,
+}
+
+impl TemplateApply {
+    /// HS2-36XDDX: the goal's new plan steps wait for a person's accept: the template
+    /// as applied waits, and the goal was opened (a denied apply opened none).
+    pub fn waits_for_accept(&self) -> bool {
+        self.snapshot.wait_for_accept
+            && self.state != ApplyState::Denied
+            && self.goal.as_ref().is_some_and(|goal| goal.created)
+    }
+
+    /// HS2-36XDDX: whether the plan step `step_id` of `goal` is held for an accept:
+    /// it belongs to this apply's goal, which waits, and was not accepted.
+    pub fn holds(&self, step_id: &str, goal: (&str, &str)) -> bool {
+        self.waits_for_accept()
+            && self
+                .goal
+                .as_ref()
+                .is_some_and(|own| (own.connection_id.as_str(), own.native_id.as_str()) == goal)
+            && !self
+                .accepted_steps
+                .iter()
+                .any(|accepted| accepted == step_id)
+    }
+
+    /// HS2-36XDDX: record a person's accept of `steps` (the goal's plan steps as they
+    /// were shown), added to those accepted before. Answers whether anything was new;
+    /// a repeat with nothing new changes nothing, not even the time.
+    pub fn accept(&mut self, steps: &[String], by: Option<&str>, now_ms: u64) -> bool {
+        let mut changed = false;
+        for step in steps {
+            if !self.accepted_steps.contains(step) {
+                self.accepted_steps.push(step.clone());
+                changed = true;
+            }
+        }
+        if changed {
+            self.accepted_steps.sort();
+            self.accepted_at_ms = Some(now_ms);
+            self.accepted_by = by.map(Into::into);
+            self.updated_at_ms = now_ms;
+        }
+        changed
+    }
+}
+
+/// HS2-36XDDX: the plan steps held for an accept, by step id, with the apply that
+/// holds each. `steps` are the live plan's `(step_id, goal connection, goal native id)`.
+/// Pure.
+pub fn held_template_steps<'a, 's>(
+    applies: &'a [TemplateApply],
+    steps: impl IntoIterator<Item = (&'s str, &'s str, &'s str)>,
+) -> BTreeMap<String, &'a TemplateApply> {
+    let waiting: Vec<&TemplateApply> = applies
+        .iter()
+        .filter(|apply| apply.waits_for_accept())
+        .collect();
+    if waiting.is_empty() {
+        return BTreeMap::new();
+    }
+    steps
+        .into_iter()
+        .filter_map(|(step_id, connection_id, native_id)| {
+            waiting
+                .iter()
+                .find(|apply| apply.holds(step_id, (connection_id, native_id)))
+                .map(|apply| (step_id.to_owned(), *apply))
+        })
+        .collect()
 }
 
 /// What a request to apply does.
@@ -1178,9 +1314,20 @@ impl TemplateApplyStore {
             None => file.applies.push(apply.clone()),
         }
         while file.applies.len() > MAX_TEMPLATE_APPLIES {
-            let Some(oldest) = file.applies.iter().position(|known| {
+            let forgettable = |known: &TemplateApply| {
                 known.state.is_final() && known.operation_id != apply.operation_id
-            }) else {
+            };
+            // HS2-36XDDX: forgetting a record releases any hold it keeps, so a finished
+            // apply that never had an accept and still waits for one goes last.
+            let Some(oldest) = file
+                .applies
+                .iter()
+                .position(|known| {
+                    forgettable(known)
+                        && !(known.waits_for_accept() && known.accepted_at_ms.is_none())
+                })
+                .or_else(|| file.applies.iter().position(forgettable))
+            else {
                 return Err(OrchestrationError::Capacity);
             };
             file.applies.remove(oldest);

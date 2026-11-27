@@ -224,17 +224,19 @@ pub use templates::{
     ApplyDecision, ApplyGoal, ApplyState, Brief, BriefStep, InputKind, MAX_APPLY_OPERATION_ID,
     MAX_INPUT_TEXT, MAX_TEMPLATE_APPLIES, MAX_TEMPLATE_INPUTS, MAX_TEMPLATE_LINE,
     MAX_TEMPLATE_STEPS, MAX_TEMPLATE_TEXT, MAX_TEMPLATES, MAX_TEMPLATES_BYTES, PRIORITIES,
-    STEP_GATES, StepAfter, StepTicket, TEMPLATE_APPLY_DIR, TEMPLATE_GOAL_TAG, TEMPLATES_PATH,
-    Template, TemplateApply, TemplateApplyStore, TemplateError, TemplateGoal, TemplateInput,
-    TemplateProblem, TemplateState, TemplateStep, TemplateStore, TemplatesFile, decide_apply,
-    input_value, merge_templates, placeholders, reference, render_brief, resolve_inputs,
-    substitute, validate_template,
+    STEP_GATES, StepAfter, StepTicket, TEMPLATE_APPLY_DIR, TEMPLATE_GOAL_TAG,
+    TEMPLATE_PLAN_NOT_ACCEPTED, TEMPLATES_ACCEPT_VERSION, TEMPLATES_PATH, Template, TemplateApply,
+    TemplateApplyStore, TemplateError, TemplateGoal, TemplateInput, TemplateProblem, TemplateState,
+    TemplateStep, TemplateStore, TemplatesFile, decide_apply, held_template_steps, input_value,
+    merge_templates, placeholders, reference, render_brief, resolve_inputs, substitute,
+    templates_version, validate_template,
 };
 pub use timeline::{
-    DEFAULT_WAVE_MINUTES, DecisionWait, EstimateBasis, ItemState, KickOff, PermissionWait,
-    PlacementHint, RunGateVerdicts, TargetLocation, TicketLabel, Timeline, TimelineInput,
-    TimelineItem, TimelinePhase, TimelinePolicy, TimelineProvisional, TimelineProvisionalGate,
-    TimelineRun, TimelineStep, TimelineTarget, WaitsOn, Wave, WaveKind, timeline,
+    AcceptWait, DEFAULT_WAVE_MINUTES, DecisionWait, EstimateBasis, ItemState, KickOff,
+    PermissionWait, PlacementHint, RunGateVerdicts, TargetLocation, TicketLabel, Timeline,
+    TimelineInput, TimelineItem, TimelinePhase, TimelinePolicy, TimelineProvisional,
+    TimelineProvisionalGate, TimelineRun, TimelineStep, TimelineTarget, WaitsOn, Wave, WaveKind,
+    timeline,
 };
 pub use tool_capacity::{
     ActiveLimit, Applied, BACKOFF_BASE_MS, BACKOFF_CAP_MS, BACKOFF_FACTOR, Candidate,

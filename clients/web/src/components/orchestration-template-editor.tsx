@@ -128,6 +128,12 @@ function TemplatePart({ context }: { context: Context }) {
         hint="Guidance the planner reads with the steps. Use {{key}} to insert an input."
         error={fieldError(context.placed, 'instructions')}
       />
+      <Checkbox
+        {...field(context, 'wait_for_accept')}
+        label="Wait for Accept"
+        checked={draft.waitForAccept}
+        hint="While sessions start automatically, the planned steps wait until someone accepts the plan. Off, they start as soon as they are planned."
+      />
     </List>
   );
 }

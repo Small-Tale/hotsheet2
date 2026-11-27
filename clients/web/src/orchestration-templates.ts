@@ -47,6 +47,8 @@ export interface PlanTemplate {
   inputs: TemplateInput[];
   goal_title: string;
   steps: TemplateStep[];
+  /** HS2-36XDDX: with placement on, the planned steps wait for a person to accept the proposed plan. */
+  wait_for_accept: boolean;
 }
 
 export interface TemplateProblem {
@@ -88,6 +90,8 @@ export interface TemplatePreview {
   targets: PreviewTarget[];
   planning: 'propose' | 'update';
   placement_automatic: boolean;
+  /** HS2-36XDDX: the template's Wait for Accept. */
+  wait_for_accept: boolean;
 }
 
 export interface ApplyGoal {
@@ -162,6 +166,8 @@ export function parsePlanTemplate(value: unknown): PlanTemplate | undefined {
       ];
     }),
     goal_title: text(record(raw.goal).title) ?? name,
+    // HS2-36XDDX: absent is on (the default).
+    wait_for_accept: raw.wait_for_accept !== false,
     steps: records(raw.steps).flatMap((step) => {
       const key = text(step.key),
         target = text(step.target),
@@ -282,6 +288,7 @@ export function parseTemplatePreview(value: unknown): TemplatePreview {
     }),
     planning: raw.planning === 'update' ? 'update' : 'propose',
     placement_automatic: raw.placement_automatic === true,
+    wait_for_accept: raw.wait_for_accept !== false,
   };
 }
 
@@ -477,11 +484,29 @@ export function planningRows(preview: TemplatePreview): Array<{ label: string; v
     },
     {
       label: 'Start Work',
-      value: preview.placement_automatic
-        ? 'Within the Orchestration settings once it is planned'
-        : 'After you review the plan and start orchestration',
+      value: startWorkText(preview),
     },
   ];
+}
+
+/**
+ * HS2-36XDDX: when the planned work starts. Manual placement waits for Start Orchestration; under Auto a
+ * template that waits for an accept starts once someone accepts its plan, and one that does not starts as
+ * soon as it is planned.
+ */
+export function startWorkText(preview: Pick<TemplatePreview, 'placement_automatic' | 'wait_for_accept'>): string {
+  if (!preview.placement_automatic) return 'After you review the plan and start orchestration';
+  return preview.wait_for_accept
+    ? 'After someone accepts the planned steps, within the Orchestration settings'
+    : 'Within the Orchestration settings once it is planned, without waiting for an accept';
+}
+
+/** HS2-36XDDX: the toast after Accept Plan: how many held steps were released, or that none waited. */
+export function acceptedText(answer: unknown): string {
+  const raw = record(answer),
+    released = texts(raw.released).length;
+  if (raw.outcome === 'existing' || released === 0) return 'The plan was already accepted.';
+  return `Plan accepted: ${released} ${released === 1 ? 'step starts' : 'steps start'} within the Orchestration settings.`;
 }
 
 /** The apply's outcome as a banner: what happened and what comes next. */

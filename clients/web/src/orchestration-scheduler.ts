@@ -74,6 +74,8 @@ const REASONS: Readonly<Record<string, string>> = {
   requirement_unknown: 'its project’s machine has not said whether it meets a requirement of the step',
   // HS2-ADASY5: the sessions started for its run ended before they took up the work, until the replacements ran out.
   never_joined: 'the sessions started for it ended before they took up the work, so none starts for a while',
+  // HS2-36XDDX: its template waits for a person to accept the planner's proposed plan.
+  template_plan_not_accepted: 'it waits for someone to accept the template’s plan',
   permission_required: 'it waits for a person’s permission',
   actor_required: 'the scheduler has not looked at it yet',
   // HS2-2Y535C: the explain answer's own codes for a step the pass did not rank.

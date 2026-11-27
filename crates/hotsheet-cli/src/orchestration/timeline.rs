@@ -373,7 +373,20 @@ impl OrchestrationRuntime {
         let home_outages = hotsheet_ticketing::orchestration::HomeOutageStore::new(&self.home)
             .outages(owner_id)
             .unwrap_or_default();
+        // HS2-R2N33M: unset placement is Auto, on once the plan has a step.
+        let automatic = orchestrating
+            && body.is_some_and(|body| body.placement.automatic_with(!steps.is_empty()));
+        // HS2-36XDDX: while placement is on, a template's steps wait for a person's
+        // accept; a Manual plan waits for Start Orchestration, which accepts them. An
+        // unreadable apply record shows no hold rather than failing the view (the
+        // scheduler still holds the work).
+        let accepts = if automatic {
+            self.template_holds(owner_id).unwrap_or_default()
+        } else {
+            BTreeMap::new()
+        };
         let input = TimelineInput {
+            accepts: &accepts,
             home_outages: &home_outages,
             run_gates: &run_gates,
             sites: &sites,
@@ -395,9 +408,7 @@ impl OrchestrationRuntime {
                 revision: policy.revision.clone(),
                 // HS2-J3ZF27: a Software project's kept automatic policy places
                 // nothing, so it does not read as running.
-                // HS2-R2N33M: unset placement is Auto, on once the plan has a step.
-                automatic: orchestrating
-                    && body.is_some_and(|body| body.placement.automatic_with(!steps.is_empty())),
+                automatic,
                 auto: body.is_some_and(|body| body.placement.automatic.is_none()),
                 software: !orchestrating,
                 // HS2-38R8J2: a plan never started reads Not Started, not Paused.

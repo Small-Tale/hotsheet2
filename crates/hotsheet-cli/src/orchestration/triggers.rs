@@ -1377,7 +1377,9 @@ impl OrchestrationRuntime {
         }
         if let Some(placement) = trigger.action.placement {
             entry.placement = Some(placement);
-            if let Err(error) = self.set_automatic(
+            // HS2-36XDDX: a trigger's Start is nobody's review of the plan, so the
+            // steps a template holds stay held until a person accepts them.
+            if let Err(error) = self.set_automatic_unreviewed(
                 &owner.id,
                 SetAutomatic {
                     automatic: placement.automatic(),

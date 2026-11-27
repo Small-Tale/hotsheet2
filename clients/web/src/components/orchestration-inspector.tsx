@@ -11,6 +11,7 @@ import {
   Ban,
   CircleCheck,
   CircleX,
+  ClipboardCheck,
   ExternalLink,
   Hand,
   Link,
@@ -49,6 +50,7 @@ import {
   runStateText,
   sessionText,
   stateBadge,
+  TEMPLATE_ACCEPT_WAIT,
   toolText,
 } from '../orchestration-timeline-board';
 import type { PendingValidation, ValidationStepView } from '../orchestration-validation-steps';
@@ -319,8 +321,40 @@ function stateDetail(
   timeline: OrchestrationTimeline,
   clock: ClockFormat,
   details?: OrchestrationInspectorDetails,
+  busy = false,
 ) {
   switch (item.state) {
+    // HS2-36XDDX: the template's plan waits for a person's accept before placement starts it.
+    case 'waits_for_accept':
+      return (
+        <OrchestrationInspectorSection label="Waits for Accept">
+          <Note
+            text={`${TEMPLATE_ACCEPT_WAIT}${item.accept ? ` (${item.accept.template_name})` : ''}. Review the steps planned for ${
+              item.goal_slug ?? 'its goal'
+            }, then accept them; placement starts them within the Orchestration settings. Steps the planner adds later wait for the next accept.`}
+          />
+          <Row gap="xs" wrap controlInsets="rl">
+            <Button
+              size="compact"
+              tone="brand"
+              emphasis="primary"
+              action={ORCHESTRATION_ACTIONS.acceptOrchestrationTemplatePlan.value}
+              disabled={busy || !item.accept}
+              icon={<LucideIcon size="s" icon={ClipboardCheck} name="clipboard-check" />}
+              rootAttributes={{ 'data-operation-id': item.accept?.operation_id ?? '' }}
+            >
+              Accept Plan
+            </Button>
+            <Button
+              size="compact"
+              action={ORCHESTRATION_ACTIONS.openOrchestrationGoal.value}
+              icon={<LucideIcon size="s" icon={ExternalLink} name="external-link" />}
+            >
+              {`Open ${item.goal_slug ?? 'Goal'}`}
+            </Button>
+          </Row>
+        </OrchestrationInspectorSection>
+      );
     case 'waits_for_permission': {
       const permission = item.permission;
       return (
@@ -522,7 +556,7 @@ export function OrchestrationInspector({
         </Row>
       </List>
       <WhereItRuns item={item} timeline={timeline} clock={clock} explanation={details?.explanation} />
-      {stateDetail(item, timeline, clock, details)}
+      {stateDetail(item, timeline, clock, details, busy)}
       <OrchestrationPlanSection item={item} timeline={timeline} />
       {item.state === 'provisional' || details?.builtAhead ? (
         <OrchestrationBuiltAheadSection work={details?.builtAhead} timeline={timeline} busy={busy} />
