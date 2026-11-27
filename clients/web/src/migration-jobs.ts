@@ -6,17 +6,16 @@ import { resolve } from 'node:path';
 import { isRecord, parseJson } from './json-value';
 import { acquireMigrationLock, type MigrationLock } from './migration-lock';
 import type { MigrationJob, MigrationProgress, MigrationResult } from './migration-progress';
+import { SharedDirectoryWatch, type WatchDirectory } from './shared-directory-watch';
 
 export type MigrationOwner = Pick<MigrationJob, 'projectId' | 'root' | 'sourceIdentity' | 'store' | 'kind' | 'remote'>;
-/** The subset of a native directory watcher the registry relies on. */
-export interface DirectoryWatcher {
-  close(): void;
-  on(event: 'error', listener: (error: Error) => void): unknown;
-}
-/** Starts a native watcher; it may throw (or later emit `error`) when the OS refuses one. */
-export type WatchDirectory = (directory: string, changed: (filename: string | null) => void) => DirectoryWatcher;
+export type { DirectoryWatcher, WatchDirectory } from './shared-directory-watch';
+/**
+ * Non-persistent: a shared watcher lingering between long polls (HS2-R1KHPN) must never
+ * keep a CLI or test process alive; an open long poll keeps its own idle timer.
+ */
 export const nativeWatchDirectory: WatchDirectory = (directory, changed) =>
-  watchFiles(directory, (_event, filename) => {
+  watchFiles(directory, { persistent: false }, (_event, filename) => {
     changed(filename);
   });
 /**
@@ -38,6 +37,8 @@ export class MigrationJobs {
   private active = new Set<string>();
   private loaded = false;
   private loading?: Promise<void>;
+  /** One native watcher for every foreign long poll on this registry (HS2-R1KHPN). */
+  private sharedWatch?: SharedDirectoryWatch;
   constructor(
     private directory: string,
     private runner: MigrationJobRunner,
@@ -303,18 +304,17 @@ export class MigrationJobs {
     for (const listener of this.listeners.get(job.id) ?? []) listener();
   }
   /**
-   * Observe a foreign owner's checkpoint. A native directory watcher can fail to
-   * start under OS resource pressure (macOS FSEvents reports EMFILE, Linux inotify
-   * ENOSPC), synchronously or later through `error`. That must not fail the long
-   * poll, so the subscription degrades to re-reading the checkpoint revision until
-   * the poll ends. Comparing revisions (not file stats) leaves no gap to miss a
-   * change made while switching.
+   * Observe a foreign owner's checkpoint through the registry's shared directory
+   * watcher (HS2-R1KHPN), which also asks for catch-up reads until its stream is
+   * proven live. A native directory watcher can fail to start under OS resource
+   * pressure (macOS FSEvents reports EMFILE, Linux inotify ENOSPC), synchronously or
+   * later through `error`. That must not fail the long poll, so the subscription
+   * degrades to re-reading the checkpoint revision until the poll ends. Comparing
+   * revisions (not file stats) leaves no gap to miss a change made while switching.
    */
   private watchCheckpoint(id: string, changed: () => void, recheck: () => Promise<void>): () => void {
-    const name = `${id}.json`;
     let closed = false,
       reading = false,
-      native: DirectoryWatcher | undefined,
       fallback: ReturnType<typeof setInterval> | undefined;
     const reread = () => {
       if (reading || closed) return;
@@ -323,31 +323,35 @@ export class MigrationJobs {
         reading = false;
       });
     };
-    const degrade = (synchronous: boolean) => {
-      native?.close();
-      native = undefined;
-      if (closed || fallback) return;
-      fallback = setInterval(reread, CHECKPOINT_REREAD_INTERVAL_MS);
-      // The caller re-reads once after subscribing; a later failure must re-read
-      // immediately because events may have been lost before the error surfaced.
-      if (!synchronous) reread();
-    };
-    try {
-      native = this.watchDirectory(this.directory, (filename) => {
-        if (filename === name) changed();
-      });
-      native.on('error', () => {
-        degrade(false);
-      });
-    } catch {
-      degrade(true);
-    }
+    this.sharedWatch ??= new SharedDirectoryWatch({
+      directory: this.directory,
+      watchDirectory: this.watchDirectory,
+      writeProbe: (name) => writeFile(resolve(this.directory, name), ''),
+      removeProbe: (name) => rm(resolve(this.directory, name), { force: true }),
+    });
+    const unsubscribe = this.sharedWatch.subscribe(`${id}.json`, {
+      changed,
+      recheck: reread,
+      failed: () => {
+        if (closed || fallback) return;
+        fallback = setInterval(reread, CHECKPOINT_REREAD_INTERVAL_MS);
+        // Events may have been lost before the failure surfaced.
+        reread();
+      },
+    });
     return () => {
       closed = true;
-      native?.close();
-      native = undefined;
+      unsubscribe();
       clearInterval(fallback);
     };
+  }
+  /** Whether the shared foreign watcher has proven its stream live (diagnostics and tests). */
+  get foreignWatchLive(): boolean {
+    return this.sharedWatch?.live ?? false;
+  }
+  /** Close the shared directory watcher (shutdown and tests); a later poll reopens it. */
+  close(): void {
+    this.sharedWatch?.close();
   }
   /** Flush checkpoints before a graceful shutdown or a persistence assertion. */
   async flush(): Promise<void> {
