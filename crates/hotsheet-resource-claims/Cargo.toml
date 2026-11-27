@@ -26,5 +26,9 @@ hotsheet-ticketing.workspace = true
 [target.'cfg(unix)'.dependencies]
 libc.workspace = true
 
+# HS2-CYDK9Z: a plugin runs in the shared Windows job object that holds its process tree.
+[target.'cfg(windows)'.dependencies]
+hotsheet-process-journal.workspace = true
+
 [dev-dependencies]
 tempfile.workspace = true

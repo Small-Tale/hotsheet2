@@ -664,7 +664,9 @@ the renewal token, the metadata key, and the approval of the plugin's own code.
 
 **One process per operation.** Hot Sheet runs the command, writes one JSON envelope to stdin
 and reads the last stdout line that is a JSON result; earlier lines are ignored, so logging is
-safe. A plugin that outlives its timeout is killed. Exiting without a result line, or
+safe. A plugin that outlives its timeout is killed together with every process it started
+(HS2-CYDK9Z): it runs in its own process group on Unix and in a kill-on-close job object on
+Windows, and the whole tree is stopped. Exiting without a result line, or
 reporting `ok` and then exiting non-zero, is `backend_unreachable` with the stderr tail.
 
 ```json
@@ -713,7 +715,8 @@ expiry cannot precede acquisition, and metadata keeps its codec prefixes and bou
   A wait another thread cancels (HS2-P234BH, §36.6) stops the `wait` process exactly as a timeout
   does (killed and reaped, its output never read) and fails `interrupted`; nothing runs for that wait
   afterwards. The protocol has no abort message and none is added: a plugin must already survive
-  being stopped, and a `wait` only reads. A process the plugin started itself is not stopped with it.
+  being stopped, and a `wait` only reads. A process the plugin started itself is stopped with it
+  (HS2-CYDK9Z), so nothing it left behind keeps running or holds its output open.
 - **Credentials only on stdin.** A `secret` setting is stored in the OS credential store under
   `resource-claims.<configuration>.<key>` (`hotsheet-cli resource backend secret <id> <key>`,
   value on standard input) and appears in the envelope's `settings` and nowhere else: not in

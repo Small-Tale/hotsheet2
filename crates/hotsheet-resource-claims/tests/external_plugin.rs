@@ -90,6 +90,20 @@ fn fake_plugin_main() {
             return;
         }
         "hang" => std::thread::sleep(Duration::from_secs(120)),
+        // HS2-CYDK9Z: start a child of its own that shares the output pipes, record its
+        // pid, then wait for it; a stop must end the child too.
+        "forks" => {
+            let mut child = std::process::Command::new("sleep")
+                .arg("120")
+                .stdin(std::process::Stdio::null())
+                .spawn()
+                .unwrap();
+            let pid_file = state_dir.join("grandchild.pid");
+            std::fs::write(pid_file.with_extension("tmp"), child.id().to_string()).unwrap();
+            std::fs::rename(pid_file.with_extension("tmp"), pid_file).unwrap();
+            // Hangs as long as its child sleeps.
+            let _ = child.wait();
+        }
         "ok_but_failed_exit" => {
             println!("\n{}", json!({ "ok": true, "result": {} }));
             std::process::exit(2);
@@ -361,10 +375,13 @@ impl Plugin {
         std::fs::write(self.state_dir.join("mode"), mode).unwrap();
     }
 
+    /// The runs logged so far. HS2-CYDK9Z: only whole lines count; a plugin can still be
+    /// appending the last one while a test waits for it (seen on Linux).
     fn runs(&self) -> Vec<Value> {
         std::fs::read_to_string(self.state_dir.join("runs.log"))
             .unwrap_or_default()
-            .lines()
+            .split_inclusive('\n')
+            .filter(|line| line.ends_with('\n'))
             .map(|line| serde_json::from_str(line).unwrap())
             .collect()
     }
@@ -623,6 +640,119 @@ fn hs2_p234bh_a_cancel_stops_the_plugin_wait_process_and_nothing_runs_after() {
         WaitOutcome::Free
     );
     assert_eq!(plugin.ops().iter().filter(|op| *op == "wait").count(), 2);
+}
+
+// ---- HS2-CYDK9Z: a stop ends the plugin's own children ----------------------------------
+
+impl Plugin {
+    /// Block until the plugin has started its own child; that child's pid.
+    fn grandchild(&self) -> u32 {
+        let path = self.state_dir.join("grandchild.pid");
+        let started = Instant::now();
+        loop {
+            if let Ok(text) = std::fs::read_to_string(&path) {
+                return text.trim().parse().unwrap();
+            }
+            assert!(
+                started.elapsed() < Duration::from_secs(20),
+                "the plugin started no child"
+            );
+            std::thread::yield_now();
+        }
+    }
+
+    /// Forget the last recorded child, for the next run.
+    fn forget_grandchild(&self) {
+        let _ = std::fs::remove_file(self.state_dir.join("grandchild.pid"));
+    }
+}
+
+/// Wait until `pid` is gone. A killed child whose parent was killed too is adopted and
+/// reaped by the system, so it can stay visible for a moment; this is a local check of a
+/// process table entry, not a request.
+fn until_gone(pid: u32) -> bool {
+    let started = Instant::now();
+    while started.elapsed() < PROMPT {
+        if !process_alive(pid) {
+            return true;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    false
+}
+
+/// Stop the process if a failed assertion left it running.
+struct KillOnDrop(u32);
+
+impl Drop for KillOnDrop {
+    fn drop(&mut self) {
+        let _ = std::process::Command::new("kill")
+            .args(["-9", &self.0.to_string()])
+            .stderr(std::process::Stdio::null())
+            .status();
+    }
+}
+
+#[test]
+fn hs2_cydk9z_a_timeout_stops_the_plugins_own_children_too() {
+    let plugin = install("fake", "none", 1);
+    let backend = plugin.approved_backend("fake");
+    plugin.mode("forks");
+    // Repeated: each run starts a fresh child and each timeout ends it.
+    for _ in 0..2 {
+        plugin.forget_grandchild();
+        let started = Instant::now();
+        let error = backend.get(&target("vms/one")).unwrap_err();
+        assert_eq!(error.code(), "backend_unreachable");
+        assert!(
+            error.to_string().contains("did not finish within 1s"),
+            "{error}"
+        );
+        assert!(started.elapsed() < Duration::from_secs(30), "{error}");
+        let grandchild = plugin.grandchild();
+        let _guard = KillOnDrop(grandchild);
+        assert!(
+            until_gone(grandchild),
+            "the plugin's child {grandchild} outlived the timeout"
+        );
+    }
+    // A plugin that behaves again still works through the same backend.
+    plugin.mode("");
+    assert!(backend.get(&target("vms/one")).unwrap().is_none());
+}
+
+#[test]
+fn hs2_cydk9z_a_cancel_stops_the_plugins_own_children_too() {
+    let plugin = install("fake", "blocking", 60);
+    let backend = plugin.approved_backend("fake");
+    let held = backend.acquire(&target("vms/one"), &lease(60)).unwrap();
+    plugin.mode("forks");
+    for round in 1..=2 {
+        plugin.forget_grandchild();
+        let cancel = WaitCancel::new();
+        let parked = spawn_plugin_wait(&backend, &cancel);
+        let pid = plugin.until_running("wait", round);
+        let grandchild = plugin.grandchild();
+        let _guards = (KillOnDrop(pid), KillOnDrop(grandchild));
+        assert!(
+            process_alive(grandchild),
+            "the child runs before the cancel"
+        );
+
+        let began = Instant::now();
+        cancel.cancel();
+        let error = parked.recv_timeout(PROMPT).unwrap().unwrap_err();
+        assert!(began.elapsed() < PROMPT, "{:?}", began.elapsed());
+        assert_eq!(error.code(), "interrupted");
+        assert!(!process_alive(pid), "the wait process {pid} was stopped");
+        assert!(
+            until_gone(grandchild),
+            "the plugin's child {grandchild} outlived the cancel"
+        );
+    }
+    plugin.mode("");
+    backend.release(held.renewal_token.expose()).unwrap();
+    assert!(backend.get(&target("vms/one")).unwrap().is_none());
 }
 
 // ---- approval -----------------------------------------------------------------------

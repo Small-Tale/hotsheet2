@@ -1292,6 +1292,7 @@ name = "hotsheet-resource-claims"
 version = "0.0.0"
 dependencies = [
  "base64 0.22.1",
+ "hotsheet-process-journal",
  "hotsheet-sync",
  "hotsheet-ticketing",
  "libc",
