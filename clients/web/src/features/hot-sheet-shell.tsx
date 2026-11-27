@@ -54,6 +54,8 @@ import { ServerBuildNoticeBanner } from '../components/server-build-notice-banne
 import { type SettingsCategory, settingsCategoryTitle } from '../components/settings-navigation';
 import type { SidebarPanelParts } from '../components/sidebar-panel';
 import { SourceStaleNoticeBanner } from '../components/source-stale-notice-banner';
+import { systemsInspectorPanel } from '../components/systems-inspector';
+import { systemsSidebarPanel } from '../components/systems-sidebar';
 import { TerminalDashboardControls, type TerminalDashboardGroup } from '../components/terminal-dashboard';
 import type { TerminalDrawerProps } from '../components/terminal-drawer';
 import { TicketGroupOperationBanner } from '../components/ticket-group-operation-banner';
@@ -126,6 +128,7 @@ import {
 import { hs1CleanupPromptDismissed } from '../workspace-session';
 import type { AnnouncerPlacements } from './announcer-controller';
 import type { ApprovalReminder } from './remote-approval-reminders';
+import type { SystemsController } from './systems';
 
 /** Tab id prefix of a remembered project that is still opening (HS2-2BEJXD, HS2-XGSSK1). */
 export const PENDING_PROJECT_TAB_PREFIX = 'pending:';
@@ -213,6 +216,8 @@ export interface HotSheetShellDependencies {
   /** Whether a project's command settings have loaded (HS2-A6K8D5). */
   commandSettingsReady: (projectId: string) => boolean;
   shellMode: Signal<ProjectStripMode>;
+  /** The Systems screen's machines and readings (HS2-DR0ZSQ). */
+  systems?: Pick<SystemsController, 'view'>;
   statsProjectId: Signal<string | undefined>;
   sidebarCollapsed: Signal<boolean>;
   sidebarSize: Signal<number>;
@@ -325,6 +330,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
     settingsInspector,
     commandSettingsReady,
     shellMode,
+    systems,
     statsProjectId,
     sidebarCollapsed,
     sidebarSize,
@@ -494,6 +500,9 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
     ];
     if (shellMode.value !== 'project') {
       const active = activeTerminalVisibilityGroup(terminalVisibility.value, TERMINAL_DASHBOARD_VISIBILITY_SCOPE);
+      // HS2-DR0ZSQ: Systems keeps both rails, the Machines list on the left and the machine's
+      // sessions on the right, like the other dashboards.
+      const systemsView = shellMode.value === 'systems' ? systems?.view() : undefined;
       return (
         <MainShell
           tabs={tabs}
@@ -507,13 +516,21 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
           sidebar={
             shellMode.value === 'terminals'
               ? terminalOperationsSurfacePanel(terminalOperationsSurfaceProps())
-              : statsProjectId.value
-                ? sidebarSurfacePanel(sidebarSurfaceProps(true))
-                : statsSidebarPanel()
+              : systemsView
+                ? systemsSidebarPanel(systemsView.sidebar)
+                : statsProjectId.value
+                  ? sidebarSurfacePanel(sidebarSurfaceProps(true))
+                  : statsSidebarPanel()
           }
           sidebarVisible={!sidebarCollapsed.value}
           sidebarSize={sidebarSize.value}
-          header={<WorkspaceIdentity projectName={shellMode.value === 'terminals' ? 'Workspace Grid' : 'Stats'} />}
+          header={
+            <WorkspaceIdentity
+              projectName={
+                shellMode.value === 'terminals' ? 'Workspace Grid' : shellMode.value === 'systems' ? 'Systems' : 'Stats'
+              }
+            />
+          }
           headerActions={
             shellMode.value === 'terminals' ? (
               <TerminalDashboardControls
@@ -524,7 +541,13 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
               />
             ) : undefined
           }
-          workspace={<GlobalWorkspaceSurface {...globalWorkspaceSurfaceProps()} />}
+          workspace={
+            systemsView ? (
+              <GlobalWorkspaceSurface kind="systems" systems={systemsView.workspace} />
+            ) : (
+              <GlobalWorkspaceSurface {...globalWorkspaceSurfaceProps()} />
+            )
+          }
           workspacePresentation="edge-to-edge"
           inspector={
             shellMode.value === 'terminals'
@@ -534,7 +557,9 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
                   const { rail } = terminalRailSurfaceProps();
                   return terminalRailSurfacePanel({ rail: { ...rail, minimizedProjects } });
                 })()
-              : statsInspectorPanel()
+              : systemsView
+                ? systemsInspectorPanel(systemsView.inspector)
+                : statsInspectorPanel()
           }
           inspectorVisible={!inspectorCollapsed.value}
           inspectorSize={inspectorSize.value}

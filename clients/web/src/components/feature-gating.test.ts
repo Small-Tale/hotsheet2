@@ -89,7 +89,9 @@ describe('feature-area gating through the shipped components (HS2-3GJZGG)', () =
     expect(markup).not.toContain('aria-label="Add view"');
     expect(markup).toContain('data-component="project-summary"');
     expect(markup).toContain('data-component="view-navigation"');
-    expect(String(ProjectDashboardModes({ mode: 'project' }))).not.toContain('data-shell-mode');
+    // Systems is core (HS2-DR0ZSQ): it stays when every dashboard feature is off.
+    const quietStrip = String(ProjectDashboardModes({ mode: 'project' }));
+    expect(quietStrip.match(/data-shell-mode="[^"]+"/gu)).toEqual(['data-shell-mode="systems"']);
     expect(settingsCategoryShown('commands', false)).toBe(false);
     expect(settingsCategoryShown('groups', false)).toBe(false);
     const navigation = String(SettingsNavigation({ selected: 'features' }));

@@ -33,7 +33,6 @@ import {
   sessionStatus,
   siteChoices,
   siteChoicesByProject,
-  siteReadFailure,
   tabProjectIdOf,
   targetLimitsDraftFrom,
   usablePolicyTools,
@@ -234,14 +233,6 @@ describe('orchestration settings model (HS2-W27N1D)', () => {
       undefined,
       undefined,
     ]);
-  });
-
-  it('says why a site machine could not be read (HS2-D4G81Q)', () => {
-    expect(siteReadFailure('target_unavailable')).toBe('Cannot be reached now');
-    expect(siteReadFailure('policy_denied')).toBe('The policy does not allow reading it');
-    expect(siteReadFailure('permission_required')).toBe('Waits for a person to answer a permission request');
-    expect(siteReadFailure('permission_denied')).toBe('A person denied reading it');
-    expect(siteReadFailure('conflict')).toBe('Could not be read (conflict)');
   });
 
   it('prefers a fresh resolution over the cached binding', () => {

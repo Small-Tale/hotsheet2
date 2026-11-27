@@ -26,6 +26,16 @@ export interface StatsThisMacProps {
   liveCpu?: HostCpuFrame;
   /** Why the last disk choice failed (HS2-NHK8V8). */
   diskMessage?: string;
+  /**
+   * What the machine is to this viewer, leading the context line; Stats says "Server host", Systems
+   * "This Computer" or "Paired Remote" (HS2-DR0ZSQ).
+   */
+  context?: string;
+  /**
+   * Whether a newly detected disk asks Monitor or Ignore here. The choice acts on this app's own
+   * server, so Systems turns it off for a remote machine (HS2-DR0ZSQ).
+   */
+  diskChoices?: boolean;
 }
 
 const ICONS: Record<HostHealthSignalId, { icon: IconNode; name: string }> = {
@@ -53,16 +63,24 @@ const TIME = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-di
  * on another device. Values come from the host-health push channel (HS2-DTAVQA); unsupported or
  * unreadable signals say so and never show a value.
  */
-export function StatsThisMac({ state, liveCpu, diskMessage }: StatsThisMacProps) {
+export function StatsThisMac({
+  state,
+  liveCpu,
+  diskMessage,
+  context = 'Server host',
+  diskChoices = true,
+}: StatsThisMacProps) {
   const { snapshot } = state;
+  // The empty states name the machine as the context line does, in title case.
+  const subject = context.replace(/\b\w/gu, (letter) => letter.toUpperCase());
   if (!snapshot)
     return (
-      <section class="stats-this-mac" data-component="stats-this-mac" aria-label="Server Host" data-state="empty">
+      <section class="stats-this-mac" data-component="stats-this-mac" aria-label={subject} data-state="empty">
         {state.error === undefined ? (
-          <EmptyState busy={state.loading} title="Loading Server Host Health" />
+          <EmptyState busy={state.loading} title={`Loading ${subject} Health`} />
         ) : (
           <StateBanner
-            title="Server host health is unavailable."
+            title={`${context.charAt(0).toUpperCase()}${context.slice(1)} health is unavailable.`}
             detail={state.error}
             tone="warning"
             copyLayout="stacked"
@@ -75,7 +93,7 @@ export function StatsThisMac({ state, liveCpu, diskMessage }: StatsThisMacProps)
     <section
       class="stats-this-mac"
       data-component="stats-this-mac"
-      aria-label={`Server Host ${snapshot.host.name}`}
+      aria-label={`${subject} ${snapshot.host.name}`}
       data-state="ready"
       data-level={snapshot.level}
     >
@@ -85,7 +103,7 @@ export function StatsThisMac({ state, liveCpu, diskMessage }: StatsThisMacProps)
             {snapshot.host.name}
           </Text>
           <Text variant="p" size="compact" tone="quiet" flush rootAttributes={{ 'data-host-context': '' }}>
-            Server host · {hostPlatform(snapshot)}
+            {context} · {hostPlatform(snapshot)}
             {sampled === undefined ? '' : ` · sampled ${sampled}`}
           </Text>
         </div>
@@ -100,7 +118,7 @@ export function StatsThisMac({ state, liveCpu, diskMessage }: StatsThisMacProps)
         )}
         {/* A newly detected disk asks once whether it counts (HS2-NHK8V8); the choice is machine-wide.
             Stacked copy wraps the detail, so a phone still shows the whole question (HS2-4JRM43). */}
-        {pendingDisks(snapshot).map((disk) => (
+        {(diskChoices ? pendingDisks(snapshot) : []).map((disk) => (
           <StateBanner
             tone="info"
             copyLayout="stacked"

@@ -66,6 +66,7 @@ import { demoModule as statsProjectsTable } from './stats-projects-table-demo';
 import { demoModule as statsRightNow } from './stats-right-now-demo';
 import { demoModule as statsThisMac } from './stats-this-mac-demo';
 import { demoModule as statusBadge } from './status-badge-demo';
+import { demoModule as systems } from './systems-demo';
 import { demoModule as tagChip } from './tag-chip-demo';
 import { demoModule as terminalComponents } from './terminal-components-demo';
 import { demoModule as terminalVisibility } from './terminal-visibility-demo';
@@ -163,6 +164,7 @@ export const demoModules: readonly DemoModule[] = [
   statsRightNow,
   statsProjectsTable,
   statsThisMac,
+  systems,
   statsOvernight,
   projectLiveSection,
   gridSidebar,

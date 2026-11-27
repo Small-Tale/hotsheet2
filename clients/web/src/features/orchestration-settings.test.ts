@@ -294,7 +294,8 @@ describe('a project detail (HS2-W27N1D)', () => {
     const detail = t.settings.detailOf(DEMO_OWNER)!;
     expect(detail.capacityError).toContain('unreachable');
     expect(detail.resolution?.usable).toBe(false);
-    expect(detail.toolCapacity?.tools).toHaveLength(2);
+    // HS2-JF3EA3: AI Tool Capacity moved to Systems; the detail no longer reads it.
+    expect(t.api.orchestrationToolCapacity).not.toHaveBeenCalled();
     expect(detail.admissions.map((admission) => admission.outcome)).toEqual(['reduced', 'accepted']);
     // No policy resource names this target, so no claim namespace is asked for.
     expect(t.api.orchestrationCapacity).toHaveBeenCalledWith(DEMO_OWNER, DEMO_TARGETS.docs, []);

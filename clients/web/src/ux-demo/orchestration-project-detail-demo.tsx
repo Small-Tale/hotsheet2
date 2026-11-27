@@ -16,7 +16,6 @@ import {
   demoCapacity,
   demoSessions,
   demoTime,
-  demoToolCapacity,
   demoToolLabel,
 } from './orchestration-settings-fixtures';
 
@@ -164,7 +163,8 @@ function ProjectPanelExamples() {
 
 /**
  * One orchestrated project's detail (HS2-W27N1D), as the inspector shows it: a connected project
- * running sessions, an unreachable one whose reads fail in place, and one still loading.
+ * running sessions, an unreachable one whose reads fail in place, and one still loading. Each keeps
+ * only its Admission and Open in Systems; the machine facts are on the Systems screen (HS2-JF3EA3).
  */
 export function OrchestrationProjectDetailDemo() {
   return (
@@ -179,7 +179,6 @@ export function OrchestrationProjectDetailDemo() {
             targetId: DEMO_TARGETS.web,
             capacity: demoCapacity,
             admissions,
-            toolCapacity: demoToolCapacity,
             sessions,
             loading: false,
             limits: listedLimits,
@@ -189,6 +188,7 @@ export function OrchestrationProjectDetailDemo() {
           policyTools={policyTools}
           toolModels={toolModels}
           resourceChoices={['vm/*', 'vm/macos-vm', 'vm/windows-vm']}
+          systemsMachineId="local"
           toolLabel={demoToolLabel}
           formatTime={demoTime}
         />
@@ -204,7 +204,6 @@ export function OrchestrationProjectDetailDemo() {
             capacityError: 'orchestration observation failed: unreachable',
             admissions: [],
             admissionError: 'orchestration observation failed: unreachable',
-            toolCapacity: demoToolCapacity,
             sessions: [],
             loading: false,
             limits: unlistedLimits,
@@ -224,6 +223,7 @@ export function OrchestrationProjectDetailDemo() {
           detail={{
             targetId: DEMO_TARGETS.api,
             admissions: [],
+            admissionTools: [],
             sessions: [],
             loading: false,
             limits: { ...listedLimits, targetId: DEMO_TARGETS.api, roleSessions: ['dispatcher'] },
@@ -247,21 +247,18 @@ export function OrchestrationProjectDetailDemo() {
               label: 'Web',
               where: 'Local on This Computer',
               home: true,
-              capabilities: demoCapacity.capabilities,
             },
             {
               targetId: DEMO_TARGETS.api,
               label: 'Web on the build host',
               where: 'Remote on Build Host',
               home: false,
-              capabilities: { os: 'windows', os_version: '10.0.26100', arch: 'x86_64', gpu: { present: false } },
             },
             {
               targetId: DEMO_TARGETS.docs,
               label: 'Web laptop',
               where: 'Remote on Laptop',
               home: false,
-              error: 'Cannot be reached now',
             },
           ]}
           toolLabel={demoToolLabel}

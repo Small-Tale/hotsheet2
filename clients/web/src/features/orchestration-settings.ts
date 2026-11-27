@@ -12,7 +12,6 @@ import type {
   OrchestrationResolution,
   OrchestrationSession,
   OrchestrationSitesView,
-  OrchestrationToolCapacity,
   ProjectType,
   ProjectTypeView,
 } from '../api';
@@ -137,8 +136,6 @@ export interface OrchestrationDetailState {
   /** The tools the policy lets sessions use on this project, asked for admission (HS2-Y3N3PH). */
   admissionTools?: readonly string[];
   admissionError?: string;
-  toolCapacity?: OrchestrationToolCapacity;
-  toolCapacityError?: string;
   sessions?: OrchestrationSession[];
   sessionsError?: string;
   loading: boolean;
@@ -833,11 +830,6 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
         () => Promise.all(tools.map((tool) => api.orchestrationAdmission(projectId, targetId, tool))),
         (admissions) => ({ admissions, admissionTools: tools, admissionError: undefined }),
         (message) => ({ admissions: [], admissionTools: tools, admissionError: message }),
-      ),
-      part(
-        () => api.orchestrationToolCapacity(projectId),
-        (toolCapacity) => ({ toolCapacity, toolCapacityError: undefined }),
-        (message) => ({ toolCapacityError: message }),
       ),
       part(
         () => api.orchestrationSessions(projectId),

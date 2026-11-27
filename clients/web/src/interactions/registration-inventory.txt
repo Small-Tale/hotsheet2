@@ -81,6 +81,7 @@ navigation-and-tabs	delegate	document.body	'click'	'[data-action="set-shell-mode
 navigation-and-tabs	delegate	document.body	'click'	'[data-action="select-terminal-rail-project"]'
 navigation-and-tabs	delegate	document.body	'change'	'kui-select[name="terminal-rail-view"]'
 navigation-and-tabs	delegate	document.body	'change'	'kui-select[name="mobile-view"]'
+navigation-and-tabs	delegate	document.body	'click'	'[data-action="select-systems-machine"]'
 navigation-and-tabs	delegate	document.body	'click'	'[data-action="open-project-stats"]'
 navigation-and-tabs	delegate	document.body	'click'	'[data-action="select-project-tab"]'
 navigation-and-tabs	delegate	document.body	'change'	'kui-select[name="mobile-project"]'

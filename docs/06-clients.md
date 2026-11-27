@@ -6284,8 +6284,97 @@ Optional (on by default):
 | Ambient   | `announcer`         | Announcer                     | The announcer control, reel and spoken narration                                                                             |
 | Ambient   | `standby`           | Standby                       | The moon button, idle entry (and so the away digest), and the Standby settings                                               |
 
-Always on: tickets, search, notes, notifications, permissions, the terminal drawer, ticket sources and accounts, trash, theme, keyboard, projects, and settings. Orchestration shows only for an Orchestration project, and HS1 migration only when an HS1 database is found, so neither is listed.
+Always on: tickets, search, notes, notifications, permissions, the terminal drawer, ticket sources and accounts, trash, theme, keyboard, projects, settings, and the Systems screen (§6.13). Orchestration shows only for an Orchestration project, and HS1 migration only when an HS1 database is found, so neither is listed.
 
 ### Page layout
 
 The page uses Kerf `List`, `Text` (h2/h3), `Switch` with hint, `Row` and `Button`, and no application CSS. Each list of switches takes the List's 8px left control inset, so the switch tracks line up with the headings' text, as the maintainer asked on the v1 design.
+
+## 6.13 Systems screen (HS2-DR0ZSQ)
+
+Systems shows the machines this app works with: this computer, and each paired remote server.
+For each machine it shows what the machine is and its live readings. It is a whole-workspace
+dashboard beside the Workspace Grid and Stats. The maintainer approved Design v1 Concept B
+(machine detail, master-detail) and the Lucide `server` icon on HS2-DR0ZSQ.
+
+### Entry point
+
+- **Strip button:** a **Systems** button (Lucide `server`) in the project strip's Global
+  Dashboards group, after Workspace Grid and before Cross-Project Stats. It is pressed while
+  Systems shows.
+- **Always present:** Systems is core and has no feature area (§6.12). The machine facts it shows
+  came from the core orchestration inspector (HS2-JF3EA3).
+- **Open in Systems:** the orchestration project inspector's Open in Systems action opens the
+  screen with that project's machine selected (HS2-JF3EA3).
+
+### Machines
+
+The machine list is, in order:
+
+1. **This Computer.** It is read through the first open local project tab.
+2. **Each paired remote server**, in the order of the desktop's remote list. Each one is read
+   through its first open remote tab.
+3. **Any other remote that an open remote tab reaches.** This covers a browser without the
+   desktop's remote list.
+
+A machine shows no readings, and says why, in three cases:
+
+| Case                                      | What the screen says                                                                                                                                                           |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| A remote with no open tab                 | **Not connected**, with "Open one of its projects in a tab". The bridge reaches a remote's API only through an opened remote project; reading one without a tab is HS2-CMXKK2. |
+| A remote whose host revoked this computer | **Revoked**                                                                                                                                                                    |
+| This computer with no local project open  | **No project open**                                                                                                                                                            |
+
+A selected machine that disappears falls back to This Computer.
+
+### Layout
+
+Both rails stay, like the other dashboards. On a phone, the rails are overlays opened from the
+toolbar.
+
+- **Left rail (`SystemsSidebar`).** Two sections:
+  - **Machines:** one Kerf `ListItem` per machine, with its kind and running AI sessions. A
+    connected machine shows a bare Kerf `Gauge` of its CPU (warning at 80%, danger at 95%). A
+    machine without readings shows a Badge instead: Offline or Revoked.
+  - **AI Tool Capacity** (HS2-AHG7HW): each tool and account across the open orchestration
+    projects. It shows the state as a Badge and the session cap and budget as a quiet line.
+- **Workspace (`SystemsView`).** The selected machine's This Mac cards (`StatsThisMac`): disk,
+  memory pressure, CPU with its per-core meter and sparkline, and power. The cards' context line
+  names the machine as This Computer or Paired Remote. Below the cards:
+  - **AI Tools:** each tool, its version, and how many of its sessions run there. Tools that are
+    not installed are listed last.
+  - **Capabilities:** System, Processor (with core count), GPU, and Memory (free of total).
+  - **Toolchains:** each installed toolchain and its version.
+
+  Only This Computer offers the new-disk Monitor/Ignore choice, because that choice acts on this
+  app's own server.
+
+- **Right rail (`SystemsInspector`).** The machine's name and kind as the title, then **AI
+  Sessions Here**. Each running AI session is named by its terminal when this app shows it, with a
+  Working or Idle badge.
+
+### Live data (no fixed-interval polling)
+
+| Reading                                                   | Source                                                                                                                                                           | How it stays current                                                                                                                                                                                           |
+| --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Host health (the cards)                                   | The pushed host-health resource: this server's, or the remote tab's (HS2-DTAVQA, HS2-K4DY5G)                                                                     | Re-read on each `host_health` change event and on stream resync                                                                                                                                                |
+| Live CPU (selected machine only)                          | `GET /host-health/cpu?after=<seq>` through that machine's tab (HS2-CPFBWP)                                                                                       | Genuine long poll. Selecting another machine starts a fresh feed, because a sequence belongs to one server. A host without a per-core reader answers `unsupported` once and the feed stops.                    |
+| Capabilities, AI tools, AI sessions, free memory and disk | The hosted capacity snapshot `GET /checkouts/{checkout}/target-capacity?after=<version>&wait_ms=8000` (HS2-J8PRTV, HS2-P5GTSW): one stream per connected machine | Genuine long poll with version replay. It answers when the machine's room changes, or after eight seconds. Failures keep the last snapshot with an out-of-date banner and back off from 1 s, doubling to 30 s. |
+| AI Tool Capacity                                          | `GET /checkouts/{owner}/orchestration/tool-capacity`                                                                                                             | Read once each time the screen opens                                                                                                                                                                           |
+
+These streams run only while Systems shows on a visible page. Leaving the screen or hiding the
+page aborts them.
+
+The headless equivalent of the capacity read is `hotsheet-cli orchestration capacity show
+--checkout <id> [--after <version> --wait-seconds <n>]`. Host health has its own HTTP routes
+(docs/host-health.md). Systems adds no server route.
+
+### Known gaps (follow-ups)
+
+- **Sign-in state (HS2-S1FEYY):** a machine does not report whether each AI tool is signed in, so
+  tools show as installed or not.
+- **Admission by Project and Placement Limits (HS2-5H8R0N):** the approved mock showed both in the
+  right rail.
+  They need per-project orchestration bindings by machine.
+- **Remotes without an open tab (HS2-CMXKK2):** reading a paired remote that has no open tab needs
+  a machine-level remote read in the bridge.

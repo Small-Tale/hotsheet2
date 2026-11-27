@@ -360,6 +360,20 @@ covers anything past the button's end. The demo's Unread chat messages setting s
   takes `appearance="warning"` or `"danger"`; unsupported or unreadable signals read "Not supported"
   or "Unavailable" with no value. Loading, a failed first read, and a stale snapshot use Kerf
   `EmptyState` and `StateBanner`. The demo's Scenario setting covers each state.
+  Systems reuses it with a `context` of "This Computer" or "Paired Remote" and turns the disk
+  choice off for a remote (`diskChoices`, HS2-DR0ZSQ).
+- `SystemsView`, `SystemsSidebar`, `SystemsInspector` — **demo built** (`components/systems-*.tsx`,
+  HS2-DR0ZSQ, docs/06-clients.md §6.13): the Systems screen's workspace, left rail and right rail.
+  The workspace is a `Pane` with the selected machine's `StatsThisMac` cards, then AI Tools,
+  Capabilities and Toolchains as `ValueTable`s under `ListHeader`s (Capabilities and Toolchains share
+  a `Grid` row once each fits 512px, so they keep their columns), an `EmptyState` for a machine
+  without readings, and a `StateBanner` for stale readings. The left rail lists machines as
+  selectable `ListItem`s with a bare Kerf `Gauge` of CPU or an Offline/Revoked `Badge` as status,
+  then AI Tool Capacity as a `ValueTable` with state `Badge`s. The right rail lists AI Sessions Here
+  as a `ValueTable` with Working/Idle `Badge`s. Read-only rows use `ValueTable` rather than the
+  mock's `ListItem`s, which are buttons. The demo's settings cover each machine kind, loading, a
+  failed first read, stale readings, and each AI Tool Capacity state; the App Shell demo's strip
+  opens the same screen.
 
 - `ProjectLiveSection` — **shipped** (`components/project-live-section.tsx`, HS2-F788GW;
   docs/34-glance-surfaces.md §34.6): the project sidebar's Live section under the completion chart.

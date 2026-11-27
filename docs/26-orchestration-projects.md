@@ -332,12 +332,10 @@ skipped when unset; without the flag the view still contacts nothing. Settings �
 Orchestration reads it only while a project has more than one site, after the list has
 loaded, and on each `orchestration_changed` event. Each site row of such a project adds its
 machine's OS to its description (`Site · Local on This Computer · macOS 15.1, arm64`; the
-home site's reads `Home Site · …`), and the detail of any of its sites gains a **Sites** section with one table per
-site: Site (the home marked `Home`), Where, then the System, Processor, GPU, AI Tools
-and Toolchains rows of HS2-ZY4Z4G, or why the machine was not read. What a machine is
-shows in one place: for a project with several sites the capacity region leaves those
-rows out, and the shown site's table uses the detail's own fresh capacity read when it
-has one. A one-site project keeps them in the capacity region.
+home site's reads `Home Site · …`). What each machine is (the System, Processor, GPU, AI
+Tools and Toolchains of HS2-ZY4Z4G) shows on the Systems screen, not in the project detail
+(HS2-JF3EA3, docs/06-clients.md §6.13); the detail's Binding still names where each site is
+(HS2-NGP2AK).
 
 ```sh
 hotsheet-cli -C <configured-host-source> orchestration target add --project <owner> \
@@ -6518,8 +6516,10 @@ the type changes to Software while it shows.
 - **Detail.** Selecting a row opens its detail in the inspector. Each part is its own read
   through an existing route, so a part the gate refuses says so in place and hides
   nothing else: binding and connection (a fresh `resolve` first, because the reads after
-  it check the same binding), capacity and admission per policy tool, AI tool capacity,
-  held resources (the namespaces the policy's `placement.resources` names for this
+  it check the same binding), this project's admission per policy tool (HS2-JF3EA3: one
+  line per tool, _Can start N now_ or why not, then **Open in Systems**, which opens the
+  Systems screen on the machine the project's binding runs on), held resources (read
+  from the capacity snapshot) (the namespaces the policy's `placement.resources` names for this
   project), and the orchestrator's active sessions there with **Show in Drawer** (while
   that project's tab shows the session's terminal), **Take Over…** and **Stop** (at a safe
   point; mid-turn asks first and then stops with `force`). **Stop Orchestrating…** removes
@@ -6531,7 +6531,11 @@ the type changes to Software while it shows.
   sessions use on that project; with none the detail says _No AI tool is allowed here
   yet_ rather than showing the policy's refusal. A part that is refused says why by the
   refusal's code (the policy's limits, an unreachable project, a pending permission
-  request), never "not allowed yet". Show in Drawer works the same for a remote project: its tab is
+  request), never "not allowed yet". What the machine is and how busy it is (free memory,
+  CPU load, free disk, AI sessions there, its capabilities, each site's machine) and AI
+  tool capacity are machine facts, not project facts, so they moved to the Systems screen
+  (HS2-JF3EA3, maintainer CHOICE B on HS2-DR0ZSQ); the detail no longer reads AI tool
+  capacity. Show in Drawer works the same for a remote project: its tab is
   `remote:<registration_id>:<checkout_id>` from the bound destination, the desktop bridge
   gives that tab the peer's terminals launched in its checkout (HS2-JJKVJJ), and the
   session's `hosted.session_id` is the peer's terminal id (HS2-6E32N4).
@@ -6554,7 +6558,7 @@ the type changes to Software while it shows.
   row (HS2-M1T6KN), and the detail's Binding lists one row per site, the home site marked
   _(Home)_, under _Where: N sites_.
 - **A project's limits (HS2-7WF6JD).** The detail's **Limits** section, between Binding
-  and Capacity and Admission, edits that project's entry in the policy (`targets[]`).
+  and Admission, edits that project's entry in the policy (`targets[]`).
   Its header's **About Limits** help button (HS2-Y737GM, Kerf's ListHeader action and
   AnchoredSurface) explains every limit and what its Auto value does; each field's hint
   says the same. The names Sessions Here and Build Ahead are kept: no clearly better

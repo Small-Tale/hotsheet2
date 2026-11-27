@@ -26,6 +26,9 @@ import { ProjectTab, type ProjectTabProps } from '../components/project-tab';
 import { PROJECT_TAB_BAR_ID } from '../components/project-tab-bar';
 import { ProjectTabBar, type ProjectTabBarMode } from '../components/project-tab-bar';
 import { QuickTicketComposer } from '../components/quick-ticket-composer';
+import { systemsInspectorPanel } from '../components/systems-inspector';
+import { systemsSidebarPanel } from '../components/systems-sidebar';
+import { SystemsView } from '../components/systems-view';
 import { terminalOperationsPanel } from '../components/terminal-operations-sidebar';
 import { TicketBoard } from '../components/ticket-board';
 import { ticketInspectorPanel } from '../components/ticket-inspector';
@@ -74,6 +77,8 @@ import {
   sidebarViews,
 } from './project-sidebar-demo';
 import { syncSettingsControls } from './settings-controls';
+import { systemsDemoSettings } from './systems-demo';
+import { systemsDemoInspector, systemsDemoSidebar, systemsDemoView } from './systems-fixtures';
 import { collectionTickets } from './ticket-collections-demo';
 import { DemoWorkerColumns } from './worker-columns-demo';
 import {
@@ -665,6 +670,11 @@ export function AppShellDemo() {
             />
           </section>
         );
+      case 'systems':
+        // The production Systems workspace over synthetic machines (HS2-DR0ZSQ).
+        return (
+          <SystemsView {...systemsDemoView(systemsDemoSettings.machine.value, systemsDemoSettings.scenario.value)} />
+        );
       case 'project':
         return projectWorkspace;
       default:
@@ -677,6 +687,8 @@ export function AppShellDemo() {
         return { projectName: 'Workspace Grid', viewName: 'Workspace Grid' };
       case 'stats':
         return { projectName: 'Stats', viewName: 'Cross-project Stats' };
+      case 'systems':
+        return { projectName: 'Systems', viewName: 'Systems' };
       case 'project':
         return { projectName: 'Hot Sheet 2', viewName: 'Queue' };
       default:
@@ -738,7 +750,15 @@ export function AppShellDemo() {
         mode={shellMode.value}
         tabs={projectTabs.value.filter((tab) => !minimizedProjectTabs.value.includes(tab.id))}
         minimizedProjects={demoMinimizedProjects()}
-        sidebar={shellMode.value === 'terminals' ? shellTerminalOperationsPanel() : shellSidebarPanel()}
+        sidebar={
+          shellMode.value === 'terminals'
+            ? shellTerminalOperationsPanel()
+            : shellMode.value === 'systems'
+              ? systemsSidebarPanel(
+                  systemsDemoSidebar(systemsDemoSettings.machine.value, systemsDemoSettings.scenario.value),
+                )
+              : shellSidebarPanel()
+        }
         sidebarVisible={shellSidebarVisible.value}
         banner={banner}
         sidebarSize={shellSidebarSize.value}
@@ -781,28 +801,32 @@ export function AppShellDemo() {
         terminalDrawerVisible={shellTerminalDrawerVisible.value}
         inspectorSize={shellInspectorSize.value}
         inspector={
-          projectSettings
-            ? ticketInspectorPlaceholderPanel({ selectionCount: 0 })
-            : ticketInspectorPanel({
-                slug: ticket.slug,
-                title: ticket.title,
-                status: ticket.status,
-                priority: ticket.priority,
-                category: ticket.category,
-                tags: ticket.tags,
-                details: markdownValue.value,
-                detailsMode: markdownMode.value,
-                detailsDirty: markdownValue.value !== markdownSavedValue.value,
-                notes: readerNotes.value,
-                editingNoteId: editingNoteId.value,
-                noteDraft: noteDraft.value,
-                providerName: 'Hot Sheet Git',
-                updatedLabel: ticket.updatedLabel,
-                activeTab: inspectorTab.value,
-                upNext: ticket.upNext,
-                codeReview: inspectorCodeReview,
-                latestConfidence: latestDemoConfidence(readerNotes.value),
-              })
+          shellMode.value === 'systems'
+            ? systemsInspectorPanel(
+                systemsDemoInspector(systemsDemoSettings.machine.value, systemsDemoSettings.scenario.value),
+              )
+            : projectSettings
+              ? ticketInspectorPlaceholderPanel({ selectionCount: 0 })
+              : ticketInspectorPanel({
+                  slug: ticket.slug,
+                  title: ticket.title,
+                  status: ticket.status,
+                  priority: ticket.priority,
+                  category: ticket.category,
+                  tags: ticket.tags,
+                  details: markdownValue.value,
+                  detailsMode: markdownMode.value,
+                  detailsDirty: markdownValue.value !== markdownSavedValue.value,
+                  notes: readerNotes.value,
+                  editingNoteId: editingNoteId.value,
+                  noteDraft: noteDraft.value,
+                  providerName: 'Hot Sheet Git',
+                  updatedLabel: ticket.updatedLabel,
+                  activeTab: inspectorTab.value,
+                  upNext: ticket.upNext,
+                  codeReview: inspectorCodeReview,
+                  latestConfidence: latestDemoConfidence(readerNotes.value),
+                })
         }
         inspectorVisible={inspectorOpen.value}
       />
@@ -934,7 +958,12 @@ function wireAppShellDemo(root: HTMLElement): () => void {
       workspaceSearchOpen.value = false;
       workspaceSearchHelpOpen.value = false;
       workspaceSearchModel.clear();
-      shellEvent.value = shellMode.value === 'terminals' ? 'Workspace grid selected.' : 'Cross-project stats selected.';
+      shellEvent.value =
+        shellMode.value === 'terminals'
+          ? 'Workspace grid selected.'
+          : shellMode.value === 'systems'
+            ? 'Systems selected.'
+            : 'Cross-project stats selected.';
     }),
   );
   demoListeners.add(

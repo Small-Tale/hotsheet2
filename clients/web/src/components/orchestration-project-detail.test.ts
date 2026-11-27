@@ -1,128 +1,75 @@
 import { describe, expect, it } from 'vitest';
 
-import type { OrchestrationCapabilities, OrchestrationRoleSession } from '../api';
+import type { OrchestrationRoleSession } from '../api';
 import { OrchestrationProjectDetail } from './orchestration-project-detail';
 
-const macos: OrchestrationCapabilities = {
-  os: 'macos',
-  os_version: '15.1',
-  arch: 'arm64',
-  cpu_model: 'Synthetic 10-core CPU',
-  gpu: { present: true, vendors: ['apple'] },
-  ai_tools: [{ tool: 'claude', version: '2.0.14' }],
-  toolchains: [{ name: 'node', installed: true, version: '22.11.0' }],
-};
-const linux: OrchestrationCapabilities = { os: 'linux', arch: 'x86_64' };
 const toolLabel = (tool: string) => (tool === 'claude' ? 'Claude' : tool);
 
 const render = (props: Partial<Parameters<typeof OrchestrationProjectDetail>[0]> = {}) =>
   String(OrchestrationProjectDetail({ targetId: 'W1', label: 'Widgets', where: 'Local on This Computer', ...props }));
 
-/** The text of one site's table, tags stripped. */
-const siteText = (markup: string, target: string) =>
-  (new RegExp(`data-orchestration-site="${target}"[\\s\\S]*?</dl>`).exec(markup)?.[0] ?? '').replace(/<[^>]+>/g, ' ');
-
-describe('OrchestrationProjectDetail Sites (HS2-D4G81Q)', () => {
-  it('shows every site of a project with several sites, with what each machine is', () => {
-    const markup = render({
-      toolLabel,
-      sites: [
-        { targetId: 'W1', label: 'Widgets', where: 'Local on This Computer', home: true, capabilities: macos },
-        {
-          targetId: 'W2',
-          label: 'Widgets build host',
-          where: 'Remote on Build host',
-          home: false,
-          capabilities: linux,
-        },
-        {
-          targetId: 'W3',
-          label: 'Widgets laptop',
-          where: 'Remote on Laptop',
-          home: false,
-          error: 'Cannot be reached now',
-        },
-        { targetId: 'W4', label: 'Widgets spare', where: '', home: false },
-      ],
-    });
-    expect(markup).toContain('aria-label="Sites"');
-    const home = siteText(markup, 'W1');
-    for (const text of [
-      'Widgets · Home',
-      'Local on This Computer',
-      'macOS 15.1, arm64',
-      'Synthetic 10-core CPU',
-      'Apple',
-      'Claude 2.0.14',
-      'node 22.11.0',
-    ])
-      expect(home).toContain(text);
-    // A machine that reports little reads as unknown, never as absent; no Processor row without a model.
-    const build = siteText(markup, 'W2');
-    expect(build).toContain('Linux, x86_64');
-    expect(build).not.toContain('Processor');
-    expect(build).toContain('Unknown');
-    // A failed read names why, and a site not bound here says so.
-    expect(siteText(markup, 'W3')).toContain('Cannot be reached now');
-    const spare = siteText(markup, 'W4');
-    expect(spare).toContain('Not bound on this computer');
-    expect(spare).toContain('Not bound here');
-  });
-
-  it('shows no Sites section for a one-site project', () => {
-    expect(render()).not.toContain('aria-label="Sites"');
-    expect(
-      render({ sites: [{ targetId: 'W1', label: 'Widgets', where: 'Local on This Computer', home: true }] }),
-    ).not.toContain('aria-label="Sites"');
-  });
-
-  const capacityDetail = (capabilities: OrchestrationCapabilities) => ({
+describe('OrchestrationProjectDetail keeps only this project’s admission (HS2-JF3EA3)', () => {
+  const text = (markup: string, label: string) =>
+    (new RegExp(`aria-label="${label}"[\\s\\S]*?</section>`).exec(markup)?.[0] ?? '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ');
+  const detail = {
     targetId: 'W1',
-    admissions: [],
     loading: false,
-    capacity: {
-      sampled_at_ms: 1,
-      memory: { free_mb: 1, total_mb: 2 },
-      cpu: { load_percent: 1, logical_cpus: 2 },
-      disk: { free_mb: 1, total_mb: 2 },
-      tools: null,
-      sessions: null,
-      claims: null,
-      claim_namespaces: [],
-      capabilities,
-    },
-  });
-  /** The text of the capacity region, tags stripped. */
-  const capacityText = (markup: string) =>
-    (/aria-label="Capacity and Admission"[\s\S]*?<\/section>/.exec(markup)?.[0] ?? '').replace(/<[^>]+>/g, ' ');
+    admissions: [
+      { outcome: 'accepted' as const, tool: 'claude', requested: 3, admitted: 3, reason: null },
+      { outcome: 'reduced' as const, tool: 'codex', requested: 2, admitted: 1, reason: 'session_cap_reached' },
+      { outcome: 'refused' as const, tool: 'gemini', requested: 1, admitted: 0, reason: 'below_ram_floor' },
+    ],
+  };
 
-  it('shows a one-site project machine rows in the capacity region (HS2-ZY4Z4G)', () => {
-    const capacity = capacityText(render({ toolLabel, detail: capacityDetail(macos) }));
-    for (const label of ['System', 'Processor', 'GPU', 'AI Tools', 'Toolchains']) expect(capacity).toContain(label);
-    expect(capacity).toContain('macOS 15.1, arm64');
-  });
-
-  it('shows the machine rows of a project with several sites only in Sites, from the fresh read for this site', () => {
+  it('shows each tool’s admission line and moves the machine sections to Systems', () => {
     const markup = render({
       toolLabel,
-      // The capacity read is newer than the sites view's for this site.
-      detail: capacityDetail({ ...macos, os_version: '15.2' }),
+      detail,
+      systemsMachineId: 'local',
       sites: [
-        { targetId: 'W1', label: 'Widgets', where: 'Local on This Computer', home: true, capabilities: macos },
-        {
-          targetId: 'W2',
-          label: 'Widgets build host',
-          where: 'Remote on Build host',
-          home: false,
-          capabilities: linux,
-        },
+        { targetId: 'W1', label: 'Widgets', where: 'Local on This Computer', home: true },
+        { targetId: 'W2', label: 'Widgets build host', where: 'Remote on Build host', home: false },
       ],
     });
-    const capacity = capacityText(markup);
-    expect(capacity).toContain('Free Memory');
-    for (const label of ['System', 'Processor', 'GPU', 'AI Tools', 'Toolchains']) expect(capacity).not.toContain(label);
-    expect(siteText(markup, 'W1')).toContain('macOS 15.2, arm64');
-    expect(siteText(markup, 'W2')).toContain('Linux, x86_64');
+    const admission = text(markup, 'Admission');
+    expect(admission).toContain('Claude Can start 3 now');
+    expect(admission).toContain('codex Can start 1 of 2 · session cap reached');
+    expect(admission).toContain('gemini Refused · memory below the floor');
+    for (const gone of [
+      'Capacity and Admission',
+      'aria-label="Sites"',
+      'AI Tool Capacity',
+      'Free Memory',
+      'Toolchains',
+    ])
+      expect(markup).not.toContain(gone);
+    // Each site's place stays in Binding.
+    expect(text(markup, 'Binding')).toContain('Remote on Build host');
+  });
+
+  it('opens Systems on the project’s machine, or on its current machine when unknown', () => {
+    const named = render({ detail, systemsMachineId: 'remote:01ARZ3NDEKTSV4RRFFQ69G5FAV' });
+    expect(named).toMatch(
+      /data-machine-id="remote:01ARZ3NDEKTSV4RRFFQ69G5FAV"[^>]*data-action="select-systems-machine"|data-action="select-systems-machine"[^>]*data-machine-id="remote:01ARZ3NDEKTSV4RRFFQ69G5FAV"/u,
+    );
+    expect(named).toContain('Open in Systems');
+    const unknown = render({ detail });
+    expect(unknown).toContain('data-action="select-systems-machine"');
+    expect(unknown).not.toContain('data-machine-id');
+  });
+
+  it('says when no tool is allowed, when admission failed, and waits while loading', () => {
+    expect(text(render({ detail: { ...detail, admissions: [], admissionTools: [] } }), 'Admission')).toContain(
+      'No AI tool is allowed here yet.',
+    );
+    expect(text(render({ detail: { ...detail, admissions: [], admissionError: 'refused' } }), 'Admission')).toContain(
+      'Admission is not available. refused',
+    );
+    expect(render({ detail: { targetId: 'W1', admissions: [], loading: true } })).toMatch(
+      /aria-label="Admission"[\s\S]*data-placeholder/u,
+    );
   });
 });
 
