@@ -5612,3 +5612,32 @@ before child registration, then recreate it. Both transitions run under root and
 scopes on Unix and root scope on Windows before the native watch becomes live.
 The replacement test covers both sides of the post-registration identity sample and checks
 that a subsequent external write reaches the rearmed index.
+
+### Probe-proven native registrations (HS2-190GDZ)
+
+`crates/hotsheet-server/src/watcher.rs` (`stream_proof_tests`) unit-tests the proof state machine:
+
+- a probe of the current registration proves the stream; a store change or another registration's
+  probe does not, and the probe file never outlives its write;
+- a probe written before a re-registration arrives late and proves nothing;
+- dropping the handle ends a proof wait, and a stopped proof neither begins nor writes again;
+- a directory that cannot take a probe reports it as unwritable;
+- the simulated busy stream drops exactly the requested probes, every event of each;
+- every unanswered probe is reported in order, and every second one unwatches and registers the
+  directory again; a failed re-registration or a dropped handle ends the proof.
+
+The native tests run the real backend against a simulated busy stream:
+
+- With 0, 1 and 2 dropped probes (the last forces a re-registration), external writes landing
+  before registration, between registration and the identity sample, and before the proof are all
+  indexed once the index goes live, and a write after the proof is reported.
+- A stream that never answers goes live through the bridge after a full reconcile, still
+  indexes later writes, and keeps its bridge. A proven stream retires its bridge.
+- Moving that bridged store away marks the index out of sync without reporting any deletion.
+  Moving it back reconciles every ticket and makes the index live again.
+
+Repro evidence: the R6FZ54 startup-replacement test under four sibling churn loops in the shared
+temp directory failed 5 of 5 runs before the fix (each a 120 s timeout) and passed 5 of 5 after it
+(about 9 s each). Under that sustained churn other native-latency tests (`hs2_vn96j5_*`, the
+native repository monitor) time out before and after the fix alike, because `fseventsd` itself
+falls minutes behind; that residual risk is tracked separately.
