@@ -8,8 +8,8 @@ use std::collections::BTreeMap;
 use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::orchestration::{
     ApplyGoal, ApplyState, AuditOutcome, PermissionAnswer, PlanUpdateState, SHARED_PLAN_PATH,
-    StepTicket, TEMPLATE_GOAL_TAG, TEMPLATES_PATH, TargetAction, Template, TemplateApplyStore,
-    TemplateState,
+    StepTicket, TEMPLATE_GOAL_TAG, TEMPLATES_PATH, TargetAction, Template, TemplateApply,
+    TemplateApplyStore, TemplateState,
 };
 use hotsheet_ticketing::{NewTicket, ops};
 use serde_json::{Value, json};
@@ -1515,6 +1515,183 @@ fn hs2_amjner_a_waiting_apply_resumes_once_the_planner_is_free() {
     );
     assert_eq!(f.goals().len(), 1);
     assert_eq!(f.host.launches().len(), 1);
+}
+
+/// HS2-DMA5DR: what a resume pass did when run from inside an apply's own ask, and
+/// the apply's record at that moment.
+type DuringAsk = (Result<ResumeReport, &'static str>, TemplateApply);
+
+/// HS2-DMA5DR: arm the host so that, inside the next apply's ask (after it recorded
+/// attempt `attempt` with no reason yet and before its planner answers, the apply
+/// records' lock held), a resume pass runs on another thread; hand back what that pass
+/// did and what the record said meanwhile.
+fn resume_during_next_ask(f: &Fixture, attempt: u32) -> std::sync::mpsc::Receiver<DuringAsk> {
+    let (sent, received) = std::sync::mpsc::channel();
+    let runtime = f.m.runtime.clone();
+    let owner = f.owner();
+    f.host.during_sessions.arm(move || {
+        let asking = TemplateApplyStore::new(&runtime.home, &owner)
+            .unwrap()
+            .applies()
+            .unwrap()
+            .pop();
+        let Some(asking) = asking.filter(|apply| {
+            apply.state == ApplyState::WaitingPlanner
+                && apply.attempts == attempt
+                && apply.reason.is_none()
+                && apply.proposal_id.is_some()
+        }) else {
+            return false;
+        };
+        let (done, pass) = std::sync::mpsc::channel();
+        let (runtime, owner) = (runtime.clone(), owner.clone());
+        std::thread::spawn(move || {
+            let mut rng = Rng(7);
+            let mut tx = Transaction {
+                clock: &Clock,
+                rng: &mut rng,
+            };
+            let _ = done.send(
+                runtime
+                    .template_resume_waiting(&owner, &mut ResumeMemory::default(), &mut tx)
+                    .map_err(|error| error.code()),
+            );
+        });
+        // The pass must not wait for the asking apply: before HS2-DMA5DR it judged the
+        // record (which reads like an interrupted ask) unlocked and then blocked on the
+        // apply's lock to ask again. The bound only turns that deadlock into a failure.
+        let pass = pass
+            .recv_timeout(std::time::Duration::from_secs(30))
+            .expect("the resume pass waited on the apply still asking its planner");
+        sent.send((pass, asking)).unwrap();
+        true
+    });
+    received
+}
+
+/// HS2-DMA5DR: a resume pass that runs while an apply is still asking its planner
+/// leaves that apply alone, whether the machine then refuses the planner or admits
+/// it: the planner is asked once per attempt, the refusal stays on the record through
+/// every later pass, and only the caller's own repeat makes a newer attempt.
+#[test]
+fn hs2_dma5dr_a_resume_pass_never_acts_on_an_apply_still_asking() {
+    let mut rng = Rng(1300);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let f = Fixture::new(2, &mut tx);
+    let template = f.define("Feature", &mut tx);
+    let attempts = |operation_id: &str| {
+        f.m.runtime
+            .template_apply_show(
+                &f.owner(),
+                &ApplyRef {
+                    operation_id: operation_id.into(),
+                },
+            )
+            .unwrap()
+            .apply
+    };
+    let applies_audited = || {
+        f.m.runtime
+            .audit(&f.owner(), 0, 500)
+            .unwrap()
+            .entries
+            .into_iter()
+            .filter(|entry| entry.record.action == "template_apply")
+            .count()
+    };
+
+    // Refused: the pass inside the ask skips it; the refusal is the apply's outcome.
+    f.probe
+        .set(|observation| observation.cpu.load_percent = Some(96));
+    let during = resume_during_next_ask(&f, 1);
+    let refused = f
+        .apply(
+            &template,
+            json!({"feature": "Billing"}),
+            "op-r",
+            &human(),
+            &mut tx,
+        )
+        .unwrap();
+    let (pass, asking) = during.try_recv().expect("the pass ran inside the ask");
+    assert_eq!(pass, Ok(ResumeReport::default()), "nothing resumed mid-ask");
+    // Mid-ask the record reads like an interrupted ask: no reason yet, attempt 1.
+    assert_eq!(asking.operation_id, "op-r");
+    assert_eq!(asking.state, ApplyState::WaitingPlanner);
+    assert_eq!((asking.attempts, asking.reason.as_deref()), (1, None));
+    assert_eq!(asking.proposal_id.as_deref(), Some("op-r"));
+    assert_eq!(
+        refused.apply.reason.as_deref(),
+        Some("session_admission_refused")
+    );
+    assert_eq!(refused.apply.attempts, 1);
+    // Every later pass (fresh memory, so no backoff hides a try) keeps the refusal.
+    for _ in 0..3 {
+        let report =
+            f.m.runtime
+                .template_resume_waiting(&f.owner(), &mut ResumeMemory::default(), &mut tx)
+                .unwrap();
+        assert!(report.resumed.is_empty(), "{report:?}");
+        let shown = attempts("op-r");
+        assert_eq!(shown.attempts, 1);
+        assert_eq!(shown.proposal_id.as_deref(), Some("op-r"));
+        assert_eq!(shown.reason.as_deref(), Some("session_admission_refused"));
+        assert!(shown.admission.is_some());
+    }
+    assert_eq!(applies_audited(), 1, "one apply, one ask");
+    assert!(f.host.launches().is_empty());
+
+    // The caller's own repeat is the newer outcome: attempt 2, again refused, again
+    // untouched by a pass inside its ask.
+    let during = resume_during_next_ask(&f, 2);
+    let again = f
+        .apply(
+            &template,
+            json!({"feature": "Billing"}),
+            "op-r",
+            &human(),
+            &mut tx,
+        )
+        .unwrap();
+    let (pass, asking) = during.try_recv().expect("the pass ran inside the ask");
+    assert_eq!(pass, Ok(ResumeReport::default()));
+    assert_eq!((asking.attempts, asking.reason.as_deref()), (2, None));
+    assert_eq!(again.apply.attempts, 2);
+    assert_eq!(
+        again.apply.reason.as_deref(),
+        Some("session_admission_refused")
+    );
+    assert_eq!(applies_audited(), 2);
+
+    // Admitted: a pass inside the ask still waits its turn; the planner starts once.
+    f.probe.set(|observation| *observation = roomy());
+    let during = resume_during_next_ask(&f, 3);
+    let taken = f
+        .apply(
+            &template,
+            json!({"feature": "Billing"}),
+            "op-r",
+            &human(),
+            &mut tx,
+        )
+        .unwrap();
+    let (pass, _) = during.try_recv().expect("the pass ran inside the ask");
+    assert_eq!(pass, Ok(ResumeReport::default()));
+    assert_eq!(taken.apply.state, ApplyState::Planning);
+    assert_eq!(taken.apply.attempts, 3);
+    assert!(
+        f.m.runtime
+            .template_resume_waiting(&f.owner(), &mut ResumeMemory::default(), &mut tx)
+            .unwrap()
+            .resumed
+            .is_empty()
+    );
+    assert_eq!(f.host.launches().len(), 1, "one planner");
+    assert_eq!(applies_audited(), 3);
+    assert_eq!(f.goals().len(), 1);
 }
 
 /// HS2-36XDDX: the planner's step for a goal, on a new ticket of target 1.

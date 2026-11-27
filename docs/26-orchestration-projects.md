@@ -7926,6 +7926,17 @@ after a pause that doubles from one second to at most a minute, unless its recor
 changes. `hotsheet-cli orchestration template resume` and `POST templates/resume` run
 one pass headless and answer the applies continued.
 
+A pass never acts on an apply whose own request is still in flight (HS2-DMA5DR). Every
+apply holds the owner's apply-record lock from reading its record until it records the
+planner's answer, and an accept holds it across its writes. The pass judges each apply
+on its record read under that lock and continues it under the same lock; while another
+caller holds it, the pass leaves the apply and that caller's write wakes it again. So an
+apply in the middle of asking (no reason yet and a proposal id, which is what an
+interrupted ask looks like) is never asked again, the planner is asked once per attempt,
+and a recorded refusal stays on the record until a newer outcome replaces it: only the
+caller's own repeat, or the planner becoming free after `planner_busy`, starts the next
+attempt.
+
 The apply is recorded machine-locally in
 `${HOTSHEET_HOME}/orchestration-template-applies/<owner>.json` (mode 0600, at most 256;
 the oldest finished one is forgotten first, an unfinished one never). The record keeps

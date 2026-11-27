@@ -123,6 +123,15 @@ impl Storage {
         Ok(FileLock::acquire(self.open(&path, true)?)?)
     }
 
+    /// HS2-DMA5DR: the same lock taken only when nobody holds it right now; `None`
+    /// means another caller is at work under it.
+    pub(crate) fn try_lock(&self) -> Result<Option<FileLock>, OrchestrationError> {
+        self.ensure_parent()?;
+        let path = self.path.with_extension("json.lock");
+        reject_nonregular(&path)?;
+        Ok(FileLock::try_acquire(self.open(&path, true)?)?)
+    }
+
     pub(crate) fn read(&self, limit: usize) -> Result<Option<Vec<u8>>, OrchestrationError> {
         self.check_directories()?;
         reject_nonregular(&self.path)?;

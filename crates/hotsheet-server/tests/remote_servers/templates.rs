@@ -385,6 +385,118 @@ async fn hs2_4bqacq_a_refused_planner_admission_keeps_its_numbers_on_a_real_serv
     assert_eq!(drawer(&world.router).await.len(), 1);
 }
 
+/// HS2-DMA5DR: with the server's automation thread running its resume pass on every
+/// apply write, applies the machine refuses each ask their planner once: the pass
+/// never takes an apply that is still asking for an interrupted one, so no record
+/// shows a second attempt or loses its refusal, and the audit holds one refused
+/// `plan_propose` and one `template_apply` per apply. The refusal comes from the admission file (no real load).
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn hs2_dma5dr_the_resume_pass_leaves_a_refused_apply_at_one_attempt_on_a_real_server() {
+    let world = World::new(
+        &["tickets_read", "sessions_manage"],
+        PUSH_AGENT,
+        PUSH_PLUGIN,
+    )
+    .await;
+    world.host.spawn_orchestration_automation();
+    let person = json!({"role":"human","id":"maintainer"});
+    let (status, set) = world
+        .call(
+            "POST",
+            "/templates/set",
+            json!({"templates":[template("Build {{feature}}")],"actor":person}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{set}");
+    let template_id = set["templates"][0]["template_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    std::fs::write(
+        world.home.join("orchestration-admission.json"),
+        br#"{"schema_version":1,"admission":{"max_sessions":0}}"#,
+    )
+    .unwrap();
+    let operations: Vec<String> = (1..=5).map(|n| format!("tpl-refused-{n}")).collect();
+    let shown = |operation: &str| {
+        let world = &world;
+        let operation = operation.to_owned();
+        async move {
+            let (status, shown) = world
+                .call(
+                    "POST",
+                    "/templates/apply_show",
+                    json!({"operation_id": operation}),
+                )
+                .await;
+            assert_eq!(status, StatusCode::OK, "{shown}");
+            shown
+        }
+    };
+    for (n, operation) in operations.iter().enumerate() {
+        let (status, refused) = world
+            .call(
+                "POST",
+                "/templates/apply",
+                json!({"template_id":template_id,"inputs":{"feature":format!("Feature {n}")},
+                    "tool":REPORT_TOOL,"operation_id":operation,"actor":person}),
+            )
+            .await;
+        assert_eq!(status, StatusCode::OK, "{refused}");
+        assert_eq!(refused["reason"], "session_admission_refused", "{refused}");
+        assert_eq!(refused["attempts"], 1, "{refused}");
+        // Every earlier apply keeps its one refused attempt while the pass runs.
+        for earlier in &operations[..=n] {
+            let record = shown(earlier).await;
+            assert_eq!(record["state"], "waiting_planner", "{record}");
+            assert_eq!(record["attempts"], 1, "{record}");
+            assert_eq!(record["proposal_id"], earlier.as_str(), "{record}");
+            assert_eq!(record["reason"], "session_admission_refused", "{record}");
+        }
+    }
+    // A headless pass, as the automation thread's, finds nothing to continue.
+    let (status, again) = world.call("POST", "/templates/resume", json!({})).await;
+    assert_eq!(status, StatusCode::OK, "{again}");
+    assert_eq!(again["resumed"], json!([]), "{again}");
+    for operation in &operations {
+        let record = shown(operation).await;
+        assert_eq!(record["attempts"], 1, "{record}");
+        assert_eq!(record["reason"], "session_admission_refused", "{record}");
+    }
+    let (_, audit) = world.call("GET", "/audit", Value::Null).await;
+    // One planner ask (refused) and one apply per operation, in order.
+    let asks: Vec<(String, String, String)> = audit["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|entry| entry["action"] == "template_apply" || entry["action"] == "plan_propose")
+        .map(|entry| {
+            let text = |key: &str| entry[key].as_str().unwrap_or_default().to_owned();
+            (text("action"), text("operation_id"), text("reason"))
+        })
+        .collect();
+    let expected: Vec<(String, String, String)> = operations
+        .iter()
+        .flat_map(|operation| {
+            [
+                (
+                    "plan_propose".to_owned(),
+                    operation.clone(),
+                    "session_admission_refused".to_owned(),
+                ),
+                (
+                    "template_apply".to_owned(),
+                    operation.clone(),
+                    "template_waiting_planner".to_owned(),
+                ),
+            ]
+        })
+        .collect();
+    assert_eq!(asks, expected, "{audit}");
+    assert!(drawer(&world.router).await.is_empty(), "no planner started");
+    world.host.begin_stopping();
+}
+
 /// HS2-K3ESZR: the preview checks the test profiles a template's steps name against
 /// the profiles the project offers, read from its checked-in file through the gate
 /// as an observation: an unknown profile is a coded problem, a damaged file is one

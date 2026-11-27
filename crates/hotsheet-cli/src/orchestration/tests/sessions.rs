@@ -51,6 +51,9 @@ pub(super) struct ScriptedHost {
     /// and before the caller records that answer: a readiness event that lands while
     /// the push is under way.
     pub(super) during_push: PushHook,
+    /// HS2-DMA5DR: runs inside each read of the host's sessions until it answers true
+    /// (a reader of the host in the middle of a caller's request).
+    pub(super) during_sessions: UntilHook,
 }
 
 /// HS2-9QQ0M9: what a [`PushHook`] runs, with the terminal id.
@@ -74,6 +77,40 @@ impl PushHook {
             .take();
         if let Some(hook) = hook {
             hook(session_id);
+        }
+    }
+}
+
+/// HS2-DMA5DR: what an [`UntilHook`] runs; true once it did its work.
+type UntilHookFn = Box<dyn FnMut() -> bool + Send>;
+
+/// HS2-DMA5DR: a hook a test arms to run at each call until it answers true. While it
+/// runs it is taken out, so a call from another thread meanwhile does not run it.
+#[derive(Default)]
+pub(super) struct UntilHook(Mutex<Option<UntilHookFn>>);
+impl UntilHook {
+    pub(super) fn arm(&self, hook: impl FnMut() -> bool + Send + 'static) {
+        *self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(Box::new(hook));
+    }
+    fn fire(&self) {
+        let hook = self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take();
+        if let Some(mut hook) = hook
+            && !hook()
+        {
+            let mut slot = self
+                .0
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if slot.is_none() {
+                *slot = Some(hook);
+            }
         }
     }
 }
@@ -197,6 +234,7 @@ impl SessionHost for ScriptedHost {
         })
     }
     fn sessions(&self, _: &Checkout) -> Option<Vec<HostSessionState>> {
+        self.during_sessions.fire();
         (!self.down.load(Ordering::SeqCst)).then(|| self.live().clone())
     }
     fn stop(&self, _: &Checkout, session_id: &str) -> Result<(), SessionHostError> {

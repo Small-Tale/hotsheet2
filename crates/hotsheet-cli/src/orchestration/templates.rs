@@ -1388,6 +1388,21 @@ impl OrchestrationRuntime {
         let owner = self.owner(owner_id)?;
         let store = self.template_applies(owner_id)?;
         let _lock = store.lock()?;
+        self.template_apply_locked(&owner, &store, request, actor, tx)
+    }
+
+    /// [`Self::template_apply`] once the caller holds the apply records' lock, which
+    /// stays held across the planner's ask so no other caller acts on the apply
+    /// meanwhile (HS2-DMA5DR).
+    fn template_apply_locked(
+        &self,
+        owner: &Checkout,
+        store: &TemplateApplyStore,
+        request: ApplyTemplate,
+        actor: Option<&MutationActor>,
+        tx: &mut Transaction<'_>,
+    ) -> Result<TemplateApplyView, OrchestrationError> {
+        let owner_id = owner.id.as_str();
         let existing = store.find(&request.operation_id)?;
         let mut apply = match decide_apply(
             existing.as_ref(),
@@ -1418,7 +1433,7 @@ impl OrchestrationRuntime {
             }
             ApplyDecision::Resume => existing.ok_or(OrchestrationError::Corrupt)?,
             ApplyDecision::New => {
-                let template = self.active_template(&owner, &request.template_id)?;
+                let template = self.active_template(owner, &request.template_id)?;
                 let (inputs, problems) = resolve_inputs(&template, &request.inputs);
                 if !problems.is_empty()
                     || request
@@ -1456,7 +1471,7 @@ impl OrchestrationRuntime {
                 }
             }
         };
-        let result = self.template_apply_steps(&owner, &store, &mut apply, actor, tx);
+        let result = self.template_apply_steps(owner, store, &mut apply, actor, tx);
         let reason = match &result {
             Ok(()) => match apply.state {
                 ApplyState::Planning => "template_planning",
@@ -1808,6 +1823,11 @@ impl OrchestrationRuntime {
     /// Anything else waits for its caller. An apply left waiting is tried again only
     /// after a pause that doubles up to [`MAX_RESUME_BACKOFF_MS`], so a planner that
     /// stays busy is not asked at every wake. Audited as the ordinary `template_apply`.
+    ///
+    /// HS2-DMA5DR: each apply is judged on its record read under the apply records'
+    /// lock and continued under that same lock; while a request holds it (an apply
+    /// still asking its planner, an accept) the pass leaves the apply alone, so it never
+    /// asks a planner twice for one attempt nor replaces a recorded refusal.
     pub fn template_resume_waiting(
         &self,
         owner_id: &str,
@@ -1816,13 +1836,31 @@ impl OrchestrationRuntime {
     ) -> Result<ResumeReport, OrchestrationError> {
         let owner = self.owner(owner_id)?;
         let now = tx.clock.now_ms();
-        let applies = self.template_applies(owner_id)?.applies()?;
+        let store = self.template_applies(owner_id)?;
+        let listed = store.applies()?;
         memory
             .tried
-            .retain(|operation, _| applies.iter().any(|apply| &apply.operation_id == operation));
+            .retain(|operation, _| listed.iter().any(|apply| &apply.operation_id == operation));
         let mut planner_free: Option<bool> = None;
         let mut report = ResumeReport::default();
-        for apply in applies {
+        for seen in listed {
+            if !matches!(
+                seen.state,
+                ApplyState::WaitingPermission | ApplyState::WaitingPlanner
+            ) {
+                continue;
+            }
+            // HS2-DMA5DR: judge and act only under the apply records' lock, which every
+            // apply holds across its whole ask. A held lock means a request is still in
+            // flight (mid-ask an apply reads like an interrupted one: no reason, a
+            // proposal id), so the pass leaves it; that request's own write wakes the
+            // automation thread again. The listed copy only says what to look at.
+            let Some(_lock) = store.try_lock()? else {
+                continue;
+            };
+            let Some(apply) = store.find(&seen.operation_id)? else {
+                continue;
+            };
             if let Some((_, next_at, seen)) = memory.tried.get(&apply.operation_id)
                 && *seen == apply.updated_at_ms
                 && now < *next_at
@@ -1838,6 +1876,8 @@ impl OrchestrationRuntime {
                             .all(|request| !self.permission_waiting(owner_id, request, now))
                 }
                 ApplyState::WaitingPlanner => {
+                    // A refusal stays on the record until a newer outcome replaces it:
+                    // only a busy planner or a real interruption is asked again here.
                     let resumable = apply.reason.is_none()
                         || apply.reason.as_deref() == Some(ReadinessError::PlannerBusy.code());
                     resumable && *planner_free.get_or_insert_with(|| self.planner_free(&owner, tx))
@@ -1863,15 +1903,14 @@ impl OrchestrationRuntime {
                 operation_id: apply.operation_id.clone(),
             };
             let (state, reason, updated) =
-                match self.template_apply(owner_id, request, Some(&actor), tx) {
+                match self.template_apply_locked(&owner, &store, request, Some(&actor), tx) {
                     Ok(view) => (
                         view.apply.state,
                         view.apply.reason.clone(),
                         view.apply.updated_at_ms,
                     ),
                     Err(error) => {
-                        let current = self
-                            .template_applies(owner_id)?
+                        let current = store
                             .find(&apply.operation_id)?
                             .unwrap_or_else(|| apply.clone());
                         (

@@ -375,11 +375,14 @@ test('HS2-4BQACQ Use Template… says why the machine refused the planner, with 
       actor: person,
     });
     const [{ operation_id }] = listed.applies as Array<{ operation_id: string }>;
-    // The server may ask the planner once more on its own meanwhile (refused the same way): read the settled record.
-    const shown = () =>
-      send(server, 'POST', `/checkouts/${server.checkoutId}/orchestration/templates/apply_show`, { operation_id });
-    await expect.poll(shown, { timeout: 30_000 }).toMatchObject({
+    // HS2-DMA5DR: the server's resume pass never asks again for an apply still asking, so the record is settled at once.
+    const shown = await send(server, 'POST', `/checkouts/${server.checkoutId}/orchestration/templates/apply_show`, {
+      operation_id,
+    });
+    expect(shown).toMatchObject({
       state: 'waiting_planner',
+      attempts: 1,
+      proposal_id: operation_id,
       reason: 'session_admission_refused',
       admission: { reason: 'session_cap_reached', setting: 'max_sessions', limit: 0 },
     });

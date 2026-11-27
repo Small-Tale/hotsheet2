@@ -1283,6 +1283,13 @@ impl TemplateApplyStore {
         self.storage.lock()
     }
 
+    /// HS2-DMA5DR: the apply records' lock only when it is free. Every apply holds it
+    /// across its whole ask (and an accept across its writes), so `None` means a
+    /// request on these records is still in flight.
+    pub fn try_lock(&self) -> Result<Option<crate::FileLock>, OrchestrationError> {
+        self.storage.try_lock()
+    }
+
     fn read(&self) -> Result<AppliesFile, OrchestrationError> {
         match self.storage.read(MAX_APPLY_BYTES)? {
             Some(bytes) => decode(&bytes),

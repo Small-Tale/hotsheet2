@@ -923,3 +923,32 @@ fn hs2_36xddx_records_still_waiting_for_an_accept_are_forgotten_last() {
     assert_eq!(kept.len(), MAX_TEMPLATE_APPLIES);
     assert_eq!(kept[0].operation_id, "op-wait-1");
 }
+
+/// HS2-DMA5DR: the apply records' lock taken only when free: held by another caller
+/// (another handle on the same records, as another thread or process has) it answers
+/// `None` and blocks nothing; released, it is taken; held by the try, a second try is
+/// refused again, and the records stay readable meanwhile.
+#[test]
+fn hs2_dma5dr_the_apply_lock_is_tried_without_waiting() {
+    let home = tempfile::tempdir().unwrap();
+    let store = TemplateApplyStore::new(home.path(), "launch-0123456789ab").unwrap();
+    let other = TemplateApplyStore::new(home.path(), "launch-0123456789ab").unwrap();
+    // Free before anything was written: the lock file is made on demand.
+    let first = store.try_lock().unwrap().expect("free");
+    assert!(other.try_lock().unwrap().is_none(), "held by the try");
+    let asking = apply(ApplyState::WaitingPlanner);
+    store.write(&asking).unwrap();
+    assert_eq!(other.find("op-1").unwrap(), Some(asking));
+    drop(first);
+    let held = other.lock().unwrap();
+    assert!(
+        store.try_lock().unwrap().is_none(),
+        "held by a waiting lock"
+    );
+    drop(held);
+    assert!(store.try_lock().unwrap().is_some(), "free again");
+    // Another owner's records have their own lock.
+    let _mine = store.lock().unwrap();
+    let elsewhere = TemplateApplyStore::new(home.path(), "other-0123456789ab").unwrap();
+    assert!(elsewhere.try_lock().unwrap().is_some());
+}
