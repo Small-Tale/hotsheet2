@@ -6,7 +6,13 @@
  */
 import { parseRequiredResources, type ResourceStandingView } from './orchestration-resources';
 import type { OrchestrationTimeline, TimelineItem } from './orchestration-timeline';
-import { type ClockFormat, toolLabel } from './orchestration-timeline-board';
+import {
+  type ClockFormat,
+  machinePhrase,
+  signedOutText,
+  signedOutTool,
+  toolLabel,
+} from './orchestration-timeline-board';
 
 /** One decision log record (`DecisionRecord`), as much of it as the view shows. */
 export interface SchedulerDecision {
@@ -98,9 +104,14 @@ const MODEL_DETAILS: Readonly<Record<string, string>> = {
   no_matching_model: 'no model its machine reports is an allowed model',
 };
 
-/** HS2-747WQA: a scheduler reason as a phrase, or its model-resolution detail in its place when it has one. */
-export function schedulerReasonWithModel(code: string, detail: string | undefined): string {
+/**
+ * HS2-747WQA: a scheduler reason as a phrase, or its model-resolution detail in its place when it has one.
+ * HS2-ZRPZJJ: a signed-out tool is named with its machine (`machine`, "its machine" when not known).
+ */
+export function schedulerReasonWithModel(code: string, detail: string | undefined, machine = 'its machine'): string {
   if (detail && MODEL_DETAILS[detail]) return MODEL_DETAILS[detail];
+  const signedOut = signedOutTool(detail);
+  if (signedOut) return signedOutText(signedOut, machine);
   // HS2-2Y535C: a policy block names the limit that denied it.
   const limit = code === 'policy_denied' && detail ? SITE_PASS_DETAILS[detail] : undefined;
   return limit ? `${schedulerReasonText(code)} (${limit})` : schedulerReasonText(code);
@@ -114,10 +125,12 @@ const NOT_CHOSEN: Readonly<Record<string, string>> = {
   site_order: 'another site was as good and comes first',
 };
 
-/** HS2-9FKTB3: why one site of the project was passed over, as a phrase. */
-export function sitePassText(pass: SchedulerSitePass): string {
+/** HS2-9FKTB3: why one site of the project was passed over, as a phrase; `machine` names the site's machine. */
+export function sitePassText(pass: SchedulerSitePass, machine = 'its machine'): string {
   if (pass.reason === 'not_chosen') return (pass.detail && NOT_CHOSEN[pass.detail]) || 'another site was chosen';
   if (pass.detail && MODEL_DETAILS[pass.detail]) return MODEL_DETAILS[pass.detail];
+  const signedOut = signedOutTool(pass.detail);
+  if (signedOut) return signedOutText(signedOut, machine);
   const reason = schedulerReasonText(pass.reason);
   const detail = sitePassDetail(pass);
   return detail ? `${reason} (${detail})` : reason;
@@ -175,16 +188,21 @@ const STANDINGS: Readonly<Record<string, string>> = {
 const NEVER_JOINED_NEXT =
   'Open the AI tool in a terminal of its project to check that it starts and is signed in, or work the ticket by hand';
 
-/** The Why It Is Not Running rows from `scheduler explain`, with the time of the scheduler's last pass. */
+/**
+ * The Why It Is Not Running rows from `scheduler explain`, with the time of the scheduler's last pass. `item`
+ * names the machine of the step's own site (HS2-ZRPZJJ); a passed-over site's machine comes from the timeline.
+ */
 export function explanationRows(
   explanation: SchedulerExplanation,
   clock: ClockFormat,
   lastPassMs?: number,
   timeline?: OrchestrationTimeline,
+  item?: Pick<TimelineItem, 'location' | 'machine_label'>,
 ): Array<{ label: string; value: string }> {
+  const machine = machinePhrase(item);
   const standing =
     explanation.standing === 'not_placed'
-      ? `Waits: ${schedulerReasonWithModel(explanation.reason, explanation.detail)}`
+      ? `Waits: ${schedulerReasonWithModel(explanation.reason, explanation.detail, machine)}`
       : (STANDINGS[explanation.standing] ?? sentence(words(explanation.standing)));
   const rows = [
     { label: 'Scheduler', value: lastPassMs === undefined ? standing : `${standing} (last pass ${clock(lastPassMs)})` },
@@ -195,8 +213,20 @@ export function explanationRows(
   // HS2-9FKTB3: the site chosen among the project's sites, and why each other one was passed over.
   const passed = explanation.sites ?? [];
   if (explanation.site && passed.length > 0) rows.push({ label: 'Site', value: siteLabel(explanation.site, timeline) });
-  for (const pass of passed)
-    rows.push({ label: `Not on ${siteLabel(pass.target_id, timeline)}`, value: sentence(sitePassText(pass)) });
+  for (const pass of passed) {
+    const site = timeline?.targets.find((target) => target.target_id === pass.target_id);
+    rows.push({
+      label: `Not on ${siteLabel(pass.target_id, timeline)}`,
+      value: sentence(sitePassText(pass, machinePhrase(site))),
+    });
+  }
+  // HS2-ZRPZJJ: what a person can do while the step's AI tool is signed out on its machine.
+  const signedOut = explanation.standing === 'not_placed' ? signedOutTool(explanation.detail) : undefined;
+  if (signedOut)
+    rows.push({
+      label: 'What to do',
+      value: `Sign in to ${toolLabel(signedOut) ?? signedOut} on ${machine}, or allow another AI tool for its project`,
+    });
   // HS2-ADASY5: what a person can do while the step's sessions do not take up its work.
   if (explanation.reason === 'never_joined') rows.push({ label: 'What to do', value: NEVER_JOINED_NEXT });
   if (explanation.retry_at_ms !== undefined)

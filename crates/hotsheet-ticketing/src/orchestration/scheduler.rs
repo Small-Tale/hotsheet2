@@ -902,6 +902,7 @@ pub fn is_capacity_refusal(code: &str) -> bool {
         || [
             R::ToolNotInstalled,
             R::ToolNotConfigured,
+            R::ToolSignedOut,
             R::SessionCapReached,
             R::AboveCpuCeiling,
             R::BelowDiskFloor,
@@ -910,6 +911,24 @@ pub fn is_capacity_refusal(code: &str) -> bool {
         ]
         .iter()
         .any(|reason| reason.code() == code)
+}
+
+/// HS2-ZRPZJJ: the `no_tool_available` detail for work whose tool is signed out on
+/// its machine: `tool_signed_out:<tool>`, so the view can say which tool, as a
+/// requirement's detail names the requirement.
+pub fn signed_out_detail(tool: &str) -> String {
+    format!(
+        "{}:{tool}",
+        super::capacity::AdmissionReason::ToolSignedOut.code()
+    )
+}
+
+/// HS2-ZRPZJJ: whether a block's detail says its tool is signed out on the machine.
+/// A sign-in there changes the machine's capacity version, so the change can end it.
+pub fn is_signed_out_detail(detail: &str) -> bool {
+    detail
+        .split_once(':')
+        .is_some_and(|(code, _)| code == super::capacity::AdmissionReason::ToolSignedOut.code())
 }
 
 /// HS2-AWB7BX: forget a target's capacity refusal because its capacity changed, so the
@@ -1555,10 +1574,28 @@ fn try_site<'a>(cx: &SiteContext<'_, 'a>) -> SiteTry<'a> {
             break;
         }
         let reason = admission.reason.unwrap_or(AdmissionReason::CapacityUnknown);
+        if reason == AdmissionReason::ToolSignedOut {
+            // HS2-ZRPZJJ: another allowed tool may be signed in there. The first
+            // signed-out tool is named, over a missing one: signing in is what a
+            // person can do.
+            if !nearest
+                .as_ref()
+                .is_some_and(|(_, detail, _)| is_signed_out_detail(detail))
+            {
+                nearest = Some((Blocker::NoTool, signed_out_detail(&candidate.tool), None));
+            }
+            continue;
+        }
         if matches!(
             reason,
             AdmissionReason::ToolNotInstalled | AdmissionReason::ToolNotConfigured
         ) {
+            if nearest
+                .as_ref()
+                .is_some_and(|(_, detail, _)| is_signed_out_detail(detail))
+            {
+                continue;
+            }
             // Another allowed tool may be present on that machine.
             nearest = Some((Blocker::NoTool, reason.code().into(), None));
             continue;

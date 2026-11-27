@@ -38,6 +38,7 @@ fn capabilities() -> HostCapabilities {
         ai_tools: Some(vec![ToolVersion {
             tool: "codex".into(),
             version: Some("0.1.0".into()),
+            signed_in: None,
         }]),
         toolchains: Some(vec![toolchain("cargo", true), toolchain("docker", false)]),
     }
@@ -497,6 +498,7 @@ fn versioned(codex_version: Option<&str>, node_version: Option<&str>) -> Capacit
     caps.ai_tools = Some(vec![ToolVersion {
         tool: "codex".into(),
         version: codex_version.map(Into::into),
+        signed_in: None,
     }]);
     caps.toolchains = Some(vec![ToolchainCapability {
         name: "node".into(),
@@ -660,4 +662,37 @@ fn hs2_zh9c6w_versions_compare_part_by_part() {
     assert!(!version_at_least(&[1, 9], &[1, 10]));
     assert_eq!(split_minimum("node>=20"), ("node", Some("20")));
     assert_eq!(split_minimum("node"), ("node", None));
+}
+
+/// HS2-S1FEYY: a tool's sign-in state is reported only when known, and a change of it
+/// changes the capacity version, so a Systems long poll answers when a tool signs in or
+/// out. A snapshot that does not report it keeps its version.
+#[test]
+fn hs2_s1feyy_sign_in_state_is_optional_and_versioned() {
+    let with = |signed_in: Option<bool>| {
+        let mut caps = capabilities();
+        caps.ai_tools = Some(vec![ToolVersion {
+            tool: "codex".into(),
+            version: Some("1.0.0".into()),
+            signed_in,
+        }]);
+        snapshot(Some(caps), Some(32 * 1024)).with_version()
+    };
+    let unknown = with(None);
+    assert!(
+        serde_json::to_value(&unknown).unwrap()["capabilities"]["ai_tools"][0]
+            .get("signed_in")
+            .is_none()
+    );
+    assert_eq!(
+        serde_json::to_value(with(Some(false))).unwrap()["capabilities"]["ai_tools"][0]["signed_in"],
+        serde_json::json!(false)
+    );
+    // An older peer's tool entry without the field reads as unknown.
+    let older: ToolVersion =
+        serde_json::from_value(serde_json::json!({ "tool": "codex", "version": "1.0.0" })).unwrap();
+    assert_eq!(older.signed_in, None);
+    assert_ne!(with(Some(true)).version, with(Some(false)).version);
+    assert_ne!(with(Some(true)).version, unknown.version);
+    assert_eq!(with(Some(true)).version, with(Some(true)).version);
 }

@@ -37,8 +37,12 @@ describe('HS2-DR0ZSQ SystemsView', () => {
     expect(markup).toMatch(/This Computer · macOS · aarch64/u);
     expect(markup).toContain('data-card="cpu"');
     expect(markup).toContain('data-component="cpu-core-meter"');
-    expect(markup).toContain('data-systems-ai-tool="claude" data-installed="true"');
-    expect(markup).toContain('2 sessions running');
+    expect(markup).toContain('data-systems-ai-tool="claude" data-installed="true" data-signed-in="true"');
+    expect(markup).toContain('Signed in · 2 sessions running');
+    // HS2-S1FEYY: each tool's sign-in badge, as the approved mock shows it.
+    expect(markup).toMatch(/data-systems-ai-tool="claude"[^]*?>Signed In</u);
+    expect(markup).toContain('data-systems-ai-tool="opencode" data-installed="true" data-signed-in="false"');
+    expect(markup).toMatch(/data-systems-ai-tool="opencode"[^]*?>Signed Out</u);
     expect(markup).toContain('Example M-Series · 12 cores');
     expect(markup).toContain('22.1 GB free of 64.0 GB');
     expect(markup).toMatch(/>xcode<[^]*>17\.0</u);
@@ -49,8 +53,12 @@ describe('HS2-DR0ZSQ SystemsView', () => {
     const markup = html(SystemsView(systemsDemoView('build', 'ready')));
     expect(markup).toMatch(/Paired Remote · macOS/u);
     expect(markup).not.toContain('data-pending-disk');
-    expect(markup).toContain('data-systems-ai-tool="opencode" data-installed="false"');
+    expect(markup).toContain('data-systems-ai-tool="opencode" data-installed="false" data-signed-in="unknown"');
+    expect(markup).toMatch(/data-systems-ai-tool="opencode"[^]*?>Not Installed</u);
     expect(markup).toContain('Not installed on this machine');
+    // A machine that cannot tell whether a tool is signed in shows it as Installed.
+    expect(markup).toContain('data-systems-ai-tool="codex" data-installed="true" data-signed-in="unknown"');
+    expect(markup).toMatch(/data-systems-ai-tool="codex"[^]*?>Installed</u);
   });
 
   it('says how to connect a machine without readings', () => {
@@ -58,6 +66,10 @@ describe('HS2-DR0ZSQ SystemsView', () => {
     expect(offline).toContain('Travel Laptop Is Not Connected');
     expect(offline).not.toContain('data-component="stats-this-mac"');
     expect(html(SystemsView(systemsDemoView('revoked', 'ready')))).toContain('Lab Box Revoked This Computer');
+    // HS2-CMXKK2: a remote read through its binding that did not answer says why.
+    const unreachable = html(SystemsView(systemsDemoView('unreachable', 'ready')));
+    expect(unreachable).toContain('Render Box Is Not Reachable');
+    expect(unreachable).toContain('Remote server is unavailable or its approval changed.');
   });
 
   it('shows loading, a failed first read, and stale readings after a failure', () => {
@@ -159,6 +171,38 @@ describe('HS2-DR0ZSQ SystemsInspector', () => {
     expect(html(SystemsInspector({ machine: SYSTEMS_DEMO_MACHINES.local, sessions: [] }))).toContain(
       'No AI session is running here.',
     );
+  });
+
+  it('HS2-5H8R0N shows Admission by Project and the owner’s Placement Limits, with why when there are none', () => {
+    const markup = html(SystemsInspector(systemsDemoInspector('local', 'ready')));
+    expect(markup.indexOf('Admission by Project')).toBeLessThan(markup.indexOf('AI Sessions Here'));
+    expect(markup.indexOf('AI Sessions Here')).toBeLessThan(markup.indexOf('Placement Limits'));
+    expect(markup).toContain('data-systems-admission="demo-local:P1"');
+    expect(markup).toMatch(/Hot Sheet 2[^]*?Claude: Can start 1 now · Codex: Can start 1 now[^]*?>Can start 1 now</u);
+    expect(markup).toMatch(/Website[^]*?Claude: Refused · session cap reached[^]*?>Refused</u);
+    expect(markup).toMatch(/Internal API[^]*?>No AI tool allowed here</u);
+    expect(markup).toMatch(/data-systems-limit="Sessions per Machine"[^]*?>10</u);
+    expect(markup).toMatch(/data-systems-limit="Free Memory Floor"[^]*?1\.0 GB/u);
+    expect(markup).toMatch(/data-systems-limit="CPU Ceiling"[^]*?95%/u);
+    expect(markup).toMatch(/data-systems-limit="Free Disk Floor"[^]*?5\.0 GB/u);
+    // A machine whose owner set no limit leaves each one to the projects' policies.
+    const build = html(SystemsInspector(systemsDemoInspector('build', 'ready')));
+    expect(build).toContain('No orchestrated project runs on this machine.');
+    expect(build).toMatch(/Sessions per Machine[^]*?Set by each project/u);
+    expect(html(SystemsInspector(systemsDemoInspector('offline', 'ready')))).toContain(
+      'Admission shows while the machine is connected.',
+    );
+    expect(html(SystemsInspector(systemsDemoInspector('offline', 'ready')))).toContain(
+      'Limits show while the machine is connected.',
+    );
+    expect(html(SystemsInspector(systemsDemoInspector('local', 'loading')))).toMatch(/Placement Limits[^]*Loading…/u);
+    expect(html(SystemsInspector(systemsDemoInspector('local', 'failed')))).toContain(
+      'Limits are not available. The Hot Sheet server could not be reached.',
+    );
+    // An older host reports no limits; without an orchestration project Admission says how to get one.
+    const older = html(SystemsInspector({ machine: SYSTEMS_DEMO_MACHINES.local, sessions: [], capacityRead: true }));
+    expect(older).toContain('This machine does not report its limits.');
+    expect(older).toContain('Open an orchestration project to see what it can start here.');
   });
 
   it('titles the right rail with the machine and its kind', () => {

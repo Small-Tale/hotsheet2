@@ -67,9 +67,12 @@ fn loopback_monitor(provider_url: &str) -> DetachedJobMonitor {
 /// A roomy machine with the fake tools installed. HS2-RCR4A6: with an OS it also
 /// reports its capabilities (HS2-ZY4Z4G), as a machine of that family would, so a
 /// step's requirements are matched against it without probing the real host.
+/// HS2-ZRPZJJ: with a sign-in status program, each tool's sign-in is that program's
+/// exit, probed as the real host probes a declared `auth_status_args` command.
 struct Roomy(
     Vec<&'static str>,
     Option<hotsheet_ticketing::orchestration::OsFamily>,
+    Option<PathBuf>,
 );
 impl hotsheet_server::CapacitySource for Roomy {
     fn machine(&mut self) -> hotsheet_server::MachineReading {
@@ -98,8 +101,28 @@ impl hotsheet_server::CapacitySource for Roomy {
         _: &[PathBuf],
         _: &[String],
     ) -> Option<hotsheet_ticketing::orchestration::HostCapabilities> {
-        self.1
-            .map(|os| hotsheet_ticketing::orchestration::HostCapabilities::bare(os, "arm64"))
+        use hotsheet_ticketing::orchestration::{HostCapabilities, OsFamily, ToolVersion};
+        let Some(status) = &self.2 else {
+            return self.1.map(|os| HostCapabilities::bare(os, "arm64"));
+        };
+        let args = ["auth".to_owned(), "status".to_owned()];
+        Some(HostCapabilities {
+            ai_tools: Some(
+                self.0
+                    .iter()
+                    .map(|tool| ToolVersion {
+                        tool: (*tool).to_owned(),
+                        version: None,
+                        signed_in: hotsheet_server::signed_in_at(
+                            status,
+                            &args,
+                            Duration::from_secs(10),
+                        ),
+                    })
+                    .collect(),
+            ),
+            ..HostCapabilities::bare(self.1.unwrap_or(OsFamily::Linux), "arm64")
+        })
     }
 }
 
@@ -152,6 +175,28 @@ args = ["--report-dir", {reports:?}, {agent} "--print", "ready", "--hold-ms", "6
     )
     .unwrap();
     plugins
+}
+
+/// HS2-ZRPZJJ: a synthetic AI tool's sign-in status program. Like a real tool's
+/// `auth status` it prints an account line whatever the answer, and only its exit says
+/// whether the tool is signed in: 1 while a `signed-out` file is beside it, else 0. It
+/// starts signed out.
+fn sign_in_status(root: &Path) -> PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+    let directory = root.join("sign-in");
+    std::fs::create_dir_all(&directory).unwrap();
+    let program = directory.join("auth-status");
+    std::fs::write(
+        &program,
+        format!(
+            "#!/bin/sh\necho synthetic-account@example.invalid\n[ \"$1 $2\" = 'auth status' ] || exit 2\n[ -f {:?} ] && exit 1\nexit 0\n",
+            directory.join("signed-out")
+        ),
+    )
+    .unwrap();
+    std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o755)).unwrap();
+    std::fs::write(directory.join("signed-out"), "").unwrap();
+    program
 }
 
 fn git(dir: &Path, args: &[&str]) -> String {
@@ -326,6 +371,9 @@ pub(super) struct Fleet {
     /// HS2-EQ7K35: the peer's target B is the project's home and the controller's
     /// target A a site of it, so the orchestrator runs away from the home.
     peer_is_home: bool,
+    /// HS2-ZRPZJJ: the controller's sign-in status program, when its tools report
+    /// sign-in: it exits 1 (signed out) while a `signed-out` file is beside it.
+    auth_status: Option<PathBuf>,
     /// HS2-EX594V: the controller's delay before a home outage is announced; `None`
     /// keeps the runtime's default.
     home_notify_after: Option<Duration>,
@@ -338,26 +386,32 @@ impl Fleet {
     /// Two servers, both targets declared, bound, with remembered rules and allowed by a policy
     /// whose placement is not automatic yet.
     pub(super) async fn new() -> Self {
-        Self::build(Layout::Separate, false, None, None, false).await
+        Self::build(Layout::Separate, false, None, None, false, false).await
+    }
+
+    /// HS2-ZRPZJJ: [`Fleet::new`] whose controller reports its tool's sign-in from a
+    /// sign-in status program, signed out until [`Fleet::sign_in`].
+    pub(super) async fn signed_out() -> Self {
+        Self::build(Layout::Separate, false, None, None, false, true).await
     }
 
     /// HS2-QV00AP: [`Fleet::new`] whose peer also starts a real Job monitor process
     /// for its hosted watches and pipeline reads, pointed at the loopback provider as
     /// the controller's is.
     pub(super) async fn with_peer_monitor() -> Self {
-        Self::build(Layout::Separate, false, None, None, true).await
+        Self::build(Layout::Separate, false, None, None, true, false).await
     }
 
     /// HS2-RCR4A6: the same two servers holding one project as two sites ([`Layout::Sites`]).
     pub(super) async fn sites() -> Self {
-        Self::build(Layout::Sites, false, None, None, false).await
+        Self::build(Layout::Sites, false, None, None, false, false).await
     }
 
     /// HS2-EQ7K35: the same two sites with the peer's target B as the project's home and
     /// the controller's target A a site of it. The controller announces a home outage
     /// after `notify_after`.
     pub(super) async fn sites_peer_home(notify_after: Duration) -> Self {
-        Self::build(Layout::Sites, true, Some(notify_after), None, false).await
+        Self::build(Layout::Sites, true, Some(notify_after), None, false, false).await
     }
 
     /// HS2-1CC1TQ: [`Self::sites_peer_home`] whose controller reads a home on record as
@@ -373,6 +427,7 @@ impl Fleet {
             Some(notify_after),
             Some(recheck_after),
             false,
+            false,
         )
         .await
     }
@@ -383,11 +438,14 @@ impl Fleet {
         home_notify_after: Option<Duration>,
         home_recheck_after: Option<Duration>,
         peer_monitor: bool,
+        signed_out: bool,
     ) -> Self {
         assert!(hotsheet_aitools::test_permission_vault_available());
         hotsheet_aitools::enable_test_permission_vault();
         let root = tempfile::tempdir().unwrap();
         let reports = root.path().join("reports");
+        // HS2-ZRPZJJ: written before anything starts a process, so no child holds it open.
+        let auth_status = signed_out.then(|| sign_in_status(root.path()));
         let provider = Provider::default();
         let provider_url = provider.start();
 
@@ -425,7 +483,7 @@ impl Fleet {
         // Both fake tools are installed on the peer; the policy lets target B run only
         // its own until a scenario says otherwise.
         let peer_state = state(&b_store, &peer_home)
-            .with_capacity_source(Box::new(Roomy(peer_tools, peer_os)))
+            .with_capacity_source(Box::new(Roomy(peer_tools, peer_os, None)))
             .with_capacity_cache(Duration::ZERO)
             .with_plugin_dirs(vec![
                 plugin(root.path(), TOOL_B, &reports),
@@ -479,7 +537,7 @@ impl Fleet {
             &a_plugins,
             &memory,
             &provider_url,
-            Roomy(controller_tools, controller_os),
+            Roomy(controller_tools, controller_os, auth_status.clone()),
             Timing {
                 relink_retry: None,
                 home_notify_after,
@@ -529,6 +587,7 @@ impl Fleet {
             revision: Value::Null,
             relink_retry: None,
             peer_is_home,
+            auth_status,
             home_notify_after,
             home_recheck_after,
         };
@@ -572,9 +631,16 @@ impl Fleet {
             Some(base) => runtime.with_home_recheck_after(base),
             None => runtime,
         };
+        // HS2-ZRPZJJ: a sign-in change is seen at the next reading, not ten minutes on.
+        let capabilities_ttl = if capacity.2.is_some() {
+            Duration::ZERO
+        } else {
+            Duration::from_secs(600)
+        };
         state(a_store, home)
             .with_capacity_source(Box::new(capacity))
             .with_capacity_cache(Duration::ZERO)
+            .with_capabilities_ttl(capabilities_ttl)
             .with_plugin_dirs(plugins.to_vec())
             .with_orchestration_runtime(runtime)
     }
@@ -1041,6 +1107,21 @@ impl Fleet {
         (session, terminal, worker)
     }
 
+    /// HS2-ZRPZJJ: the controller's tool signs in (or out again), as a person does in
+    /// a terminal there. Only a [`Fleet::signed_out`] fleet reports sign-in.
+    pub(super) fn sign_in(&self, signed_in: bool) {
+        let status = self
+            .auth_status
+            .as_ref()
+            .expect("a fleet that reports sign-in");
+        let flag = status.with_file_name("signed-out");
+        if signed_in {
+            std::fs::remove_file(flag).unwrap();
+        } else {
+            std::fs::write(flag, "").unwrap();
+        }
+    }
+
     // ----- Failures -----
 
     /// The peer's listener goes away; its sessions and store stay as they are, as on
@@ -1092,7 +1173,7 @@ impl Fleet {
             &self.a_plugins,
             &self.memory,
             &self.provider_url,
-            Roomy(tools, os),
+            Roomy(tools, os, self.auth_status.clone()),
             Timing {
                 relink_retry: self.relink_retry,
                 home_notify_after: self.home_notify_after,

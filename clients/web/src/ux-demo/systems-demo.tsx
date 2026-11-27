@@ -103,6 +103,7 @@ export function SystemsSettings() {
           { value: 'local', label: 'This Computer' },
           { value: 'build', label: 'Paired Remote, Busy' },
           { value: 'offline', label: 'Paired Remote, Not Connected' },
+          { value: 'unreachable', label: 'Paired Remote, Not Reachable' },
           { value: 'revoked', label: 'Paired Remote, Revoked' },
         ]}
       />

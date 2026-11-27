@@ -173,7 +173,7 @@ function withHeldTemplate(timeline: OrchestrationTimeline): OrchestrationTimelin
 
 /** HS2-FXY5QM: the running timeline with API-12's run in the chosen condition. */
 function runningTimeline(phase: TimelinePhase = 'running') {
-  const timeline = withHeldTemplate(withDoneCi(demoTimeline(phase))),
+  const timeline = withSignedOut(withHeldTemplate(withDoneCi(demoTimeline(phase)))),
     condition = orchestrationDemoSettings.runCondition.value;
   if (!condition) return timeline;
   if (condition === 'elsewhere')
@@ -228,7 +228,30 @@ const DOC_WAITS = [
   { value: 'no_matching_model', label: 'No Matching Model' },
   // HS2-36XDDX: its template holds it until someone accepts the proposed plan.
   { value: 'template_plan_not_accepted', label: 'Its Template’s Accept' },
+  // HS2-ZRPZJJ: its AI tool is signed out on its machine (and on API's).
+  { value: 'tool_signed_out', label: 'Its AI Tool Signed Out' },
 ];
+
+/** HS2-ZRPZJJ: the scheduler's detail when DOC-9's AI tool is signed out on its machine. */
+const DEMO_SIGNED_OUT = 'tool_signed_out:claude';
+
+/** HS2-ZRPZJJ: DOC-9's last pass found Claude signed out, when the settings choose that wait. */
+function withSignedOut(timeline: OrchestrationTimeline): OrchestrationTimeline {
+  if (orchestrationDemoSettings.docWait.value !== 'tool_signed_out') return timeline;
+  const placement = {
+    at_ms: DEMO_NOW - 60_000,
+    decision: 'unplaced' as const,
+    reason: 'no_tool_available',
+    detail: DEMO_SIGNED_OUT,
+  };
+  return {
+    ...timeline,
+    waves: timeline.waves.map((wave) => ({
+      ...wave,
+      items: wave.items.map((item) => (item.step_id === 'step-8' ? { ...item, placement } : item)),
+    })),
+  };
+}
 
 const CI_GATES = [
   { value: '', label: 'Pending' },
@@ -619,28 +642,36 @@ export function OrchestrationInspectorDemo() {
                 ? undefined
                 : orchestrationDemoSettings.docWait.value === 'template_plan_not_accepted'
                   ? { standing: 'not_placed', reason: 'template_plan_not_accepted' }
-                  : orchestrationDemoSettings.docWait.value !== 'resource_held'
+                  : orchestrationDemoSettings.docWait.value === 'tool_signed_out'
                     ? {
-                        // HS2-747WQA: a pattern-only Models list on both of Docs's sites resolves to no model.
+                        // HS2-ZRPZJJ: Claude is signed out on this machine and on API's Build host.
                         standing: 'not_placed',
                         reason: 'no_tool_available',
-                        detail: orchestrationDemoSettings.docWait.value,
-                        retry_at_ms: timeline.now_ms + 10 * 60_000,
-                        sites: [{ target_id: 'api', reason: 'no_tool_available', detail: 'model_unresolved' }],
+                        detail: DEMO_SIGNED_OUT,
+                        sites: [{ target_id: 'api', reason: 'no_tool_available', detail: DEMO_SIGNED_OUT }],
                       }
-                    : {
-                        standing: 'not_placed',
-                        reason: 'resource_held',
-                        retry_at_ms: timeline.now_ms + 40 * 60_000,
-                        resources: [
-                          {
-                            namespace: 'vm',
-                            resource: 'macos-vm',
-                            state: 'held',
-                            expires_at_ms: timeline.now_ms + 40 * 60_000,
-                          },
-                        ],
-                      },
+                    : orchestrationDemoSettings.docWait.value !== 'resource_held'
+                      ? {
+                          // HS2-747WQA: a pattern-only Models list on both of Docs's sites resolves to no model.
+                          standing: 'not_placed',
+                          reason: 'no_tool_available',
+                          detail: orchestrationDemoSettings.docWait.value,
+                          retry_at_ms: timeline.now_ms + 10 * 60_000,
+                          sites: [{ target_id: 'api', reason: 'no_tool_available', detail: 'model_unresolved' }],
+                        }
+                      : {
+                          standing: 'not_placed',
+                          reason: 'resource_held',
+                          retry_at_ms: timeline.now_ms + 40 * 60_000,
+                          resources: [
+                            {
+                              namespace: 'vm',
+                              resource: 'macos-vm',
+                              state: 'held',
+                              expires_at_ms: timeline.now_ms + 40 * 60_000,
+                            },
+                          ],
+                        },
             // HS2-0D60T8: DOC-7 was built ahead of WEB-33's CI, which failed.
             builtAhead:
               orchestrationDemoSettings.selected.value === 'step-5'

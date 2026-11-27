@@ -1885,7 +1885,11 @@ const capabilitiesShape = shape<OrchestrationCapabilities>(
     gpu: (field) =>
       isRecord(field) && isBoolean(field.present) && (field.vendors === undefined || isStringArray(field.vendors)),
     ai_tools: listOf(
-      (tool) => isRecord(tool) && isString(tool.tool) && (tool.version === undefined || isString(tool.version)),
+      (tool) =>
+        isRecord(tool) &&
+        isString(tool.tool) &&
+        (tool.version === undefined || isString(tool.version)) &&
+        (tool.signed_in === undefined || isBoolean(tool.signed_in)),
     ),
     toolchains: listOf(
       (chain) =>
@@ -1946,7 +1950,16 @@ export const parseOrchestrationCapacity = shape<OrchestrationCapacity>(
   },
   {},
   // HS2-P5GTSW: `version` lets a reader wait for the next change (HS2-DR0ZSQ's Systems screen).
-  { capabilities: capabilitiesShape.check, version: isString },
+  {
+    capabilities: capabilitiesShape.check,
+    version: isString,
+    // HS2-5H8R0N: the owner's placement limits; each one is absent when unset.
+    owner_limits: (field) =>
+      isRecord(field) &&
+      ['max_sessions', 'min_free_ram_mb', 'max_cpu_percent', 'min_free_disk_mb'].every(
+        (name) => field[name] === undefined || isNumber(field[name]),
+      ),
+  },
 );
 export const parseOrchestrationAdmission = shape<OrchestrationAdmission>('admission decision', {
   outcome: oneOf('accepted', 'reduced', 'refused'),

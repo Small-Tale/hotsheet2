@@ -621,9 +621,36 @@ Confirm This Computer and the remote each show their own host name, cards,
 capabilities and toolchains, that the remote's CPU card follows its own live
 feed after selecting it, and that starting and stopping an AI session on each
 machine changes its session count and AI Sessions Here without a reload. Close
-the remote's last tab: its row reads Not connected. Revoke this computer on the
-remote host: its row reads Revoked. Repeat in the Tauri desktop host and on a
+the remote's last tab: its row keeps its live readings, now read through the
+bridge's machine path (HS2-CMXKK2), with its CPU card still following its live
+feed. Stop the remote host's server: within the backoff its row reads Not
+reachable with why, and restarting it brings the readings back without a
+reload. Revoke this computer on the remote host: its row reads Revoked. Repeat in the Tauri desktop host and on a
 phone-width browser, where both rails open as overlays from the toolbar.
+
+AI tool sign-in (HS2-S1FEYY): on a disposable machine with Claude and Codex
+installed and AI-tool probes on, sign Codex out (`codex logout`) and leave Claude
+signed in. Within ten minutes (the capability detection's lifetime) Systems shows
+Claude Signed In and Codex Signed Out on that machine, and no account name or
+email appears anywhere in the screen or in `orchestration capacity show`. Sign
+Codex back in: it reads Signed In after the next detection.
+
+Signed-out tool placement (HS2-ZRPZJJ): on the same disposable machine, with an
+orchestration project whose only allowed tool there is Codex and placement on,
+sign Codex out. After the next detection its ready card reads "Codex is signed
+out" beside its machine, Why It Is Not Running says "Codex is signed out on
+<machine>" with What to Do, its
+Admission by Project line reads "Codex: Refused · signed out there", and no
+session starts. Sign Codex back in: after the next detection the card starts a
+session without any other action.
+
+Admission by Project and Placement Limits (HS2-5H8R0N): with an orchestration
+project open whose sites run on this computer and on the paired remote, select
+each machine: its Admission by Project lists only the sites placed there, with
+a Can start or Refused badge matching the orchestration inspector's Admission.
+Run `hotsheet-cli orchestration admission set --max-sessions 0` on the remote:
+its Placement Limits reads 0 within a few seconds without a reload, and its
+admission turns Refused · session cap reached.
 
 ### Remote project terminals (HS2-PPHJMZ, HS2-JJKVJJ)
 

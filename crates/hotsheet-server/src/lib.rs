@@ -101,8 +101,9 @@ pub use hotsheet_ticketing::{ApiNote, ApiTicket};
 pub use api_error::ApiError;
 pub use events::{AssignmentEvent, ChangeEvent};
 pub(crate) use events::{EventLog, emit_change};
+pub use host_health::capabilities::signed_in_at;
 pub use host_health::capacity::{
-    CapacitySource, MachineReading, ROOMY_CAPACITY_ENV, RoomyFixtureCapacity,
+    CapacitySource, MachineReading, ROOMY_CAPACITY_ENV, RoomyFixtureCapacity, SIGNED_OUT_TOOLS_ENV,
 };
 use routes::accounts::{
     cancel_github_device_auth, identify_github_account, list_account_github_repositories,

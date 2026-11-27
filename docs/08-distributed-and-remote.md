@@ -196,6 +196,30 @@ session. A pairing peer learns the server id from the `/remote-auth/pair` answer
 `/remote-identity` stays authenticated, and registration refuses a peer whose
 authenticated identity differs.
 
+**Machine reads without a tab (HS2-CMXKK2).** The local bridge also answers
+`GET /__hotsheet/remotes/{binding}/machine/{route}` for the Systems screen
+(docs/06 §6.13), so a paired remote's machine is read without an open project tab.
+It is no new auth path:
+
+- It rides the binding's private connection, as a remote tab does: the session
+  cookie and TLS material stay in the Node host. It re-checks the binding on every
+  read (`requireCurrentRemoteBinding`) and needs the same local grant on a
+  remote-mode host.
+- It allows three read-only routes, each with only its own query parameters:
+  `host-health`, `host-health/cpu` (`after`, `timeout_ms`), and
+  `checkouts/machine/target-capacity` (`after`, `wait_ms`, `claim_namespaces`).
+  Every other path or method is refused before the remote is reached.
+- Capacity is read through the first checkout the binding's discovery reports as
+  available. When it reports none, the bridge answers 409 and says so; host health
+  still answers.
+- The connection and checkout are found once. They are found again after a
+  refused session, a failure, a re-review or a removal.
+- Only the content type of the answer comes back.
+
+The headless equivalents are `hotsheet-cli orchestration capacity show --project
+<owner> --target <target>` (a bound target's machine through the orchestration gate)
+and the remote host's own `host-health` routes.
+
 Listing performs no network requests and marks cached checkout observations stale.
 Explicit discovery returns live checkouts only on successful authenticated identity
 verification. Unreachable, unauthorized, missing-credential, unsupported, changed-id

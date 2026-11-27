@@ -503,3 +503,199 @@ fn hs2_6nqkp9_each_site_requires_its_own_policy_resources() {
         vec![&win]
     );
 }
+
+/// HS2-ZRPZJJ: target `n`'s machine reports these sign-in states.
+fn sign_in(world: &mut World, n: u128, states: &[(&str, Option<bool>)]) {
+    let capacity = world
+        .targets
+        .iter_mut()
+        .find(|state| state.target_id == target(n))
+        .and_then(|state| state.capacity.as_mut())
+        .unwrap();
+    capacity.capabilities = Some(HostCapabilities {
+        ai_tools: Some(
+            states
+                .iter()
+                .map(|(tool, signed_in)| ToolVersion {
+                    tool: (*tool).into(),
+                    version: None,
+                    signed_in: *signed_in,
+                })
+                .collect(),
+        ),
+        ..HostCapabilities::bare(OsFamily::Linux, "x86_64")
+    });
+}
+
+/// HS2-ZRPZJJ: a tool its machine reports signed out is never placed there. Another
+/// allowed tool that is signed in or unknown takes the work; with none, the step waits
+/// with `no_tool_available` naming the first signed-out tool. Unknown is still tried.
+#[test]
+fn hs2_zrpzjj_a_signed_out_tool_is_skipped_and_unknown_is_still_tried() {
+    let out = "no_tool_available";
+    // One tool allowed on the target: signed in, unknown, no report, signed out.
+    for (state, expected) in [
+        (Some(true), None),
+        (None, None),
+        (Some(false), Some("tool_signed_out:alpha")),
+    ] {
+        let mut world = World::new(&[(1, 2)]);
+        world.policy.targets[0].tools.truncate(1);
+        sign_in(&mut world, 1, &[("alpha", state)]);
+        world.work = vec![work(1, 1)];
+        let schedule = world.now();
+        match expected {
+            None => assert_eq!(starts(&schedule), vec![(id(1), "alpha".into())]),
+            Some(detail) => {
+                assert!(starts(&schedule).is_empty(), "{schedule:#?}");
+                assert_eq!(blocked(&schedule, 1), (out, Some(detail.into())));
+                // It waits for the machine to change, not for a time.
+                assert_eq!(schedule.retry_at_ms, None);
+            }
+        }
+    }
+    // Several tools: the first that is not signed out starts.
+    type Case<'a> = (
+        &'a [(&'a str, Option<bool>)],
+        Option<&'a str>,
+        Option<&'a str>,
+    );
+    let several: &[Case] = &[
+        (
+            &[("alpha", Some(false)), ("beta", Some(true))],
+            Some("beta"),
+            None,
+        ),
+        (
+            &[("alpha", Some(false)), ("beta", None)],
+            Some("beta"),
+            None,
+        ),
+        (
+            &[("alpha", None), ("beta", Some(false))],
+            Some("alpha"),
+            None,
+        ),
+        (
+            &[("alpha", Some(true)), ("beta", Some(false))],
+            Some("alpha"),
+            None,
+        ),
+        (
+            &[("alpha", Some(false)), ("beta", Some(false))],
+            None,
+            Some("tool_signed_out:alpha"),
+        ),
+    ];
+    for (states, tool, detail) in several {
+        let mut world = World::new(&[(1, 2)]);
+        sign_in(&mut world, 1, states);
+        world.work = vec![work(1, 1)];
+        let schedule = world.now();
+        match tool {
+            Some(tool) => assert_eq!(
+                starts(&schedule),
+                vec![(id(1), (*tool).into())],
+                "{states:?}"
+            ),
+            None => assert_eq!(
+                blocked(&schedule, 1),
+                (out, detail.map(str::to_owned)),
+                "{states:?}"
+            ),
+        }
+    }
+    // A signed-out tool is named over a missing one, whichever comes first.
+    for (missing, signed_out) in [(1, "alpha"), (0, "beta")] {
+        let mut world = World::new(&[(1, 2)]);
+        sign_in(
+            &mut world,
+            1,
+            &[("alpha", Some(false)), ("beta", Some(false))],
+        );
+        let capacity = world.targets[0].capacity.as_mut().unwrap();
+        capacity.tools.as_mut().unwrap()[missing].installed = false;
+        world.work = vec![work(1, 1)];
+        assert_eq!(
+            blocked(&world.now(), 1),
+            (out, Some(format!("tool_signed_out:{signed_out}")))
+        );
+    }
+    // A preferred tool that is signed out is a preference: another tool takes it.
+    let mut world = World::new(&[(1, 2)]);
+    sign_in(
+        &mut world,
+        1,
+        &[("alpha", Some(true)), ("beta", Some(false))],
+    );
+    let mut preferring = work(1, 1);
+    preferring.tool = Some("beta".into());
+    world.work = vec![preferring];
+    assert_eq!(starts(&world.now()), vec![(id(1), "alpha".into())]);
+}
+
+/// HS2-ZRPZJJ: across sites on two machines (this one and a paired one), a site whose
+/// machine reports every allowed tool signed out is passed over, named with the tool.
+/// Signing in there makes it a candidate again; signing out again passes it over again.
+#[test]
+fn hs2_zrpzjj_a_site_whose_tools_are_signed_out_is_passed_over() {
+    for (signed_out, other) in [(1, 2), (2, 1)] {
+        let mut world = World::new(&[(1, 2), (2, 2)]);
+        sign_in(
+            &mut world,
+            signed_out,
+            &[("alpha", Some(false)), ("beta", Some(false))],
+        );
+        sign_in(&mut world, other, &[("alpha", None), ("beta", Some(true))]);
+        world.work = vec![project(1, 1, &[2])];
+        let schedule = world.now();
+        assert_eq!(placed_on(&schedule, 1), target(other));
+        assert_eq!(
+            passes(&schedule, 1),
+            expect(&[pass(
+                signed_out,
+                "no_tool_available",
+                Some("tool_signed_out:alpha")
+            )])
+        );
+        // Both signed out: the step waits on the named site's sign-in.
+        sign_in(
+            &mut world,
+            other,
+            &[("alpha", Some(false)), ("beta", Some(false))],
+        );
+        let schedule = world.now();
+        assert_eq!(
+            blocked(&schedule, 1),
+            ("no_tool_available", Some("tool_signed_out:alpha".into()))
+        );
+        // Signing in on the first site places it there; out again, it waits again.
+        sign_in(
+            &mut world,
+            1,
+            &[("alpha", Some(true)), ("beta", Some(false))],
+        );
+        assert_eq!(placed_on(&world.now(), 1), target(1));
+        sign_in(
+            &mut world,
+            1,
+            &[("alpha", Some(false)), ("beta", Some(false))],
+        );
+        assert_eq!(
+            blocked(&world.now(), 1),
+            ("no_tool_available", Some("tool_signed_out:alpha".into()))
+        );
+    }
+}
+
+/// HS2-ZRPZJJ: the detail names its tool, and a start the machine refused because the
+/// tool is signed out there is a capacity refusal a change of the machine can end.
+#[test]
+fn hs2_zrpzjj_the_signed_out_detail_and_refusal_codes() {
+    assert_eq!(signed_out_detail("claude"), "tool_signed_out:claude");
+    assert!(is_signed_out_detail("tool_signed_out:claude"));
+    assert!(!is_signed_out_detail("tool_signed_out"));
+    assert!(!is_signed_out_detail("tool_not_installed"));
+    assert!(!is_signed_out_detail("os:windows"));
+    assert!(is_capacity_refusal("tool_signed_out"));
+}

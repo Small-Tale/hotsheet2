@@ -5,6 +5,7 @@
  */
 import type {
   HostedOrchestrationProjectChoice,
+  OrchestrationAdmission,
   OrchestrationBinding,
   OrchestrationDestination,
   OrchestrationManifest,
@@ -527,6 +528,43 @@ export function usablePolicyTools(
   return [...new Set([...listed.map((tool) => tool.tool), ...knownTools])].filter(
     (name) => !toolOff(listed.find((tool) => tool.tool === name)),
   );
+}
+
+/**
+ * The tools a target's admission is asked about (HS2-Y3N3PH, HS2-N5BDE4): the tools its own scope
+ * lists that the policy lets sessions use, or every usable tool when it lists none (Auto). Shared by the
+ * orchestration inspector and Systems (HS2-5H8R0N), so both ask the same question.
+ */
+export function admissionTools(
+  body: OrchestrationPolicyBody | null | undefined,
+  targetId: string,
+  knownTools: readonly string[],
+): string[] {
+  const usable = usablePolicyTools(body, knownTools),
+    configured = new Set(usable),
+    scoped = (body?.targets?.find((entry) => entry.target_id === targetId)?.tools ?? []).map((scope) => scope.tool);
+  return [...new Set(scoped.length ? scoped.filter((tool) => configured.has(tool)) : usable)];
+}
+
+const ADMISSION_REASONS: Readonly<Record<string, string>> = {
+  tool_not_installed: 'not installed there',
+  tool_not_configured: 'turned off in that project',
+  // HS2-ZRPZJJ
+  tool_signed_out: 'signed out there',
+  session_cap_reached: 'session cap reached',
+  above_cpu_ceiling: 'CPU above the ceiling',
+  below_disk_floor: 'disk below the floor',
+  below_ram_floor: 'memory below the floor',
+  capacity_unknown: 'capacity unknown',
+};
+
+/** One admission answer as a person reads it: "Can start N now", "Can start N of M · why", "Refused · why". */
+export function admissionValue(admission: OrchestrationAdmission): string {
+  const reason = admission.reason ? ` · ${ADMISSION_REASONS[admission.reason] ?? admission.reason}` : '';
+  if (admission.outcome === 'accepted') return `Can start ${String(admission.admitted)} now`;
+  if (admission.outcome === 'reduced')
+    return `Can start ${String(admission.admitted)} of ${String(admission.requested)}${reason}`;
+  return `Refused${reason}`;
 }
 
 /** One form control's change. Field names are the controls' `name` attributes. */

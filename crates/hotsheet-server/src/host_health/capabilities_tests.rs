@@ -253,3 +253,71 @@ fn hs2_zy4z4g_this_host_reports_what_it_is() {
             .all(|tool| tool.version.is_none())
     );
 }
+
+/// HS2-S1FEYY: a tool's sign-in comes from its declared status command's exit alone: 0
+/// is signed in, another exit signed out, and a probe that cannot finish is unknown. The
+/// command's output is never read. Without probing or a declaration nothing runs.
+#[cfg(unix)]
+#[test]
+fn hs2_s1feyy_sign_in_is_the_status_commands_exit_only() {
+    use std::os::unix::fs::PermissionsExt;
+    let root = tempfile::tempdir().unwrap();
+    let script = |name: &str, body: &str| {
+        let path = root.path().join(name);
+        std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        path
+    };
+    // The account a real tool prints must not matter: only the exit does.
+    let signed_in = script(
+        "signed-in",
+        "echo synthetic-account@example.invalid; exit 0",
+    );
+    let signed_out = script(
+        "signed-out",
+        "echo 'Not logged in' >&2; [ \"$1 $2\" = 'auth status' ] && exit 1; exit 0",
+    );
+    let hangs = script("hangs", "exec sleep 30");
+    let args = ["auth".to_owned(), "status".to_owned()];
+    let timeout = Duration::from_secs(5);
+    assert_eq!(signed_in_at(&signed_in, &args, timeout), Some(true));
+    assert_eq!(signed_in_at(&signed_out, &args, timeout), Some(false));
+    // The declared arguments are passed: without them this script exits 0.
+    assert_eq!(signed_in_at(&signed_out, &[], timeout), Some(true));
+    // A probe that runs out of time is unknown, never signed out.
+    assert_eq!(
+        signed_in_at(&hangs, &args, Duration::from_millis(200)),
+        None
+    );
+    // A program that cannot start is unknown.
+    assert_eq!(
+        signed_in_at(&root.path().join("missing"), &args, timeout),
+        None
+    );
+    // No probing, or no declaration, runs nothing and reports nothing.
+    assert_eq!(program_signed_in("sh", &args, false, timeout), None);
+    assert_eq!(program_signed_in("sh", &[], true, timeout), None);
+    assert_eq!(
+        program_signed_in("no-such-program-s1feyy", &args, true, timeout),
+        None
+    );
+}
+
+/// HS2-S1FEYY: the bundled Claude and Codex manifests declare their sign-in status
+/// commands; a tool without one reports no sign-in state.
+#[test]
+fn hs2_s1feyy_bundled_tools_declare_their_sign_in_status() {
+    let plugins = hotsheet_plugins::all_plugins(&[]);
+    let auth = |id: &str| {
+        plugins
+            .iter()
+            .find(|plugin| plugin.id() == id)
+            .and_then(|plugin| plugin.manifest.drive.as_ref())
+            .map(|drive| drive.auth_status_args.clone())
+            .unwrap()
+    };
+    assert_eq!(auth("claude"), ["auth", "status"]);
+    assert_eq!(auth("codex"), ["login", "status"]);
+    assert!(auth("opencode").is_empty());
+    assert!(auth("antigravity").is_empty());
+}

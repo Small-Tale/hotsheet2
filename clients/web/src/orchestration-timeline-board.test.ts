@@ -10,12 +10,15 @@ import {
   heldTemplateStatus,
   heldTemplateTitle,
   machineLabel,
+  machinePhrase,
   orchestrationLine,
   runAttention,
   runNotice,
   runStateText,
   schedulerHold,
   sessionText,
+  signedOutText,
+  signedOutTool,
   startBlockedInSettings,
   startBlockedReason,
   startColumnId,
@@ -109,6 +112,41 @@ describe('orchestration timeline on the ticket board (HS2-J89JC7)', () => {
     // A server older than the field groups by the step's own target.
     const older = timelineCard({ ...item('step-4'), site_id: undefined }, timeline, undefined, demoClock);
     expect([older.group, older.groupName]).toEqual(['web', 'Web']);
+  });
+
+  it('says a ready card’s AI tool is signed out beside its machine, and Ready again once it is placed (HS2-ZRPZJJ)', () => {
+    const ready = item('step-8');
+    const unplaced = (detail: string | undefined, decision: 'unplaced' | 'start' = 'unplaced'): TimelineItem => ({
+      ...ready,
+      placement: { at_ms: DEMO_NOW, decision, reason: 'no_tool_available', detail },
+    });
+    const remote = { location: 'remote', machine_label: 'Build Host' } as const;
+    expect(stateWords({ ...unplaced('tool_signed_out:claude'), ...remote }, false)).toEqual({
+      label: 'Claude is signed out',
+      tone: 'warning',
+    });
+    expect(stateWords(unplaced('tool_signed_out:opencode'), false)?.label).toBe('Opencode is signed out');
+    // The card's line names the machine in the badge beside it, in a target project's list too.
+    expect(orchestrationLine({ ...unplaced('tool_signed_out:claude'), ...remote }, false)).toMatchObject({
+      state: 'Claude is signed out',
+      stateTone: 'warning',
+      placement: expect.stringMatching(/^Build Host/) as string,
+    });
+    // Any other detail, no detail, a start, or no decision yet: plain Ready.
+    for (const other of [
+      unplaced('tool_not_installed'),
+      unplaced(undefined),
+      unplaced('tool_signed_out:claude', 'start'),
+      { ...ready, placement: undefined },
+    ])
+      expect(stateWords(other, false)).toEqual({ label: 'Ready', tone: 'success' });
+    expect(signedOutTool('tool_signed_out:claude')).toBe('claude');
+    expect(signedOutTool('tool_signed_out:')).toBeUndefined();
+    expect(signedOutTool('tool_signed_out')).toBeUndefined();
+    expect(signedOutTool(undefined)).toBeUndefined();
+    expect(signedOutText('claude', 'Build Host')).toBe('Claude is signed out on Build Host');
+    expect(machinePhrase({ location: 'remote' })).toBe('its machine');
+    expect(machinePhrase(undefined)).toBe('its machine');
   });
 
   it('states every item state in words with its tone, and lets the status badge speak for running and done', () => {

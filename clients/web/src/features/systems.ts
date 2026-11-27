@@ -1,6 +1,6 @@
 import { computed, effect, signal } from 'kerfjs';
 
-import type { Api } from '../api';
+import type { Api, OrchestrationPolicyBody, OrchestrationSitesView } from '../api';
 import { describeRequestFailure } from '../bounded-backoff';
 import type { SystemsInspectorProps } from '../components/systems-inspector';
 import type { SystemsSidebarProps, SystemsToolCapacityState } from '../components/systems-sidebar';
@@ -8,14 +8,24 @@ import type { SystemsViewProps } from '../components/systems-view';
 import { createHostCpuFeed, type HostCpuFeed, type HostCpuFeedOptions } from '../host-cpu-feed';
 import type { HostHealthSnapshot } from '../host-health';
 import type { HostHealthResourceState } from '../host-health-resource';
+import { describeRefusal } from '../orchestration-refusals';
+import { admissionTools } from '../orchestration-settings-model';
 import { isRemoteProjectId } from '../remote-projects/identity';
+import { REMOTE_MACHINE_CHECKOUT } from '../remote-projects/machine';
 import { createSystemsCapacityFeeds, type SystemsCapacityRead } from '../systems-capacity-feed';
 import {
+  admissionRow,
   LOCAL_MACHINE_ID,
+  machineConnected,
   machineCpuPercent,
+  machineReadKey,
   machineRowDescription,
+  placementLimitRows,
+  reachableMachine,
   selectedSystemsMachine,
   sessionRows,
+  sitesOnMachine,
+  type SystemsAdmissionState,
   type SystemsKnownTerminal,
   type SystemsMachine,
   type SystemsMachineReadings,
@@ -26,7 +36,24 @@ import {
 } from '../systems-model';
 
 /** The reads the Systems screen makes through one open project's path. */
-export type SystemsApi = Pick<Api, 'machineCapacity' | 'hostCpu' | 'orchestrationToolCapacity'>;
+export type SystemsApi = Pick<
+  Api,
+  | 'machineCapacity'
+  | 'hostCpu'
+  | 'orchestrationToolCapacity'
+  | 'orchestrationSites'
+  | 'orchestrationPolicy'
+  | 'orchestrationAdmission'
+>;
+
+/** HS2-CMXKK2: the machine reads of a paired remote without an open tab. */
+export type SystemsMachineApi = Pick<Api, 'machineCapacity' | 'hostCpu' | 'hostHealth'>;
+
+/** HS2-5H8R0N: what Systems read of one orchestration project: its sites and its policy. */
+interface SystemsPlacement {
+  sites: OrchestrationSitesView;
+  policy: OrchestrationPolicyBody | null;
+}
 
 export interface SystemsDependencies {
   /** Whether the Systems screen shows (the shell mode is `systems`). */
@@ -40,11 +67,19 @@ export interface SystemsDependencies {
   /** A remote tab's pushed host health (HS2-K4DY5G). */
   remoteHealth: (projectId: string) => HostHealthSnapshot | undefined;
   api: (projectId: string) => SystemsApi | undefined;
+  /**
+   * HS2-CMXKK2: a paired remote's machine reads through the bridge's machine path for its binding,
+   * for a remote with no open tab. Absent where the bridge offers none (a plain browser): such a
+   * remote stays Not connected.
+   */
+  machineApi?: (bindingId: string) => SystemsMachineApi | undefined;
   /** Whether an open project is an orchestration project, whose AI tool capacity Systems shows. */
   orchestrationProject: (projectId: string) => boolean;
   /** The terminals this app shows, to name a running session. */
   terminals: () => readonly SystemsKnownTerminal[];
   toolLabel: (tool: string) => string;
+  /** The AI tools this app knows, for a policy that lists none (Auto), as the inspector asks (HS2-5H8R0N). */
+  knownTools?: () => readonly string[];
   formatTime?: (ms: number) => string;
   /** Why the last disk choice failed (This Computer only). */
   diskMessage?: () => string | undefined;
@@ -62,18 +97,36 @@ export function createSystemsController(dependencies: SystemsDependencies) {
   const selected = signal<string>(LOCAL_MACHINE_ID);
   const toolCapacity = signal<SystemsToolCapacityState>({ status: 'none' });
   const cpu = signal<{ machineId: string; projectId: string; feed: HostCpuFeed } | undefined>(undefined);
-  const read: SystemsCapacityRead = (projectId, after, abort) => {
-    const api = dependencies.api(projectId);
-    if (!api) return Promise.reject(new Error('This project is no longer open.'));
-    return api.machineCapacity(projectId, after, abort);
+  /** The reads one machine's key reaches: an open tab's path, or a binding's machine path (HS2-CMXKK2). */
+  function readsFor(
+    key: string,
+  ): { api: Pick<SystemsApi, 'machineCapacity' | 'hostCpu'>; checkout: string } | undefined {
+    if (key.startsWith('machine:')) {
+      const api = dependencies.machineApi?.(key.slice('machine:'.length));
+      return api ? { api, checkout: REMOTE_MACHINE_CHECKOUT } : undefined;
+    }
+    const api = dependencies.api(key);
+    return api ? { api, checkout: key } : undefined;
+  }
+  const read: SystemsCapacityRead = (key, after, abort) => {
+    const reads = readsFor(key);
+    if (!reads) return Promise.reject(new Error('This project is no longer open.'));
+    return reads.api.machineCapacity(reads.checkout, after, abort);
   };
+  /** HS2-CMXKK2: host health of the remotes read without a tab, by machine id. */
+  const directHealth = signal<ReadonlyMap<string, HostHealthSnapshot>>(new Map());
   const feeds = createSystemsCapacityFeeds(read, dependencies.capacityOptions);
+  // HS2-5H8R0N: each open orchestration project's sites and policy, read once per opening, and the
+  // selected machine's admission answers, asked again only when its capacity version changes.
+  const placements = signal<ReadonlyMap<string, SystemsPlacement>>(new Map());
+  const admissions = signal<ReadonlyMap<string, SystemsAdmissionState>>(new Map());
 
   const machines = computed<SystemsMachine[]>(() =>
     systemsMachines({
       projects: dependencies.projects(),
       remoteServers: dependencies.remoteServers(),
       localName: dependencies.localHealth().snapshot?.host.name,
+      direct: Boolean(dependencies.machineApi),
     }),
   );
   const active = computed(() => dependencies.showing() && dependencies.pageVisible());
@@ -81,8 +134,12 @@ export function createSystemsController(dependencies: SystemsDependencies) {
 
   function healthFor(machine: SystemsMachine): HostHealthResourceState {
     if (machine.kind === 'local') return dependencies.localHealth();
-    const snapshot = machine.projectId ? dependencies.remoteHealth(machine.projectId) : undefined;
-    return snapshot ? { snapshot, loading: false } : { loading: Boolean(machine.projectId) };
+    const snapshot = machine.projectId
+      ? dependencies.remoteHealth(machine.projectId)
+      : machine.direct
+        ? directHealth.value.get(machine.id)
+        : undefined;
+    return snapshot ? { snapshot, loading: false } : { loading: machineConnected(machine) };
   }
 
   function readingsFor(machine: SystemsMachine): SystemsMachineReadings {
@@ -122,6 +179,69 @@ export function createSystemsController(dependencies: SystemsDependencies) {
         : { status: 'ready', rows: toolCapacityRows(views, dependencies.toolLabel, dependencies.formatTime) };
   }
 
+  /** The open local orchestration projects, whose sites and admission Systems shows. */
+  const owners = computed(() =>
+    dependencies
+      .projects()
+      .filter((project) => !isRemoteProjectId(project.id) && dependencies.orchestrationProject(project.id))
+      .map((project) => project.id),
+  );
+
+  let placementRead = 0;
+  /** HS2-5H8R0N: read each orchestration project's sites and policy; one that fails is left out. */
+  async function refreshPlacements(ids: readonly string[]) {
+    const request = ++placementRead;
+    const results = await Promise.all(
+      ids.map(async (owner): Promise<[string, SystemsPlacement] | undefined> => {
+        const api = dependencies.api(owner);
+        if (!api) return undefined;
+        try {
+          const [sites, policy] = await Promise.all([api.orchestrationSites(owner), api.orchestrationPolicy(owner)]);
+          return [owner, { sites, policy: policy.policy }];
+        } catch {
+          return undefined;
+        }
+      }),
+    );
+    if (request !== placementRead) return;
+    placements.value = new Map(results.filter((entry) => entry !== undefined));
+  }
+
+  let admissionRead = 0;
+  /** HS2-5H8R0N: ask each placed site on the machine whether its sessions may start there now. */
+  async function refreshAdmissions(machineId: string) {
+    const request = ++admissionRead;
+    const sites = [...placements.peek()].flatMap(([owner, placement]) =>
+      sitesOnMachine(owner, placement.sites, machineId).map((site) => ({ site, policy: placement.policy })),
+    );
+    const key = (owner: string, targetId: string) => `${owner}\u0000${targetId}`;
+    const previous = admissions.peek();
+    admissions.value = new Map(
+      sites.map(({ site }) => [
+        key(site.owner, site.targetId),
+        previous.get(key(site.owner, site.targetId)) ?? { status: 'loading' as const },
+      ]),
+    );
+    const answers = await Promise.all(
+      sites.map(async ({ site, policy }): Promise<[string, SystemsAdmissionState]> => {
+        const api = dependencies.api(site.owner);
+        const tools = admissionTools(policy, site.targetId, dependencies.knownTools?.() ?? []);
+        try {
+          if (!api) throw new Error('This project is no longer open.');
+          const answered = await Promise.all(
+            tools.map((tool) => api.orchestrationAdmission(site.owner, site.targetId, tool)),
+          );
+          return [key(site.owner, site.targetId), { status: 'ready', admissions: answered }];
+        } catch (reason) {
+          // The orchestration refusal in words, as the inspector's toasts read it.
+          return [key(site.owner, site.targetId), { status: 'error', message: describeRefusal(reason) }];
+        }
+      }),
+    );
+    if (request !== admissionRead) return;
+    admissions.value = new Map(answers);
+  }
+
   // One capacity stream per connected machine while the screen shows.
   const disposeFeeds = effect(() => {
     if (!active.value) {
@@ -129,30 +249,60 @@ export function createSystemsController(dependencies: SystemsDependencies) {
       return;
     }
     feeds.sync(
-      machines.value.flatMap((machine) =>
-        machine.projectId ? [{ machineId: machine.id, projectId: machine.projectId }] : [],
-      ),
+      machines.value.flatMap((machine) => {
+        const key = machineReadKey(machine);
+        return key ? [{ machineId: machine.id, projectId: key }] : [];
+      }),
     );
+  });
+  // HS2-CMXKK2: a remote read without a tab has no change stream, so its host health is read when its
+  // capacity stream starts and again each time that stream answers with a new version.
+  const healthRead = new Map<string, string>();
+  const disposeDirectHealth = effect(() => {
+    if (!active.value) {
+      healthRead.clear();
+      return;
+    }
+    for (const machine of machines.value) {
+      const key = machineReadKey(machine);
+      if (!machine.direct || !key) continue;
+      const version = feeds.states.value.get(machine.id)?.capacity?.version ?? '';
+      const signature = `${key}\u0000${version}`;
+      if (healthRead.get(machine.id) === signature) continue;
+      healthRead.set(machine.id, signature);
+      const api = dependencies.machineApi?.(machine.bindingId ?? '');
+      if (!api) continue;
+      void api.hostHealth().then(
+        (snapshot) => {
+          if (healthRead.get(machine.id) !== signature) return;
+          const next = new Map(directHealth.peek());
+          next.set(machine.id, snapshot);
+          directHealth.value = next;
+        },
+        () => undefined,
+      );
+    }
   });
   // The live CPU long poll follows the selected machine; another machine starts a fresh feed, since
   // a frame sequence belongs to one server.
   const disposeCpu = effect(() => {
     const machine = current.value;
     const running = cpu.peek();
-    if (!active.value || !machine.projectId) {
+    const key = machineReadKey(machine);
+    if (!active.value || !key) {
       running?.feed.stop();
       return;
     }
-    if (running && running.machineId === machine.id && running.projectId === machine.projectId) {
+    if (running && running.machineId === machine.id && running.projectId === key) {
       running.feed.start();
       return;
     }
     running?.feed.stop();
-    const projectId = machine.projectId;
+    const projectId = key;
     const feed = createHostCpuFeed(() => {
-      const api = dependencies.api(projectId);
-      if (!api) throw new Error('This project is no longer open.');
-      return api;
+      const reads = readsFor(projectId);
+      if (!reads) throw new Error('This project is no longer open.');
+      return reads.api;
     }, dependencies.cpuOptions);
     cpu.value = { machineId: machine.id, projectId, feed };
     feed.start();
@@ -164,6 +314,37 @@ export function createSystemsController(dependencies: SystemsDependencies) {
     if (now && !wasActive) queueMicrotask(() => void refreshToolCapacity());
     wasActive = now;
   });
+  // HS2-5H8R0N: the orchestration projects' sites and policies are read on opening, and again only
+  // when the set of open orchestration projects changes while the screen shows.
+  let placedFor: string | undefined;
+  const disposePlacements = effect(() => {
+    if (!active.value) {
+      placedFor = undefined;
+      return;
+    }
+    const ids = owners.value;
+    const signature = ids.join('\u0000');
+    if (signature === placedFor) return;
+    placedFor = signature;
+    queueMicrotask(() => void refreshPlacements(ids));
+  });
+  // Admission is asked for the selected machine when it, the placements, or its capacity version
+  // change: a version changes exactly when the machine's room does (HS2-P5GTSW).
+  let admittedFor: string | undefined;
+  const disposeAdmissions = effect(() => {
+    if (!active.value) {
+      admittedFor = undefined;
+      return;
+    }
+    const machine = current.value;
+    const version = feeds.states.value.get(machine.id)?.capacity?.version ?? '';
+    const placed = placements.value;
+    if (machine.unavailable || placed.size === 0) return;
+    const signature = `${machine.id}\u0000${version}\u0000${[...placed.keys()].join(',')}`;
+    if (signature === admittedFor) return;
+    admittedFor = signature;
+    queueMicrotask(() => void refreshAdmissions(machine.id));
+  });
 
   function select(machineId: string) {
     selected.value = machineId;
@@ -171,13 +352,22 @@ export function createSystemsController(dependencies: SystemsDependencies) {
 
   /** The three regions' props, read inside the shell's render so they follow every reading. */
   function view(): { sidebar: SystemsSidebarProps; workspace: SystemsViewProps; inspector: SystemsInspectorProps } {
-    const machine = current.value;
+    // HS2-CMXKK2: a tabless remote that answered nothing yet reads as Not reachable, with why.
+    const shown = (row: SystemsMachine) =>
+      reachableMachine(row, readingsFor(row), feeds.states.value.get(row.id)?.error);
+    const machine = shown(current.value);
     const capacity = feeds.states.value.get(machine.id) ?? {};
     const frame = cpu.value?.machineId === machine.id ? cpu.value.feed.state.value.frame : undefined;
     const sessions = sessionRows(capacity.capacity, dependencies.terminals(), dependencies.toolLabel);
+    const answered = admissions.value;
+    const placed = machine.unavailable
+      ? []
+      : [...placements.value].flatMap(([owner, placement]) => sitesOnMachine(owner, placement.sites, machine.id));
+    const limits = placementLimitRows(capacity.capacity);
     return {
       sidebar: {
-        machines: machines.value.map((row) => {
+        machines: machines.value.map((listed) => {
+          const row = shown(listed);
           const readings = readingsFor(row);
           const percent = row.unavailable ? undefined : machineCpuPercent(readings);
           return {
@@ -201,6 +391,12 @@ export function createSystemsController(dependencies: SystemsDependencies) {
         machine,
         ...(sessions ? { sessions } : {}),
         ...(capacity.error ? { error: capacity.error } : {}),
+        admission: placed.map((site) =>
+          admissionRow(site, answered.get(`${site.owner}\u0000${site.targetId}`), dependencies.toolLabel),
+        ),
+        orchestrating: owners.value.length > 0,
+        ...(limits ? { limits } : {}),
+        capacityRead: Boolean(capacity.capacity),
       },
     };
   }
@@ -209,11 +405,14 @@ export function createSystemsController(dependencies: SystemsDependencies) {
     disposeFeeds();
     disposeCpu();
     disposeToolCapacity();
+    disposePlacements();
+    disposeAdmissions();
+    disposeDirectHealth();
     feeds.stop();
     cpu.peek()?.feed.stop();
   }
 
-  return { selected, machines, select, view, refreshToolCapacity, feeds, dispose };
+  return { selected, machines, select, view, refreshToolCapacity, feeds, placements, admissions, dispose };
 }
 
 export type SystemsController = ReturnType<typeof createSystemsController>;

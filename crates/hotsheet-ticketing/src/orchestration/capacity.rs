@@ -184,6 +184,36 @@ pub struct CapacitySnapshot {
     /// reads as unknown, never as met.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub capabilities: Option<HostCapabilities>,
+    /// HS2-5H8R0N: the machine owner's own placement limits (`orchestration admission
+    /// show`), so Systems can show them for a paired machine too. Each unset limit leaves
+    /// the orchestrator's policy value. Absent from an older peer.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner_limits: Option<OwnerLimits>,
+}
+
+/// HS2-5H8R0N: the four limits a machine owner may set for sessions started here, without
+/// the footprints and toolchains [`AdmissionConfig`] also keeps.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OwnerLimits {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_sessions: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_free_ram_mb: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_cpu_percent: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_free_disk_mb: Option<u64>,
+}
+
+impl From<&AdmissionConfig> for OwnerLimits {
+    fn from(admission: &AdmissionConfig) -> Self {
+        Self {
+            max_sessions: admission.max_sessions,
+            min_free_ram_mb: admission.min_free_ram_mb,
+            max_cpu_percent: admission.max_cpu_percent,
+            min_free_disk_mb: admission.min_free_disk_mb,
+        }
+    }
 }
 
 /// HS2-TK9ADC: what a target's coordination pool says about its single-holder roles
@@ -387,6 +417,7 @@ impl CapacitySnapshot {
             version: None,
             pool: None,
             capabilities: host.capabilities,
+            owner_limits: None,
         }
     }
 
@@ -409,8 +440,11 @@ impl CapacitySnapshot {
     /// HS2-AWB7BX: stamp the snapshot with a version that also changes when the
     /// machine owner's own admission limits change, since those decide room as much
     /// as the measurements do. The default (no limits) gives [`Self::with_version`].
+    /// HS2-5H8R0N: the snapshot also reports those limits as `owner_limits`; they are not
+    /// part of [`capacity_version`], since the admission term already covers them.
     #[must_use]
-    pub fn with_admission_version(self, admission: &AdmissionConfig) -> Self {
+    pub fn with_admission_version(mut self, admission: &AdmissionConfig) -> Self {
+        self.owner_limits = Some(OwnerLimits::from(admission));
         let mut stamped = self.with_version();
         if *admission != AdmissionConfig::default() {
             let limits = serde_json::to_string(admission).unwrap_or_default();
@@ -631,6 +665,9 @@ pub enum AdmissionOutcome {
 pub enum AdmissionReason {
     ToolNotInstalled,
     ToolNotConfigured,
+    /// HS2-ZRPZJJ: the machine reports the tool signed out (`capabilities.ai_tools[]
+    /// .signed_in` is `false`). An unknown sign-in state is still tried.
+    ToolSignedOut,
     SessionCapReached,
     AboveCpuCeiling,
     BelowDiskFloor,
@@ -644,6 +681,7 @@ impl AdmissionReason {
         match self {
             Self::ToolNotInstalled => "tool_not_installed",
             Self::ToolNotConfigured => "tool_not_configured",
+            Self::ToolSignedOut => "tool_signed_out",
             Self::SessionCapReached => "session_cap_reached",
             Self::AboveCpuCeiling => "above_cpu_ceiling",
             Self::BelowDiskFloor => "below_disk_floor",
@@ -776,6 +814,10 @@ impl AdmissionRefusal {
                 "this project opted out of {}",
                 self.tool.as_deref().unwrap_or("the AI tool")
             ),
+            "tool_signed_out" => format!(
+                "{} is signed out on this machine",
+                self.tool.as_deref().unwrap_or("the AI tool")
+            ),
             "capacity_unknown" => {
                 "this machine could not measure its capacity and does not allow unknown measurements"
                     .to_owned()
@@ -812,6 +854,18 @@ pub fn estimated_footprint(
     }
 }
 
+/// HS2-ZRPZJJ: whether the machine reports `tool` signed out. Only a known `false`
+/// counts: an absent report (an older tool or peer, probing off) is not signed out.
+pub fn tool_signed_out(snapshot: &CapacitySnapshot, tool: &str) -> bool {
+    snapshot
+        .capabilities
+        .as_ref()
+        .and_then(|capabilities| capabilities.ai_tools.as_ref())
+        .and_then(|tools| tools.iter().find(|known| known.tool == tool))
+        .and_then(|known| known.signed_in)
+        == Some(false)
+}
+
 /// Decide one admission. A limit a known measurement breaks refuses with that limit's
 /// reason. Otherwise an unknown measurement refuses as `capacity_unknown` unless the
 /// owner allowed unknowns, in which case that check is skipped. What remains is how
@@ -838,6 +892,11 @@ pub fn decide_admission(
             Some(_) => {}
             None => refuse(R::ToolNotInstalled),
         },
+    }
+    // HS2-ZRPZJJ: a tool the machine reports signed out cannot start there. Unknown
+    // (an older tool or peer, or no probe) is still tried.
+    if tool_signed_out(snapshot, &request.tool) {
+        refuse(R::ToolSignedOut);
     }
     // Each `room` is how many more sessions that limit leaves space for.
     let running_sessions = snapshot
@@ -929,7 +988,7 @@ pub fn decide_admission(
                 limits.min_free_ram_mb,
                 snapshot.memory.free_mb,
             ),
-            R::ToolNotInstalled | R::ToolNotConfigured => AdmissionRefusal {
+            R::ToolNotInstalled | R::ToolNotConfigured | R::ToolSignedOut => AdmissionRefusal {
                 tool: Some(request.tool.clone()),
                 ..bare.clone()
             },

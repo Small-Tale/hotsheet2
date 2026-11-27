@@ -76,8 +76,9 @@ pub use capacity::{
     CAPACITY_LOAD_STEP_PERCENT, CAPACITY_MEMORY_STEP_MB, CapacityField, CapacitySnapshot,
     CpuCapacity, DEFAULT_SESSION_FOOTPRINT_MB, DiskCapacity, FootprintSource, HeldClaim,
     HostObservation, MAX_CLAIM_NAMESPACES, MAX_CLAIM_PAGES, MAX_SESSION_FOOTPRINT_MB,
-    MemoryCapacity, PoolState, SessionFootprint, TargetSpeculation, ToolAvailability,
+    MemoryCapacity, OwnerLimits, PoolState, SessionFootprint, TargetSpeculation, ToolAvailability,
     UnreadableNamespace, capacity_version, decide_admission, effective_limits, estimated_footprint,
+    tool_signed_out,
 };
 pub use contract::*;
 pub use gates::{
@@ -189,8 +190,8 @@ pub use scheduler::{
     REFUSAL_BACKOFF_CAP_MS, Ranked, ResourceNeed, RoleBlocker, RoleUnplaced, SITE_NOT_CHOSEN,
     Schedule, ScheduleInput, ScheduledSession, SchedulerStore, ScoreParts, SessionActivity,
     SitePass, Standing, TargetState, TickInputs, Unplaced, WorkItem, WorkLevel, WorkSpeculation,
-    is_capacity_refusal, lift_capacity_refusal, plan, refusal_backoff_ms, remember,
-    scheduler_pass_lock, score,
+    is_capacity_refusal, is_signed_out_detail, lift_capacity_refusal, plan, refusal_backoff_ms,
+    remember, scheduler_pass_lock, score, signed_out_detail,
 };
 pub use session_fence::{
     MAX_WITHDRAWN_FENCES, WITHDRAWN_FENCE_MS, Withdrawal, WithdrawnFences, WithdrawnOperation,

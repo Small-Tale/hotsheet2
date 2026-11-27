@@ -1,18 +1,30 @@
 import { describe, expect, it } from 'vitest';
 
-import type { OrchestrationCapacity, OrchestrationToolCapacity } from './api';
+import type {
+  OrchestrationAdmission,
+  OrchestrationCapacity,
+  OrchestrationSitesView,
+  OrchestrationSiteView,
+  OrchestrationToolCapacity,
+} from './api';
 import {
+  admissionRow,
   aiSessionCount,
   aiToolRows,
   capabilityRows,
   LOCAL_MACHINE_ID,
+  machineConnected,
   machineCpuPercent,
   machineKindLabel,
+  machineReadKey,
   machineRowDescription,
   machineUnavailableMessage,
+  placementLimitRows,
+  reachableMachine,
   remoteMachineId,
   selectedSystemsMachine,
   sessionRows,
+  sitesOnMachine,
   systemsMachineForDestination,
   systemsMachines,
   toolCapacityRows,
@@ -39,9 +51,52 @@ describe('HS2-DR0ZSQ systemsMachines', () => {
     });
     expect(machines).toEqual([
       { id: LOCAL_MACHINE_ID, kind: 'local', name: 'Studio', projectId: 'local-1' },
-      { id: remoteMachineId(A), kind: 'remote', name: 'Build Host', projectId: `remote:${A}:x` },
-      { id: remoteMachineId(B), kind: 'remote', name: 'laptop.example.test', unavailable: 'not-connected' },
+      { id: remoteMachineId(A), kind: 'remote', name: 'Build Host', bindingId: A, projectId: `remote:${A}:x` },
+      {
+        id: remoteMachineId(B),
+        kind: 'remote',
+        name: 'laptop.example.test',
+        bindingId: B,
+        unavailable: 'not-connected',
+      },
     ]);
+  });
+
+  it('HS2-CMXKK2 reads a paired remote without an open tab through its binding where the bridge allows', () => {
+    const machines = systemsMachines({
+      projects: [{ id: 'local-1' }, remoteTab(A, 'x')],
+      remoteServers: [
+        server(A, 'https://build.example.test'),
+        server(B, 'https://laptop.example.test'),
+        server(C, 'https://lab.example.test', true),
+      ],
+      direct: true,
+    });
+    expect(
+      machines.slice(1).map((machine) => [machine.id, machine.projectId, machine.direct, machine.unavailable]),
+    ).toEqual([
+      [remoteMachineId(A), `remote:${A}:x`, undefined, undefined],
+      [remoteMachineId(B), undefined, true, undefined],
+      // A revoked remote is never read, tab or not.
+      [remoteMachineId(C), undefined, undefined, 'revoked'],
+    ]);
+    // An open tab wins; without one the binding's machine path is the read key.
+    expect(machines.map(machineReadKey)).toEqual(['local-1', `remote:${A}:x`, `machine:${B}`, undefined]);
+    expect(machines.map(machineConnected)).toEqual([true, true, true, false]);
+    // Opening and then closing a tab moves the read to the tab and back.
+    const opened = systemsMachines({
+      projects: [{ id: 'local-1' }, remoteTab(B, 'y')],
+      remoteServers: [server(B, 'https://laptop.example.test')],
+      direct: true,
+    });
+    expect(machineReadKey(opened[1])).toBe(`remote:${B}:y`);
+    const closed = systemsMachines({
+      projects: [{ id: 'local-1' }],
+      remoteServers: [server(B, 'https://laptop.example.test')],
+      direct: true,
+    });
+    expect(machineReadKey(closed[1])).toBe(`machine:${B}`);
+    expect(machineRowDescription(closed[1], {})).toBe('Paired Remote');
   });
 
   it('marks a revoked remote even while a tab is open, and adds remotes the list does not name', () => {
@@ -132,12 +187,52 @@ describe('HS2-DR0ZSQ detail tables', () => {
     expect(aiToolRows(undefined)).toBeUndefined();
     const rows = aiToolRows(systemsDemoCapacity('build'), label)!;
     expect(rows.map((row) => [row.label, row.description, row.status.label])).toEqual([
-      ['Claude 2.1.0', '1 session running', 'Installed'],
+      ['Claude 2.1.0', 'Signed in · 1 session running', 'Signed In'],
       ['Codex 0.40.0', '1 session running', 'Installed'],
       ['OpenCode', 'Not installed on this machine', 'Not Installed'],
     ]);
     const idle = aiToolRows({ ...systemsDemoCapacity('local'), sessions: [] }, label)!;
-    expect(idle[0].description).toBe('Installed · no sessions running');
+    expect(idle.map((row) => [row.description, row.status, row.signedIn])).toEqual([
+      ['Signed in · no sessions running', { label: 'Signed In', tone: 'success' }, true],
+      ['Signed in · no sessions running', { label: 'Signed In', tone: 'success' }, true],
+      [
+        'Installed, not signed in · sign in on this machine to use it · no sessions running',
+        { label: 'Signed Out', tone: 'warning' },
+        false,
+      ],
+    ]);
+  });
+
+  it('HS2-S1FEYY reads sign-in from capabilities: unknown stays Installed, a missing tool never reads signed in', () => {
+    const base = systemsDemoCapacity('local');
+    const reported = (signIns: Record<string, boolean | undefined>, installed = true): OrchestrationCapacity => ({
+      ...base,
+      sessions: [],
+      tools: [{ tool: 'codex', installed, configured: true }],
+      capabilities: {
+        ...base.capabilities!,
+        ai_tools: Object.entries(signIns).map(([tool, signed_in]) =>
+          signed_in === undefined ? { tool } : { tool, signed_in },
+        ),
+      },
+    });
+    const one = (capacity: OrchestrationCapacity) => {
+      const [row] = aiToolRows(capacity)!;
+      return [row.status.label, row.signedIn, row.description];
+    };
+    expect(one(reported({ codex: undefined }))).toEqual(['Installed', undefined, 'Installed · no sessions running']);
+    expect(one(reported({ codex: true }))).toEqual(['Signed In', true, 'Signed in · no sessions running']);
+    // Signing out and back in, as successive snapshots report it.
+    expect(one(reported({ codex: false }))[0]).toBe('Signed Out');
+    expect(one(reported({ codex: true }))[0]).toBe('Signed In');
+    // A tool the machine says is not installed ignores a stale sign-in report.
+    expect(one(reported({ codex: true }, false))).toEqual([
+      'Not Installed',
+      undefined,
+      'Not installed on this machine',
+    ]);
+    // An older host without capabilities: Installed.
+    expect(aiToolRows({ ...reported({}), capabilities: undefined })![0].status.label).toBe('Installed');
   });
 
   it('adds a tool the capabilities name that the tool list omits, and ignores sessions without a tool', () => {
@@ -276,5 +371,150 @@ describe('HS2-JF3EA3 systemsMachineForDestination', () => {
     expect(systemsMachineForDestination(remote, `remote:${B}:c1`)).toBeUndefined();
     expect(systemsMachineForDestination(null, 'local-checkout')).toBeUndefined();
     expect(systemsMachineForDestination(undefined, 'local-checkout')).toBeUndefined();
+  });
+});
+
+describe('HS2-5H8R0N Admission by Project and Placement Limits', () => {
+  const BIND = '01JSYNTHREMTE0000000000001';
+  const site = (target: string, destination: OrchestrationSiteView['destination'], project = true, label = 'Widgets') =>
+    ({
+      target_id: target,
+      label,
+      project,
+      destination,
+      confirmed_at_ms: null,
+      last_failure: null,
+      stale: false,
+    }) satisfies OrchestrationSiteView;
+  const view: OrchestrationSitesView = {
+    revision: null,
+    projects: [
+      {
+        project_id: 'P1',
+        label: 'Widgets',
+        sites: [
+          site('P1', { kind: 'local', server_id: 's1', checkout_id: 'c1', checkout_authority: 'a1' }),
+          site(
+            'S2',
+            {
+              kind: 'remote',
+              registration_id: BIND,
+              identity: { server_id: 's2' },
+              checkout_id: 'c2',
+              checkout_authority: 'a2',
+            },
+            false,
+            'Build clone',
+          ),
+          site('S3', null, false, 'Unbound'),
+        ],
+      },
+    ],
+  };
+
+  it('places each site on the machine its destination names, through a local owner and a remote one', () => {
+    expect(sitesOnMachine('owner', view, 'local')).toEqual([{ owner: 'owner', targetId: 'P1', label: 'Widgets' }]);
+    expect(sitesOnMachine('owner', view, `remote:${BIND}`)).toEqual([
+      { owner: 'owner', targetId: 'S2', label: 'Widgets · Build clone' },
+    ]);
+    // Through a remote owner tab, a local destination is that remote; an unbound site is nowhere.
+    expect(sitesOnMachine(`remote:${BIND}:c9`, view, `remote:${BIND}`).map((entry) => entry.targetId)).toEqual(['P1']);
+    expect(sitesOnMachine('owner', { revision: null, projects: [] }, 'local')).toEqual([]);
+  });
+
+  it('reads each admission state as one row: checking, unknown, no tool, refused, reduced, accepted', () => {
+    const placed = { owner: 'o', targetId: 'T', label: 'Widgets' };
+    const ask = (
+      outcome: OrchestrationAdmission['outcome'],
+      admitted: number,
+      tool = 'codex',
+      reason: string | null = null,
+    ): OrchestrationAdmission => ({ outcome, tool, requested: 2, admitted, reason });
+    expect(admissionRow(placed, undefined).status.label).toBe('Checking');
+    expect(admissionRow(placed, { status: 'loading' }).status).toEqual({ label: 'Checking', tone: 'neutral' });
+    expect(admissionRow(placed, { status: 'error', message: 'Gone.' })).toMatchObject({
+      status: { label: 'Unknown' },
+      description: 'Admission is not available. Gone.',
+    });
+    expect(admissionRow(placed, { status: 'ready', admissions: [] }).status.label).toBe('No AI tool allowed here');
+    expect(
+      admissionRow(placed, { status: 'ready', admissions: [ask('refused', 0, 'codex', 'below_ram_floor')] }),
+    ).toMatchObject({
+      status: { label: 'Refused', tone: 'warning' },
+      description: 'codex: Refused · memory below the floor',
+    });
+    expect(
+      admissionRow(placed, { status: 'ready', admissions: [ask('reduced', 1, 'codex', 'session_cap_reached')] }).status,
+    ).toEqual({ label: 'Can start 1 of 2', tone: 'warning' });
+    // The best tool decides the badge; every tool is in the quiet line.
+    expect(
+      admissionRow(placed, { status: 'ready', admissions: [ask('refused', 0, 'claude'), ask('accepted', 2)] }, (tool) =>
+        tool.toUpperCase(),
+      ),
+    ).toEqual({
+      key: 'o\u0000T',
+      label: 'Widgets',
+      status: { label: 'Can start 2 now', tone: 'success' },
+      description: 'CLAUDE: Refused · CODEX: Can start 2 now',
+    });
+    // HS2-ZRPZJJ: a tool signed out on the machine says so; another signed-in tool still starts.
+    expect(
+      admissionRow(placed, { status: 'ready', admissions: [ask('refused', 0, 'claude', 'tool_signed_out')] }),
+    ).toMatchObject({
+      status: { label: 'Refused', tone: 'warning' },
+      description: 'claude: Refused · signed out there',
+    });
+    expect(
+      admissionRow(
+        placed,
+        { status: 'ready', admissions: [ask('refused', 0, 'claude', 'tool_signed_out'), ask('accepted', 2)] },
+        (tool) => tool.toUpperCase(),
+      ),
+    ).toMatchObject({
+      status: { label: 'Can start 2 now', tone: 'success' },
+      description: 'CLAUDE: Refused · signed out there · CODEX: Can start 2 now',
+    });
+  });
+
+  it('lists the owner’s four limits, unset ones left to each project, and nothing from an older host', () => {
+    const base = systemsDemoCapacity('local');
+    expect(placementLimitRows(undefined)).toBeUndefined();
+    expect(placementLimitRows({ ...base, owner_limits: undefined })).toBeUndefined();
+    expect(placementLimitRows(base)).toEqual([
+      { label: 'Sessions per Machine', value: '10' },
+      { label: 'Free Memory Floor', value: '1.0 GB' },
+      { label: 'CPU Ceiling', value: '95%' },
+      { label: 'Free Disk Floor', value: '5.0 GB' },
+    ]);
+    expect(placementLimitRows({ ...base, owner_limits: { max_sessions: 0, min_free_disk_mb: 512 } })).toEqual([
+      { label: 'Sessions per Machine', value: '0' },
+      { label: 'Free Memory Floor', value: 'Set by each project' },
+      { label: 'CPU Ceiling', value: 'Set by each project' },
+      { label: 'Free Disk Floor', value: '512 MB' },
+    ]);
+  });
+});
+
+describe('HS2-CMXKK2 a remote read without a tab', () => {
+  const direct = { id: 'remote:b', kind: 'remote' as const, name: 'Build', bindingId: 'b', direct: true };
+
+  it('is Not reachable, with why, only until it answers anything', () => {
+    const failed = reachableMachine(direct, {}, 'Remote server is unavailable or its approval changed.');
+    expect(failed).toMatchObject({ unavailable: 'unreachable' });
+    expect(machineRowDescription(failed, {})).toBe('Not reachable');
+    expect(machineUnavailableMessage(failed)).toEqual({
+      title: 'Build Is Not Reachable',
+      detail:
+        'Remote server is unavailable or its approval changed. Check that it is running and that this computer’s approval is current; it is tried again on its own.',
+    });
+    // Any reading, or no failure, keeps it connected; a machine with a tab is never marked.
+    expect(reachableMachine(direct, { health: hostHealthFixture('normal') }, 'x')).toBe(direct);
+    expect(reachableMachine(direct, { capacity: systemsDemoCapacity('build') }, 'x')).toBe(direct);
+    expect(reachableMachine(direct, {}, undefined)).toBe(direct);
+    const tab = { ...direct, direct: undefined, projectId: 'remote:b:c' };
+    expect(reachableMachine(tab, {}, 'x')).toBe(tab);
+    expect(machineUnavailableMessage({ ...direct, unavailable: 'unreachable' })?.detail).toMatch(
+      /^It did not answer\./u,
+    );
   });
 });

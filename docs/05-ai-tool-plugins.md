@@ -1360,6 +1360,17 @@ catalog, and only when AI-tool probes are enabled (`HOTSHEET_AI_TOOL_PROBES`). I
 bucket's typed `remaining_fraction` and `reset_time`, never names or descriptions; the latest
 reset of a spent bucket still ahead becomes the limit's reset time. Nothing polls it.
 
+It may also name **`auth_status_args`** (HS2-S1FEYY): arguments that make the drive's `program`
+say whether it is signed in through its exit status alone (Claude: `["auth", "status"]`, Codex:
+`["login", "status"]`; 0 is signed in, 1 signed out). Capability detection runs it once per
+detection beside the version probe, bounded like every probe, in a fresh empty directory, and
+only while AI-tool probes are enabled. The host never reads its output, so no account name or
+credential is read or reported; the machine reports only `signed_in` (true, false, or absent when
+unknown) in its capacity snapshot's `capabilities.ai_tools[]` ([26](26-orchestration-projects.md)
+§26.10), which the Systems screen shows (docs/06 §6.13). A tool reported signed out is not
+placed on that machine (HS2-ZRPZJJ); an absent state is still tried. OpenCode and Antigravity
+declare none.
+
 A plugin may also declare **`[capacity]`** (HS2-AHG7HW): which limit signals the host can observe
 from the tool. It is data only and selects no parser. Each of `rate_limit_errors`,
 `usage_limit_errors`, `reset_times`, `usage_events` and `cost` is `"reported"` or `"unknown"`, and
@@ -3956,8 +3967,8 @@ still detects installed tools on `PATH`, but every provider keeps its bundled ca
 and no tool is executed. Any other value, or no value, leaves probing on. The Rust test
 environment forces it off so tests never run the developer's installed tools
 (HS2-7W3D7V).
-Every probe (`--version`, the model catalog, the Codex catalog app-server and
-`usage_query_args`) runs in a fresh private empty directory made for that scan or query
+Every probe (`--version`, the model catalog, the Codex catalog app-server,
+`usage_query_args` and `auth_status_args`) runs in a fresh private empty directory made for that scan or query
 and removed afterwards, never in a hosted ticket store or the caller's directory
 (HS2-BNDRYP). `agy models` starts every MCP server registered at Antigravity's user scope
 (`~/.gemini/config/mcp_config.json`) in its working directory, even signed out. A

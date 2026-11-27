@@ -155,6 +155,11 @@ pub struct ToolVersion {
     /// `None` when the version was not asked for or could not be read.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub version: Option<String>,
+    /// HS2-S1FEYY: whether the tool is signed in on this machine, from its declared
+    /// sign-in status command's exit alone. `None` when the tool declares none, probing is
+    /// off, or the check could not finish: unknown, never signed out. Never an account.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signed_in: Option<bool>,
 }
 
 /// One toolchain the machine's owner declared, and whether it is there.

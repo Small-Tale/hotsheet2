@@ -638,6 +638,10 @@ async fn hs2_j8prtv_stdio_mcp_and_headless_cli_read_a_live_local_servers_capacit
     assert_eq!(local["memory"]["free_mb"], 6000);
     assert_eq!(local["sessions"], json!([]));
     assert!(local["sampled_at_ms"].is_u64());
+    // HS2-5H8R0N: the machine owner's placement limits ride the same snapshot for the
+    // stdio MCP tool and the headless CLI, as Systems reads them.
+    assert!(snapshot["owner_limits"].is_object(), "{snapshot}");
+    assert_eq!(local["owner_limits"], snapshot["owner_limits"]);
     let through_target = cli_named(
         &home,
         &headless,
