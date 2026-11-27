@@ -8,7 +8,10 @@ import type { HostHealthDiskVolume, HostHealthSnapshot, HostHealthStatus } from 
 const GIB = 1024 ** 3;
 const header = (status: HostHealthStatus, reason: string | null = null) => ({ status, reason, since: null });
 
-export type HostHealthScenario = 'normal' | 'crossed' | 'unsupported' | 'disks';
+export type HostHealthScenario = 'normal' | 'crossed' | 'unsupported' | 'disks' | 'long-process';
+
+/** HS2-2TEAFA: a long, unbroken synthetic process name, the kind a CPU card must truncate. */
+export const LONG_PROCESS_NAME = 'com.example.SyntheticRenderer.WebContent.Development.Helper';
 
 const volume = (id: string, label: string, overrides: Partial<HostHealthDiskVolume> = {}): HostHealthDiskVolume => ({
   id,
@@ -100,6 +103,16 @@ export function hostHealthFixture(scenario: HostHealthScenario = 'normal'): Host
         thermal: { ...header('unsupported'), throttled: null, cpu_speed_limit: null },
       },
     };
+  if (scenario === 'long-process') {
+    const base = hostHealthFixture('normal');
+    return {
+      ...base,
+      signals: {
+        ...base.signals,
+        cpu: { ...base.signals.cpu, top_process: LONG_PROCESS_NAME, top_process_percent: 97 },
+      },
+    };
+  }
   if (scenario === 'disks') {
     const base = hostHealthFixture('normal');
     return {

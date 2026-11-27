@@ -198,11 +198,29 @@ export function StatsThisMac({
                     tone={card.status === 'warning' || card.status === 'critical' ? 'warning' : 'neutral'}
                   />
                 )}
-                {card.details.map((line) => (
-                  <Text variant="span" size="compact" tone="quiet" flush>
-                    {line}
-                  </Text>
-                ))}
+                {card.details.map((line, index) =>
+                  card.processLine?.index === index ? (
+                    // HS2-2TEAFA: a long process name ellipsizes in the middle, keeping its CPU share.
+                    <Text
+                      variant="span"
+                      size="compact"
+                      tone="quiet"
+                      flush
+                      wrap="truncate"
+                      {...(card.processLine.keep > 0
+                        ? { truncate: 'middle' as const, truncateKeep: card.processLine.keep }
+                        : {})}
+                      title={line}
+                      rootAttributes={{ 'data-process-line': '' }}
+                    >
+                      {line}
+                    </Text>
+                  ) : (
+                    <Text variant="span" size="compact" tone="quiet" flush>
+                      {line}
+                    </Text>
+                  ),
+                )}
               </List>
             </ContentItem>
           ))}

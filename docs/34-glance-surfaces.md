@@ -338,7 +338,9 @@ A **Right now** section above the existing "Ticket flow and usage" on the Stats 
     - Lanes are in name order. Each segment's and tick's title gives the state or ticket, start, end,
       and duration. The legend lists the states, and shows Stalled and Halted only when a lane has them.
 - **This Mac cards (HS2-NS0AYR):** disk free with rate, time to full, and the largest growing directory
-  when known; memory pressure with swap trend; CPU with a sparkline and top process; power and sleep (kept
+  when known; memory pressure with swap trend; CPU with a sparkline and top process (a long process name
+  stays on one line, ellipsized in the middle so its CPU share shows, with the full line as its title,
+  HS2-2TEAFA); power and sleep (kept
   awake or at risk); network and thermal only when degraded. Cards past a threshold take the warning tone.
   The group is labelled with the server's host name, because the viewer may be remote.
 - **Shipped (HS2-NS0AYR).** `StatsThisMac` sits below the Projects table and above Ticket flow and

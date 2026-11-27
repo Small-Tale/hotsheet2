@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { hostHealthFixture } from '../ux-demo/host-health-fixtures';
+import { hostHealthFixture, LONG_PROCESS_NAME } from '../ux-demo/host-health-fixtures';
 import { StatsThisMac } from './stats-this-mac';
 import { GlobalWorkspaceSurface } from './workspace-composition-surfaces';
 
@@ -51,6 +51,20 @@ describe('HS2-NS0AYR StatsThisMac', () => {
     expect(meters[0]).toContain('data-cores="2"');
     expect(html).toContain('2 cores · top: cargo (88%)');
     expect(String(StatsThisMac({ state: { snapshot, loading: false } }))).not.toContain('cpu-core-meter');
+  });
+
+  it('HS2-2TEAFA truncates a long top process name on one line, with the full line as its title', () => {
+    const html = String(StatsThisMac({ state: { snapshot: hostHealthFixture('long-process'), loading: false } }));
+    const line = /<[^>]*data-process-line[^>]*>/u.exec(html)?.[0] ?? '';
+    expect(line).toContain(`title="top: ${LONG_PROCESS_NAME} (97%)"`);
+    expect(line).toContain('data-wrap="truncate"');
+    expect(line).toContain('data-truncate="middle"');
+    // The middle truncation keeps the CPU share whole: it ends the line as its own text.
+    expect(html).toMatch(/>\s?\(97%\)<\/span>/u);
+    expect(html.match(/data-process-line/gu)).toHaveLength(1);
+    // Other detail lines keep their normal wrapping.
+    expect(html).toContain('of 494 GB');
+    expect(/<[^>]*data-process-line[^>]*>[^<]*of 494 GB/u.test(html)).toBe(false);
   });
 
   it('HS2-NHK8V8 asks about a newly detected disk with Monitor and Ignore, and shows a failed choice', () => {

@@ -1271,6 +1271,134 @@ test('HS2-65AD6J HS2-91AF8K role sessions that never take up their role leave th
 });
 
 /**
+ * HS2-W9CDV4 (HS2-GK6HC8): the project's integrator and dispatcher when the only AI tool they may run is signed out
+ * on its machine. The fixture project is a git checkout with a coordination pool (a handoff wants the integrator, a
+ * ready step the dispatcher), and its roomy test machine reports the synthetic tool signed out
+ * (`HOTSHEET_TEST_SIGNED_OUT_TOOLS`, honored only by the test build). The real scheduler starts neither role and
+ * reports each not started with `tool_signed_out:<tool>`; the overview's Coordination Sessions and the running card's
+ * Integration rows name the tool and the machine, never the code.
+ */
+test('HS2-W9CDV4 a signed-out AI tool keeps the integrator and dispatcher from starting, named in plain words', async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  const server = await realTicketServer({
+    canonicalRoot: true,
+    env: { HOTSHEET_TEST_ROOMY_CAPACITY: '1', HOTSHEET_TEST_SIGNED_OUT_TOOLS: SYNTHETIC_TOOL },
+    seed: async (fixture) => {
+      await gitCheckout(fixture);
+      await syntheticTool(fixture.env.HOTSHEET_HOME!);
+    },
+  });
+  try {
+    await orchestrateSelf(server);
+    const base = `/checkouts/${server.checkoutId}/orchestration`;
+    const person = { role: 'human', id: 'maintainer' };
+    await send(server, 'POST', `${base}/permission-rules`, {
+      target_id: TARGET,
+      action: 'session_start',
+      tool: SYNTHETIC_TOOL,
+      actor: person,
+    });
+    const plan = await planTwoSteps(server);
+    // A step with nothing before it is ready, so the project wants a dispatcher.
+    const ready = await server.request<Ticket>('/tickets', 'POST', { title: 'Add the synthetic audit log' });
+    await send(server, 'POST', `${base}/readiness/define`, {
+      ticket: { native_id: plan.goal.id },
+      target_id: TARGET,
+      connection_id: plan.first.connection_id,
+      native_id: ready.id,
+      prerequisites: [],
+      actor: scheduler,
+    });
+    await plan.dispatch();
+    // A worker hands a ticket off in the project's pool, so the project wants an integrator.
+    const handed = await server.request<Ticket>('/tickets', 'POST', { title: 'Add the synthetic export' });
+    await handOffInPool(server, handed);
+    await send(server, 'PUT', `${base}/policy`, {
+      expected_revision: null,
+      policy: {
+        machine: { max_sessions: 64, min_free_ram_mb: 0, max_cpu_percent: 100, min_free_disk_mb: 0 },
+        tools: [{ tool: SYNTHETIC_TOOL, max_sessions: 8 }],
+        targets: [{ target_id: TARGET, tools: [{ tool: SYNTHETIC_TOOL }], max_sessions: 8 }],
+        placement: {
+          automatic: true,
+          actor: 'scheduler-1',
+          cooldown_minutes: 0,
+          role_sessions: [{ target_id: TARGET, roles: ['integrator', 'dispatcher'] }],
+        },
+      },
+      actor: person,
+    });
+    const detail = `tool_signed_out:${SYNTHETIC_TOOL}`;
+    type Unplaced = { target_id: string; role: string; reason: string; detail?: string; retry_at_ms?: number };
+    await expect
+      .poll(
+        async () =>
+          (
+            (
+              (await send(server, 'POST', `${base}/scheduler/plan`, { actor: person })) as {
+                roles_unplaced?: Unplaced[];
+              }
+            ).roles_unplaced ?? []
+          )
+            .map((entry) => [entry.role, entry.reason, entry.detail ?? null, entry.retry_at_ms ?? null])
+            .sort(),
+        { timeout: 60_000 },
+      )
+      .toEqual([
+        ['dispatcher', 'dispatcher_not_started', detail, null],
+        ['integrator', 'integrator_not_started', detail, null],
+      ]);
+    // No role session started on the machine where the tool is signed out.
+    expect(
+      ((await send(server, 'GET', `${base}/sessions`)) as unknown as { role: string }[]).filter(
+        (session) => session.role !== 'worker',
+      ),
+    ).toEqual([]);
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openOrchestration(page, server);
+    const view = page.locator('[data-orchestration-view="true"]');
+    const words = 'Hs-synthetic-agent is signed out on this machine';
+
+    // The overview's Coordination Sessions: each role not started, naming the tool and the machine.
+    const roles = page.locator('[data-orchestration-overview] [data-orchestration-section="Coordination Sessions"]');
+    const row = (section: typeof roles, label: string) =>
+      section.locator('dl > div').filter({ has: page.locator('dt', { hasText: label }) });
+    // Both roles, in the order the scheduler reports them.
+    await expect
+      .poll(async () => (await roles.locator('dt').allInnerTexts()).sort(), { timeout: 30_000 })
+      .toEqual(['Self Dispatcher', 'Self Integrator']);
+    for (const label of ['Self Integrator', 'Self Dispatcher'])
+      await expect(row(roles, label).locator('dd')).toHaveText(`Not started: ${words}`);
+    await expect(roles).not.toContainText('_');
+    await visualPass(page, 'hs2-w9cdv4', 'overview-roles-signed-out', {
+      show: roles,
+      check: () => expect(row(roles, 'Self Dispatcher').locator('dd')).toContainText(words),
+      atPhone: () => openInspector(page),
+    });
+
+    // The running card's Integration rows, as the real server explains its step.
+    const running = view.locator(`[data-ticket-slug="${plan.first.slug}"]`);
+    const integration = page.locator('[data-orchestration-inspector] [data-orchestration-section="Integration"]');
+    await running.click();
+    await expect(row(integration, 'Integrator').locator('dd')).toHaveText('Not started', { timeout: 30_000 });
+    await expect(row(integration, 'Why').locator('dd')).toHaveText(words);
+    await expect(row(integration, 'Next')).toHaveCount(0);
+    await expect(row(integration, 'Session')).toHaveCount(0);
+    await expect(integration).not.toContainText('_');
+    await visualPass(page, 'hs2-w9cdv4', 'integration-signed-out', {
+      show: integration,
+      check: () => expect(row(integration, 'Why').locator('dd')).toHaveText(words),
+      atPhone: () => running.click(),
+    });
+  } finally {
+    await server.stop(page);
+  }
+});
+
+/**
  * HS2-D1W59D: an integrator whose AI tool crashes at launch, before it ever joins the pool, is a failed attempt like
  * one that never takes up its role. The synthetic tool exits as soon as it starts (`crashesAtLaunch`), so each
  * integrator the real scheduler starts for a handoff in the project's pool is lost; after three in a row the project

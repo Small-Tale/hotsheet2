@@ -3,6 +3,7 @@ import { dirname, join, resolve } from 'node:path';
 
 import { expect, type Page, type Request, test } from '@playwright/test';
 
+import { hostHealthFixture, LONG_PROCESS_NAME } from '../src/ux-demo/host-health-fixtures';
 import { proxyFetch, realTicketServer } from './real-ticket-server';
 
 /**
@@ -539,6 +540,67 @@ test('HS2-DR0ZSQ Systems keeps both rails and its layout from wide to phone and 
     for (const scheme of ['light', 'dark'] as const) {
       await page.emulateMedia({ colorScheme: scheme });
       await capture(page, `hs2-cmxkk2-unreachable-1440-${scheme}`);
+    }
+  } finally {
+    await server.stop(page);
+  }
+});
+
+test('HS2-2TEAFA a long top process name ellipsizes inside the CPU card at every width, light and dark', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer();
+  try {
+    const { apiPath } = await openMachines(page, server);
+    // This computer reports a long, unbroken synthetic process name as its top CPU user.
+    await page.route(
+      (url) => url.pathname === `${apiPath}/host-health`,
+      (route) => route.fulfill({ json: hostHealthFixture('long-process') }),
+    );
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+    await page.locator('[aria-label="Global Dashboards"]').first().getByRole('button', { name: 'Systems' }).click();
+    const view = page.locator('[data-component="systems-view"]');
+    const card = view.locator('[data-card="cpu"]');
+    const line = card.locator('[data-process-line]');
+    const full = `top: ${LONG_PROCESS_NAME} (97%)`;
+    await expect(line).toHaveAttribute('title', full, { timeout: 30_000 });
+    for (const scheme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme: scheme });
+      for (const [width, height] of [
+        [1440, 900],
+        [1100, 800],
+        [390, 844],
+        [1440, 900],
+      ] as const) {
+        await page.setViewportSize({ width, height });
+        await line.scrollIntoViewIfNeeded();
+        await expect(line).toBeVisible();
+        // The line stays on one row inside its card, the name ellipsized and the CPU share kept.
+        const geometry = await line.evaluate((element) => {
+          const own = element.getBoundingClientRect();
+          const box = element.closest('[data-card]')?.getBoundingClientRect();
+          return {
+            right: own.right,
+            cardRight: box?.right ?? 0,
+            height: own.height,
+            lineHeight: Number.parseFloat(getComputedStyle(element).lineHeight) || own.height,
+          };
+        });
+        expect(geometry.right).toBeLessThanOrEqual(geometry.cardRight + 0.5);
+        expect(geometry.height).toBeLessThan(geometry.lineHeight * 1.5);
+        await expect(line).toContainText('(97%)');
+        // Some part of the line is cut: the name, never the CPU share.
+        expect(
+          await line.evaluate((element) =>
+            [element, ...element.querySelectorAll('*')].some((part) => part.scrollWidth > part.clientWidth + 1),
+          ),
+        ).toBe(true);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+        await capture(page, `hs2-2teafa-${String(width)}-${scheme}`);
+        await card.screenshot({ path: `target/visual-captures/hs2-2teafa-cpu-${String(width)}-${scheme}.png` });
+      }
     }
   } finally {
     await server.stop(page);
