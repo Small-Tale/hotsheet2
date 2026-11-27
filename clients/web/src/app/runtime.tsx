@@ -63,7 +63,6 @@ import {
 import type { AttachmentFilenameEditing } from '../attachment-filename-editing';
 import { type AttachmentLabelEditing } from '../attachment-label-editing';
 import { type BoardColumnPage, isPerColumnBoardView } from '../board-pagination';
-import { describeRequestFailure } from '../bounded-backoff';
 import { browserOutboxId, browserRandomId } from '../browser-id';
 import { type BulkUpdateProgress, createBulkUpdateProgress } from '../bulk-update-progress';
 import { claimHolderName } from '../claim-holder';
@@ -2042,12 +2041,13 @@ export async function startHotSheetWebClient() {
   };
   // Ticket-store sync health for the shell's publication-failure strip (HS2-ADHFKZ): loaded when
   // a project is first shown and on `ticket_store_sync` change events, never on a timer.
-  // HS2-JGFPG4: a transient failure retries on the bounded backoff; one that persists is shown, not dropped.
-  const ticketStoreSync = createTicketStoreSync((target) => new Api(target.apiPath).checkoutRepositorySync(target.id), {
-    onPersistentFailure: (target, reason) => {
-      showToast(`${target.name}: ticket sync health could not be read. ${describeRequestFailure(reason)}`);
-    },
-  });
+  // HS2-JGFPG4: a transient failure retries on the bounded backoff; one that persists is forgotten, so
+  // showing the project again asks again. HS2-JAJFC2: it raises no toast. An unreachable server is
+  // already shown by the app's connection state, and a refusal means there is no health to show.
+  // A background health read never drives the busy bars, including its quiet retries (HS2-JAJFC2).
+  const ticketStoreSync = createTicketStoreSync((target) =>
+    new Api(target.apiPath, '', { trackBusy: false }).checkoutRepositorySync(target.id),
+  );
   effect(() => {
     const current = project();
     if (!current) return;

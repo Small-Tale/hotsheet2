@@ -132,7 +132,7 @@ async function routeProject(page: Page, server: Server) {
   return apiPath;
 }
 
-test('HS2-CX563Y a sync-health read retries a transient failure and shows one toast for a lasting one', async ({
+test('HS2-CX563Y a sync-health read retries a transient failure and asks again after a lasting one, with no toast (HS2-JAJFC2)', async ({
   page,
 }) => {
   test.setTimeout(150_000);
@@ -183,18 +183,14 @@ test('HS2-CX563Y a sync-health read retries a transient failure and shows one to
     expect(reads.alpha).toBe(3);
     expect(await toasts(/ticket sync health could not be read/u)).toEqual([]);
 
-    // Beta: every read fails; after five tries one toast names the project, and no banner shows.
+    // Beta: every read fails; after five tries it stops, raising no toast (HS2-JAJFC2), and no banner shows.
     const strip = page.locator('.project-tab-bar:not(.project-tab-bar--mobile)');
     await strip.getByRole('button', { name: 'Add Project' }).click();
     await page.getByRole('button', { name: 'Local Project' }).click();
     await expect(projectTab(strip, 'beta')).toHaveAttribute('aria-selected', 'true');
-    // HS2-1HGTD7: the same plain sentence in every browser, never the browser's own network text.
-    const lasting = /^beta: ticket sync health could not be read\. The Hot Sheet server could not be reached\.$/u;
-    await expect.poll(() => toasts(lasting), { timeout: 60_000 }).toHaveLength(1);
-    expect(reads.beta).toBe(5);
+    await expect.poll(() => reads.beta, { timeout: 60_000 }).toBe(5);
     await expect(banner).toHaveCount(0);
-    await toastPass(page, 'hs2-cx563y', 'sync-health-toast', lasting);
-    expect(reads.beta).toBe(5);
+    expect(await toasts(/ticket sync health could not be read/u)).toEqual([]);
 
     // Showing alpha does not read it again; showing beta again asks again and fills its banner.
     betaFails = false;
@@ -203,7 +199,7 @@ test('HS2-CX563Y a sync-health read retries a transient failure and shows one to
     await projectTab(strip, 'beta').click();
     await expect(banner).toBeVisible({ timeout: 30_000 });
     expect(reads).toEqual({ alpha: 3, beta: 6 });
-    expect(await toasts(/ticket sync health could not be read/u)).toHaveLength(1);
+    expect(await toasts(/ticket sync health could not be read/u)).toEqual([]);
   } finally {
     await alpha.stop(page);
     await beta.stop(page);
