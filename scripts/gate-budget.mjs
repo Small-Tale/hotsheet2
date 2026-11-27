@@ -43,6 +43,24 @@ function directlyAffected(stage, changes) {
   return false;
 }
 
+/**
+ * HS2-C8PWWV: formatters, linters, typechecks and the cheap cross-package `always` floor. They run
+ * before every suite, in their scripts/check-full.sh order, and the CI First clock never defers
+ * them: a failing or slow `cargo nextest` once stopped the gate before web ESLint started, and an
+ * unused import reached main.
+ */
+export const staticCheckStage = (stage) =>
+  stage.group === 'always' ||
+  stage.group === 'web_lint' ||
+  /(?:^| )lint$|typecheck|format:sources:check|^cargo fmt /.test(stage.command) ||
+  stage.command === 'node scripts/windows-cfg-check.mjs';
+
+/** HS2-C8PWWV: static checks first, then suites; a stable partition keeps each side's gate order. */
+export const staticChecksFirst = (stages) => [
+  ...stages.filter((stage) => staticCheckStage(stage)),
+  ...stages.filter((stage) => !staticCheckStage(stage)),
+];
+
 function rank(stage) {
   if (/test:unit|test:coverage|cargo nextest/.test(stage.command)) return 1;
   if (stage.command.startsWith('npx playwright test ')) return 2;
@@ -187,7 +205,7 @@ export function selectBudget({
       }
     }
   }
-  const output = stages.flatMap((stage) => {
+  const output = staticChecksFirst(stages).flatMap((stage) => {
     if (cappedIds.has(stageId(stage)))
       return stageId(stage) === stageId(cappedBrowser[0]) ? browserPlan.stages : [];
     if (!stage.selected)

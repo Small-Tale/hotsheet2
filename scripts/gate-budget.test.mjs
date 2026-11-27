@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { highImpactBrowserChange, parseBudget, selectBudget, stageId } from './gate-budget.mjs';
+import {
+  highImpactBrowserChange,
+  parseBudget,
+  selectBudget,
+  stageId,
+  staticCheckStage,
+} from './gate-budget.mjs';
 import {
   BROWSER_COMMAND_OVERHEAD_MS,
   BROWSER_RANK,
@@ -491,4 +497,41 @@ test('HS2-FXY4M2 per-case estimates use recorded case timings, else the declared
   assert.equal(unitEstimate({ file: 'tests/a.spec.ts', grep: null }, { history: observed }).ms, 60_000);
   assert.equal(unitEstimate({ file: 'tests/missing.spec.ts', grep: 'x' }, { history: observed }).ms, null);
   assert.equal(BROWSER_COMMAND_OVERHEAD_MS, 5_000);
+});
+
+test('hs2_c8pwwv_static_checks_are_classified_and_ordered_before_suites', () => {
+  for (const [cwd, command, group] of [
+    ['.', 'cargo fmt --all --check', 'always'],
+    ['.', 'cargo lint', 'rust'],
+    ['.', 'node scripts/windows-cfg-check.mjs', 'rust'],
+    ['clients/web', 'npm run format:sources:check', 'always'],
+    ['clients/web', 'npm run lint:web', 'web_lint'],
+    ['clients/web', 'npm run typecheck', 'web'],
+    ['migrator', 'npm run lint', 'migrator'],
+    ['spikes/kerf-webawesome', 'npm run lint', 'spike'],
+    ['spikes/kerf-webawesome', 'npm run typecheck', 'spike'],
+  ])
+    assert.equal(staticCheckStage({ cwd, command, group }), true, `${cwd} ${command}`);
+  for (const [cwd, command, group] of [
+    ['.', 'cargo nextest run --all-features --status-level leak', 'rust'],
+    ['clients/web', 'npm run test:unit', 'web'],
+    ['clients/web', 'npm run build', 'web'],
+    ['migrator', 'npm run test:coverage', 'migrator'],
+    ['clients/web', "npx playwright test 'tests/providers.spec.ts'", 'web'],
+  ])
+    assert.equal(staticCheckStage({ cwd, command, group }), false, `${cwd} ${command}`);
+
+  // A suite listed before web lint in scripts/check-full.sh still runs after it, and a full gate
+  // keeps every static check ahead of every suite in its original relative order.
+  const nextest = stage('.', 'cargo nextest run --all-features --status-level leak', 'rust');
+  const webLint = stage('clients/web', 'npm run lint:web', 'web_lint');
+  const ordered = [format, nextest, webLint, typecheck, unit, build];
+  for (const full of [false, true]) {
+    const result = selectBudget({ stages: ordered, changes: [], history, budgetMs: 300_000, full });
+    assert.deepEqual(
+      result.stages.map(stageId),
+      [format, webLint, typecheck, nextest, unit, build].map(stageId),
+      `full=${full}`,
+    );
+  }
 });

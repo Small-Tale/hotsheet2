@@ -38,6 +38,7 @@ import {
 } from './gate-browser-exercise.mjs';
 import { bestEffortProfile, profileFromTags } from './gate-ticket-profile.mjs';
 import { BROWSER_RANK } from './gate-browser-budget.mjs';
+import { staticCheckStage } from './gate-budget.mjs';
 import {
   changedLines,
   parentModuleFiles,
@@ -2126,7 +2127,11 @@ test('HS2-ZGS7JP best effort budgets a T2 ticket, needs no analyzed selection or
   assert.equal(ciFirstProfile(10, ['tier:T1', 'test-budget:2m']).budgetMs, 120_000);
   assert.equal(ciFirstProfile(1, ['tier:T1', 'test-budget:2m']).budgetMs, 60_000);
 
-  // A fake clock: each stage takes 25 s, so the third stage starts past the one-minute budget.
+  // A fake clock: each stage takes 25 s, so the budget is spent during the static checks. HS2-C8PWWV:
+  // static checks run first and the clock never defers them; the suites after them are deferred.
+  const started = plan.checks.filter((stage) => staticCheckStage(stage)).length;
+  assert.ok(started > 3 && started < plan.checks.length);
+  assert.ok(plan.checks.slice(started).every((stage) => !staticCheckStage(stage)));
   let now = 0;
   const ran = [];
   const runner = (stage) => {
@@ -2136,16 +2141,16 @@ test('HS2-ZGS7JP best effort budgets a T2 ticket, needs no analyzed selection or
   };
   const lines = [];
   assert.equal(runGate({ ...f.options, profile, runner, clock: () => now, log: (line) => lines.push(line) }), 0);
-  assert.equal(ran.length, 3, 'stages start until the budget has elapsed, then stop');
+  assert.equal(ran.length, started, 'suites start until the budget has elapsed, then stop');
   const receipt = JSON.parse(readFileSync(join(plan.cache, `${plan.key}.json`), 'utf8'));
   const ids = plan.checks.map((stage) => `${stage.cwd}::${stage.command}`);
-  assert.deepEqual(receipt.bestEffort.ran, ids.slice(0, 3));
-  assert.deepEqual(receipt.bestEffort.runtimeDeferred, ids.slice(3));
+  assert.deepEqual(receipt.bestEffort.ran, ids.slice(0, started));
+  assert.deepEqual(receipt.bestEffort.runtimeDeferred, ids.slice(started));
   assert.equal(receipt.bestEffort.budgetMs, 60_000);
   assert.equal(receipt.bestEffort.strategy, 'ci-first');
-  for (const stage of plan.checks.slice(3)) assert.ok(receipt.deferred.includes(stage.command));
+  for (const stage of plan.checks.slice(started)) assert.ok(receipt.deferred.includes(stage.command));
   for (const stage of plan.deferred) assert.ok(receipt.deferred.includes(stage.command));
-  assert.match(lines.join('\n'), /Best-effort gate \(HS2-ZGS7JP\): 3 check\(s\) ran/);
+  assert.match(lines.join('\n'), new RegExp(`Best-effort gate \\(HS2-ZGS7JP\\): ${started} check\\(s\\) ran`));
   assert.match(lines.join('\n'), /deferred to CI: \n/);
 
   // Verification accepts the best-effort receipt; a new run spends a fresh budget on the
@@ -2156,8 +2161,72 @@ test('HS2-ZGS7JP best effort budgets a T2 ticket, needs no analyzed selection or
   assert.equal(runGate({ ...f.options, profile, runner, clock: () => now }), 0);
   assert.deepEqual(
     ran,
-    plan.checks.slice(3, 6).map((stage) => stage.command),
+    plan.checks.slice(started, started + 3).map((stage) => stage.command),
   );
+});
+
+test('hs2_c8pwwv_web_test_change_runs_web_eslint_before_suites_and_past_the_clock', (t) => {
+  // HS2-CSPDW8's change set: web specs, a shared tests/ helper and a src/ policy test only.
+  const f = fixture(t);
+  f.git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+  for (const path of [
+    'clients/web/src/eslint-policy.test.ts',
+    'clients/web/tests/project-tab-warm-cache.spec.ts',
+    'clients/web/tests/providers.spec.ts',
+    'clients/web/tests/server-event-fixtures.ts',
+  ])
+    f.put(path, 'export const synthetic = 1;\n');
+  f.git('add', 'clients/web');
+  f.git('commit', '--quiet', '-m', 'synthetic web test change');
+  const profile = ciFirstProfile(1, ['tier:T1']);
+  const plan = prepare(f.repo, undefined, false, f.options.versions, { profile });
+  const ids = plan.checks.map((stage) => `${stage.cwd}::${stage.command}`);
+  const lint = ids.indexOf('clients/web::npm run lint:web');
+  assert.ok(lint >= 0, 'a tests/ or src/ change selects web ESLint');
+  assert.ok(ids.includes('clients/web::npm run format:sources:check'));
+  assert.ok(ids.includes('clients/web::npm run typecheck'));
+  const firstSuite = plan.checks.findIndex((stage) => !staticCheckStage(stage));
+  assert.ok(firstSuite > lint, 'web ESLint runs before every suite');
+  assert.ok(plan.checks.slice(firstSuite).every((stage) => !staticCheckStage(stage)));
+
+  // Every stage takes 25 s, so the budget is spent after the third static check; the remaining
+  // static checks still run, and only the suites are deferred to CI.
+  let now = 0;
+  const ran = [];
+  const runner = (stage) => {
+    ran.push(`${stage.cwd}::${stage.command}`);
+    now += 25_000;
+    return { status: 0 };
+  };
+  assert.equal(runGate({ ...f.options, profile, runner, clock: () => now }), 0);
+  assert.deepEqual(ran, ids.slice(0, firstSuite));
+  const receipt = JSON.parse(readFileSync(join(plan.cache, `${plan.key}.json`), 'utf8'));
+  assert.deepEqual(receipt.bestEffort.runtimeDeferred, ids.slice(firstSuite));
+});
+
+test('hs2_c8pwwv_a_failing_suite_cannot_hide_web_eslint', (t) => {
+  // A full gate (as for a stack that touches scripts/) whose Rust suite fails still ran web ESLint.
+  const f = fixture(t);
+  const plan = prepare(f.repo, undefined, true, f.options.versions);
+  const ids = plan.checks.map((stage) => `${stage.cwd}::${stage.command}`);
+  const nextest = ids.indexOf('.::cargo nextest run --all-features --status-level leak');
+  for (const check of [
+    '.::cargo fmt --all --check',
+    '.::cargo lint',
+    'clients/web::npm run format:sources:check',
+    'clients/web::npm run lint:web',
+    'clients/web::npm run typecheck',
+    'migrator::npm run lint',
+    'spikes/kerf-webawesome::npm run lint',
+  ])
+    assert.ok(ids.indexOf(check) >= 0 && ids.indexOf(check) < nextest, `${check} runs before cargo nextest`);
+  const ran = [];
+  const runner = (stage) => {
+    ran.push(`${stage.cwd}::${stage.command}`);
+    return { status: stage.command.startsWith('cargo nextest') ? 1 : 0 };
+  };
+  assert.equal(runGate({ ...f.options, full: true, runner }), 1);
+  assert.ok(ran.includes('clients/web::npm run lint:web'), 'web ESLint ran before the suite failed');
 });
 
 test('HS2-ZGS7JP a failing best-effort stage still fails the gate and records no receipt', (t) => {

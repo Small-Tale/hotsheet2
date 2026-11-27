@@ -359,7 +359,16 @@ hide malformed coverage evidence from the local check. A failing stage still fai
 the gate. The cheap server route/OpenAPI completeness check runs next, before broad Rust
 suites (HS2-140YMZ); it catches a newly added undocumented path or method even when a later
 browser contracts test would be deferred. Its selected or deferred status appears in the
-same plan and receipt as every other stage. A rerun on the same inputs reuses passed stage receipts and spends a fresh budget on the
+same plan and receipt as every other stage.
+
+**Static checks run first and are never clock-deferred (HS2-C8PWWV).** Formatters, linters,
+typechecks and the cheap cross-package `always` floor (`cargo fmt`, `cargo lint`, the
+Windows cfg clippy pass, `format:sources:check`, web `lint:web` and `typecheck`, migrator
+and spike `lint`/`typecheck`) run before every suite in every gate mode, keeping their
+relative `check-full.sh` order, and the CI First clock never defers them. Before this, web
+ESLint ran after `cargo nextest`: a stacked full gate stopped on two nextest load flakes
+before `lint:web` started, and an unused import in a web spec reached main.
+`staticCheckStage` in `scripts/gate-budget.mjs` is the one predicate for both rules. A rerun on the same inputs reuses passed stage receipts and spends a fresh budget on the
 deferred stages. Under CI First `scripts/push.sh` does not require the receipt at all;
 the covering main CI run is the gate.
 

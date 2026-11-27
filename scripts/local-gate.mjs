@@ -10,7 +10,13 @@ import { exerciseIndexForRepo, withSpecimenInventory } from './gate-browser-exer
 import { ciBrowserMatrix, gateBrowserCoverage, WORKFLOWS } from './browser-engines.mjs';
 import { edgePreviewForRepo } from './gate-edge-plan.mjs';
 import { platformCfgForRepo } from './platform-cfg.mjs';
-import { contractInputsChanged, highImpactBrowserChange, parseBudget, selectBudget } from './gate-budget.mjs';
+import {
+  contractInputsChanged,
+  highImpactBrowserChange,
+  parseBudget,
+  selectBudget,
+  staticCheckStage,
+} from './gate-budget.mjs';
 import { BROWSER_RANK, countDeclaredTests } from './gate-browser-budget.mjs';
 import { readTicketProfile } from './gate-ticket-profile.mjs';
 import {
@@ -1033,7 +1039,13 @@ export function runGate(options = {}) {
   for (const stage of before.checks) {
     const stagePath = join(before.cache, `stage-${stage.key}.json`);
     const recorded = read(stagePath);
-    if (recorded?.key !== stage.key && before.bestEffort && clock() - budgetStarted >= before.budgetMs) {
+    if (
+      recorded?.key !== stage.key &&
+      before.bestEffort &&
+      // HS2-C8PWWV: lint, format and type checks always run locally; the clock never defers them.
+      !staticCheckStage(stage) &&
+      clock() - budgetStarted >= before.budgetMs
+    ) {
       // HS2-ZGS7JP: the best-effort budget is spent; an unstarted stage is deferred to CI, not failed.
       runtimeDeferred.push(stage);
       attempt.checks.push({ id: observationStageKey(stage), outcome: 'skip', category: 'best-effort-deferred' });
