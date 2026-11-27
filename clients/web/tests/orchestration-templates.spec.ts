@@ -255,6 +255,10 @@ test('HS2-A4RVYA Save a Goal as Template… saves a goal’s plan steps and sele
     await capture(page, 'empty-1440-light');
     await dialog.getByRole('button', { name: 'Save a Goal as Template…' }).click();
     await expect(dialog.getByRole('heading', { name: 'Save a Goal as Template' })).toBeVisible();
+    // HS2-M7RXCB: the goal is named by its title, then its slug and step count.
+    await expect(dialog.locator('[data-template-save]')).toContainText(
+      `Ship the synthetic sign-on · ${goal.slug} · 2 steps`,
+    );
     const save = dialog.getByRole('button', { name: 'Save Template' });
     await expect(save).toBeDisabled();
     await expect(dialog).toContainText('Name the template.');

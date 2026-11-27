@@ -496,6 +496,8 @@ export interface SavableGoal {
   connection_id: string;
   native_id: string;
   slug: string;
+  /** HS2-M7RXCB: the goal's title (bounded by the server); empty from an older server. */
+  title: string;
   steps: number;
 }
 
@@ -506,8 +508,36 @@ export function savableGoals(view: Record<string, unknown> | undefined): Savable
       native = text(goal.native_id),
       steps = typeof goal.steps === 'number' ? goal.steps : 0;
     if (!connection || !native || steps < 1) return [];
-    return [{ connection_id: connection, native_id: native, slug: text(goal.slug) ?? native, steps }];
+    return [
+      {
+        connection_id: connection,
+        native_id: native,
+        slug: text(goal.slug) ?? native,
+        title: (text(goal.title) ?? '').trim(),
+        steps,
+      },
+    ];
   });
+}
+
+/** Characters of a goal title shown in the Save a Goal as Template… select before it is shortened. */
+export const GOAL_LABEL_TITLE_CHARS = 80;
+
+/**
+ * HS2-M7RXCB: a goal as the Save a Goal as Template… select names it: its title first, then its slug
+ * and step count, so goals read by what they are about rather than by slug alone.
+ */
+export function savableGoalLabel(goal: SavableGoal): string {
+  const steps = goal.steps === 1 ? '1 step' : `${goal.steps} steps`;
+  // Graphemes, so a shortened title never splits a character.
+  const chars = Array.from(
+    new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(goal.title),
+    (part) => part.segment,
+  );
+  if (chars.length === 0) return `${goal.slug} · ${steps}`;
+  const title =
+    chars.length > GOAL_LABEL_TITLE_CHARS ? `${chars.slice(0, GOAL_LABEL_TITLE_CHARS - 1).join('')}…` : goal.title;
+  return `${title} · ${goal.slug} · ${steps}`;
 }
 
 /** Why Save Template is disabled, or undefined when it may be pressed. */

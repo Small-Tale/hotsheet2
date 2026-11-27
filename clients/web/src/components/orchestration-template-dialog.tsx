@@ -23,6 +23,7 @@ import {
   type PlanTemplate,
   problemText,
   type SavableGoal,
+  savableGoalLabel,
   type SaveGoalForm,
   saveProblem,
   stepNumbers,
@@ -308,7 +309,7 @@ function SaveDetail({ state }: { state: OrchestrationTemplateDialogState }) {
           disabled={state.goals.length === 0}
           choices={state.goals.map((goal) => ({
             value: goal.native_id,
-            label: `${goal.slug} · ${goal.steps === 1 ? '1 step' : `${goal.steps} steps`}`,
+            label: savableGoalLabel(goal),
           }))}
         />
         <TextField

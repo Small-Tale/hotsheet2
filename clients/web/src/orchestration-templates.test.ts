@@ -4,6 +4,7 @@ import {
   accessText,
   applyBanner,
   applyProblems,
+  GOAL_LABEL_TITLE_CHARS,
   initialInputs,
   inputsToSend,
   localInputProblems,
@@ -15,6 +16,7 @@ import {
   permissionRows,
   planningRows,
   problemText,
+  savableGoalLabel,
   savableGoals,
   saveProblem,
   stepNumbers,
@@ -221,7 +223,7 @@ describe('plan templates in the Orchestration view (HS2-A4RVYA)', () => {
         { native_id: 'g3', steps: 3 },
       ],
     });
-    expect(goals).toEqual([{ connection_id: 'c', native_id: 'g1', slug: 'LCH-1', steps: 2 }]);
+    expect(goals).toEqual([{ connection_id: 'c', native_id: 'g1', slug: 'LCH-1', title: '', steps: 2 }]);
     const form = { goal: 'g1', name: 'Again', description: '', targetsAsInputs: false };
     expect(saveProblem(form, goals)).toBeUndefined();
     expect(saveProblem(form, [])).toBe('No open goal has plan steps to save yet');
@@ -229,6 +231,32 @@ describe('plan templates in the Orchestration view (HS2-A4RVYA)', () => {
     expect(saveProblem({ ...form, name: '  ' }, goals)).toBe('Name the template');
     expect(saveProblem({ ...form, name: 'x'.repeat(201) }, goals)).toBe('Use a name of at most 200 characters');
     expect(savableGoals(undefined)).toEqual([]);
+  });
+
+  it('HS2-M7RXCB names goals by title in the Save a Goal as Template… select', () => {
+    const [titled, untitled, long, one] = savableGoals({
+      goals: [
+        { connection_id: 'c', native_id: 'g1', slug: 'LCH-1', title: '  Rate limits for the API ', steps: 2 },
+        { connection_id: 'c', native_id: 'g2', slug: 'LCH-2', steps: 3 },
+        { connection_id: 'c', native_id: 'g3', slug: 'LCH-3', title: 'x'.repeat(200), steps: 4 },
+        { connection_id: 'c', native_id: 'g4', slug: 'LCH-4', title: 'One step', steps: 1 },
+      ],
+    });
+    expect(titled.title).toBe('Rate limits for the API');
+    expect(savableGoalLabel(titled)).toBe('Rate limits for the API · LCH-1 · 2 steps');
+    // An older server sends no title: the slug alone, as before.
+    expect(savableGoalLabel(untitled)).toBe('LCH-2 · 3 steps');
+    const label = savableGoalLabel(long);
+    expect(label).toBe(`${'x'.repeat(GOAL_LABEL_TITLE_CHARS - 1)}… · LCH-3 · 4 steps`);
+    expect(savableGoalLabel(one)).toBe('One step · LCH-4 · 1 step');
+    // A title of exactly the bound is not shortened, and characters are counted, not code units.
+    expect(savableGoalLabel({ ...long, title: '😀'.repeat(GOAL_LABEL_TITLE_CHARS) })).toBe(
+      `${'😀'.repeat(GOAL_LABEL_TITLE_CHARS)} · LCH-3 · 4 steps`,
+    );
+    const family = '\u{1F469}\u200D\u{1F469}\u200D\u{1F467}';
+    expect(savableGoalLabel({ ...long, title: family.repeat(GOAL_LABEL_TITLE_CHARS + 1) })).toBe(
+      `${family.repeat(GOAL_LABEL_TITLE_CHARS - 1)}… · LCH-3 · 4 steps`,
+    );
   });
 
   it('demo templates parse back through the wire parser', () => {

@@ -451,7 +451,15 @@ function templateState(change: Partial<OrchestrationTemplateDialogState> = {}): 
       { target_id: 'docs', label: 'Docs · This computer' },
     ],
     save: { goal: 'ticket-LCH-1', name: '', description: '', targetsAsInputs: true },
-    goals: [{ connection_id: 'launch-tickets', native_id: 'ticket-LCH-1', slug: 'LCH-1', steps: 3 }],
+    goals: [
+      {
+        connection_id: 'launch-tickets',
+        native_id: 'ticket-LCH-1',
+        slug: 'LCH-1',
+        title: 'Launch the synthetic sign-on',
+        steps: 3,
+      },
+    ],
     session: 1,
     ...change,
   };

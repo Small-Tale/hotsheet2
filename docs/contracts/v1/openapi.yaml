@@ -27096,6 +27096,10 @@ components:
           type: string
         slug:
           type: string
+        title:
+          description: The goal's title, at most 200 characters (HS2-M7RXCB).
+          type: string
+          maxLength: 200
         steps:
           type: integer
           minimum: 0

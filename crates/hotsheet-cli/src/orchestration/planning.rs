@@ -58,6 +58,9 @@ pub struct ProposePlan {
     pub(super) plan_update: bool,
 }
 
+/// HS2-M7RXCB: the bound on a listed goal's title.
+pub const GOAL_TITLE_CHARS: usize = 200;
+
 /// An open goal ticket of the orchestration project, with the plan steps it has.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GoalTicket {
@@ -65,6 +68,10 @@ pub struct GoalTicket {
     /// The canonical id.
     pub native_id: String,
     pub slug: String,
+    /// HS2-M7RXCB: the goal's title, at most [`GOAL_TITLE_CHARS`] characters, so a
+    /// goal can be named by title rather than by slug alone.
+    #[serde(default)]
+    pub title: String,
     /// Plan steps this machine holds for the goal.
     pub steps: u32,
     /// HS2-N5BDE4: the unanswered `FEEDBACK NEEDED` note on the goal, by note id: the
@@ -189,6 +196,7 @@ impl OrchestrationRuntime {
                             .unwrap_or(0),
                         connection_id: connection_id.to_owned(),
                         native_id,
+                        title: ticket.title.chars().take(GOAL_TITLE_CHARS).collect(),
                         slug: ticket.slug,
                     }
                 })

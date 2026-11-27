@@ -5785,8 +5785,9 @@ operation id and `plan_started`, `plan_replanned`, `plan_existing` or the refusa
 
 `goal` names one goal ticket (slug or id, with its `connection_id` when the project
 has several git sources); without it every open goal ticket is planned. The answer
-lists the goals oldest first with the plan steps this machine holds for each (at most
-256 listed; `goal_count` counts all), the number of declared targets, the planner's
+lists the goals oldest first with their titles (at most 200 characters, HS2-M7RXCB) and
+the plan steps this machine holds for each (at most 256 listed; `goal_count` counts
+all), the number of declared targets, the planner's
 hosted session, and how its prompt was delivered. `show` adds the plan's step count
 and `placement_automatic`, so a view can say the plan is a dry run. The planner's
 hosted session carries `tool_ready` (§26.16). While it is `false` the Orchestration
@@ -7803,6 +7804,10 @@ prerequisites on other steps of the goal become `after` with their gates. The go
 title and details become the template's goal. With `targets_as_inputs`, each project
 becomes a required `target` input (`project-<n>`) defaulting to it. A goal without steps
 is `template_goal_empty`.
+
+The view's **Goal** select offers the open goals that have plan steps, each named by its
+title, then its slug and step count (`Rate limits for the API · LCH-7 · 3 steps`; a title
+past 80 characters is shortened with an ellipsis, HS2-M7RXCB).
 
 ### In the Orchestration view
 
