@@ -97,6 +97,7 @@ import { type NotificationView } from '../components/notification-navigation';
 import { OrchestrationDecisionsDialog } from '../components/orchestration-decisions-dialog';
 import { orchestrationInspectorPanel } from '../components/orchestration-inspector';
 import { OrchestrationTemplateDialog } from '../components/orchestration-template-dialog';
+import { OrchestrationTemplateEditor } from '../components/orchestration-template-editor';
 import { OrchestrationToolbar } from '../components/orchestration-toolbar';
 import { type ProjectCloseDialogState } from '../components/project-close-dialog';
 import { projectRestoreTabId } from '../components/project-restore-error';
@@ -6049,6 +6050,7 @@ export async function startHotSheetWebClient() {
     remoteServerLabels: async () =>
       Object.fromEntries((await listDesktopRemoteServers()).map((server) => [server.id, server.label])),
     showToast,
+    personId: () => orchestrationPersonId(localStorage),
   });
   orchestrationSurfaceRef.current = orchestrationSurface;
   const { settingsWorkspace } = createSettingsSurface({
@@ -7070,6 +7072,7 @@ export async function startHotSheetWebClient() {
           timeline={orchestrationView.timeline.value}
         />
         <OrchestrationTemplateDialog state={orchestrationView.templateDialog.value} compact={viewportMobile.value} />
+        <OrchestrationTemplateEditor {...orchestrationSurface.templateEditor()} compact={viewportMobile.value} />
       </>
     ),
     composerAttachmentError,
@@ -7849,6 +7852,9 @@ export async function startHotSheetWebClient() {
     notificationSettings,
     remoteDevices,
     orchestrationSettings: orchestrationSurface.settings,
+    orchestrationTemplates: orchestrationSurface.templates,
+    orchestrationTemplateFirstProject: (projectId: string) =>
+      orchestrationSurface.declaredProjects(projectId)[0]?.target_id,
     registeredProjects,
     refreshTrashSettings,
     refreshTicketCreationSettings,

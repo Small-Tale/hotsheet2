@@ -14,6 +14,7 @@ import type {
 } from '../api';
 import { ApiHttpError } from '../api';
 import { createOrchestrationSettings, type OrchestrationApi } from '../features/orchestration-settings';
+import { createOrchestrationTemplateEditing } from '../features/orchestration-template-editing';
 
 export const DEMO_OWNER = 'launch-0000000000ab';
 export const DEMO_NOW = 1_794_000_000_000;
@@ -472,6 +473,122 @@ export function createDemoOrchestrationSettings(options: { empty?: boolean } = {
       settings.settings.value = { ...settings.settings.value, [DEMO_OWNER]: undefined };
       await settings.loadType(DEMO_OWNER);
       await settings.loadSettings(DEMO_OWNER);
+    },
+  };
+}
+
+/** HS2-1XCW6N: synthetic checked-in templates for Settings › Orchestration › Templates. */
+export function demoCheckedInTemplates(): Array<Record<string, unknown>> {
+  return [
+    {
+      template_id: '01JTEMPLATE00000000000FEAT',
+      name: 'Feature across API and Web',
+      description: 'Build it in the API, then show it in Web on top of green CI.',
+      state: 'active',
+      version: 3,
+      inputs: [
+        { key: 'feature', label: 'Feature', kind: 'text', required: true, hint: 'Such as Rate limits' },
+        { key: 'api', label: 'API Project', kind: 'target', required: true, default: DEMO_TARGETS.api },
+        { key: 'contract', label: 'Contract Check', kind: 'boolean', required: false, default: true },
+      ],
+      goal: { title: '{{feature}}: API and Web' },
+      steps: [
+        {
+          key: 'api',
+          target: '{{api}}',
+          title: 'Add {{feature}} headers',
+          priority: 'high',
+          validation: ['contract-check'],
+          tool: 'claude',
+        },
+        {
+          key: 'web',
+          target: DEMO_TARGETS.web,
+          title: 'Show {{feature}} errors',
+          after: [{ step: 'api', gates: 'ci' }],
+          when: '{{contract}}',
+        },
+      ],
+    },
+    {
+      template_id: '01JTEMPLATE00000000000DOCS',
+      name: 'Release notes',
+      state: 'retired',
+      version: 2,
+      goal: { title: 'Write the release notes' },
+      steps: [{ key: 'notes', target: DEMO_TARGETS.docs, title: 'Write the release notes', ticket: 'create' }],
+    },
+  ];
+}
+
+/**
+ * HS2-1XCW6N: the production template editing controller over an in-memory template list with the server's
+ * shapes (list, validate with a few of the validator's codes, set with the revision, retire).
+ */
+export function createDemoTemplateEditing() {
+  let templates = demoCheckedInTemplates(),
+    revision = 1;
+  const api = {
+    orchestrationTemplates: (
+      _checkout: string,
+      operation: 'list' | 'validate' | 'set' | 'retire',
+      body: Record<string, unknown>,
+    ): Promise<Record<string, unknown>> => {
+      switch (operation) {
+        case 'list':
+          return Promise.resolve({ revision: `rev-${String(revision)}`, templates, applies: [] });
+        case 'validate': {
+          const template = (body.template ?? {}) as {
+            name?: string;
+            goal?: { title?: string };
+            steps?: Array<{ title?: string }>;
+          };
+          const problems = [
+            ...(template.name?.trim() ? [] : [{ code: 'name_invalid', at: 'name' }]),
+            ...(template.goal?.title?.trim() ? [] : [{ code: 'text_invalid', at: 'goal.title' }]),
+            ...(template.steps ?? []).flatMap((step, n) =>
+              step.title?.trim() ? [] : [{ code: 'text_invalid', at: `steps[${String(n)}].title` }],
+            ),
+          ];
+          return Promise.resolve({ valid: problems.length === 0, problems });
+        }
+        case 'set': {
+          const incoming = (body.templates as Array<Record<string, unknown>>)[0];
+          const id =
+            typeof incoming.template_id === 'string'
+              ? incoming.template_id
+              : `01JTEMPLATE0000000000NEW${String(revision)}`;
+          const known = templates.find((template) => template.template_id === id);
+          templates = [
+            ...templates.filter((template) => template.template_id !== id),
+            { ...incoming, template_id: id, version: Number(known?.version ?? 0) + 1 },
+          ];
+          revision += 1;
+          return Promise.resolve({ revision: `rev-${String(revision)}`, templates });
+        }
+        case 'retire':
+          templates = templates.map((template) =>
+            template.template_id === body.template_id ? { ...template, state: 'retired' } : template,
+          );
+          revision += 1;
+          return Promise.resolve({});
+        default:
+          return Promise.reject(new Error(String(operation)));
+      }
+    },
+  };
+  const editing = createOrchestrationTemplateEditing({
+    api: () => api,
+    personId: () => 'demo-person',
+    confirm: () => Promise.resolve(true),
+  });
+  return {
+    editing,
+    reset: async () => {
+      templates = demoCheckedInTemplates();
+      revision = 1;
+      editing.editor.value = undefined;
+      await editing.load(DEMO_OWNER);
     },
   };
 }

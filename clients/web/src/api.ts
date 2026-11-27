@@ -2473,7 +2473,7 @@ export class Api {
    */
   orchestrationTemplates = (
     checkout: string,
-    operation: 'list' | 'preview' | 'apply' | 'apply_show' | 'save_goal',
+    operation: 'list' | 'preview' | 'apply' | 'apply_show' | 'save_goal' | 'validate' | 'set' | 'retire',
     body: Record<string, unknown>,
     actorId: string,
   ) =>
@@ -2481,7 +2481,7 @@ export class Api {
       parseOrchestrationRecord,
       `/checkouts/${encodeURIComponent(checkout)}/orchestration/templates/${operation}`,
       { method: 'POST', body: JSON.stringify({ ...body, actor: { role: 'human', id: actorId } }) },
-      operation !== 'list' && operation !== 'preview' && operation !== 'apply_show',
+      operation !== 'list' && operation !== 'preview' && operation !== 'apply_show' && operation !== 'validate',
     );
   /** HS2-HCW7MD: where planning stands (`idle`, `planning` or `ended`); starts nothing. */
   orchestrationPlanning = (checkout: string) =>

@@ -842,7 +842,8 @@ test('HS2-TK9ADC turns a project coordination sessions on and off through the re
  * Web and Docs are registered on that server but not open here.
  */
 /** The Orchestration view's read-only POSTs: where planning stands, the dry-run schedule, the decisions. */
-const READ_ONLY_POSTS = /\/orchestration\/(?:planning\/show|scheduler\/plan|scheduler\/decisions)$/;
+// HS2-1XCW6N: Settings › Orchestration also lists the checked-in templates, a read.
+const READ_ONLY_POSTS = /\/orchestration\/(?:planning\/show|scheduler\/plan|scheduler\/decisions|templates\/list)$/;
 
 async function openRemoteOrchestration(page: Page) {
   const server = await realTicketServer();

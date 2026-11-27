@@ -26,6 +26,7 @@ import { wireCommandSettingsEditor } from '../components/command-settings-editor
 import { type ConversationExportDialogState } from '../components/conversation-export-dialog';
 import { type ManualModelDialogState } from '../components/manual-model-dialog';
 import { wireOrchestrationSettings } from '../components/orchestration-settings-interactions';
+import { wireOrchestrationTemplateEditor } from '../components/orchestration-template-editor-interactions';
 import { type ExternalProviderKind, type GithubAuthState } from '../components/provider-setup-form';
 import { type SettingsCategory } from '../components/settings-navigation';
 import { TERMINAL_LIMIT_FIELDS } from '../components/terminal-memory-settings';
@@ -42,6 +43,7 @@ import { type ConversationSelectionModifiers } from '../conversation-selection';
 import { syncDesktopWindowTheme } from '../desktop-window-theme';
 import type { createCommandSchedulesController } from '../features/command-schedules';
 import type { OrchestrationSettings } from '../features/orchestration-settings';
+import type { OrchestrationTemplateEditing } from '../features/orchestration-template-editing';
 import { terminalLimitChoiceValue, type TerminalLimitsSettings } from '../features/terminal-limits-settings';
 import { wireInputDialogs } from '../input-dialog-interactions';
 import { COMMANDS_AND_AI_ACTIONS, COMMANDS_AND_AI_TARGETS } from '../interaction-attrs/commands-and-ai';
@@ -203,6 +205,10 @@ export interface CommandAndAiInteractionsDependencies {
   readonly setSettingsCategory: (_projectId: string, category: SettingsCategory) => void;
   /** Project Type and Settings → Orchestration (HS2-W27N1D). */
   readonly orchestrationSettings?: OrchestrationSettings;
+  /** HS2-1XCW6N: Settings › Orchestration › Templates and its editor. */
+  readonly orchestrationTemplates?: OrchestrationTemplateEditing;
+  /** The declared project a new template's first step runs in. */
+  readonly orchestrationTemplateFirstProject?: (projectId: string) => string | undefined;
   readonly selectProjectTab: (next: string) => void;
   readonly updateDevelopmentStrategyField?: (field: string, value: string | boolean) => void;
   readonly saveDevelopmentStrategy?: () => Promise<void>;
@@ -375,6 +381,8 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     refreshProject,
     setSettingsCategory,
     orchestrationSettings,
+    orchestrationTemplates,
+    orchestrationTemplateFirstProject,
     selectProjectTab,
     updateDevelopmentStrategyField,
     saveDevelopmentStrategy,
@@ -1058,6 +1066,14 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
       wireOrchestrationSettings(document.body, orchestrationSettings, {
         projectId: () => project()?.id,
         activateProject: selectProjectTab,
+      }),
+    );
+  // HS2-1XCW6N: Settings › Orchestration › Templates shares the demo's wire helper too.
+  if (orchestrationTemplates)
+    lifetime.add(
+      wireOrchestrationTemplateEditor(document.body, orchestrationTemplates, {
+        projectId: () => project()?.id,
+        firstProject: orchestrationTemplateFirstProject,
       }),
     );
   // The Trash retention gestures share the UX demo's wire helper (HS2-WFFDAA).

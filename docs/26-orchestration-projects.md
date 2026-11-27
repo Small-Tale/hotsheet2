@@ -7657,8 +7657,9 @@ project. The maintainer's decisions (answer on HS2-A4RVYA to the `Design v1` rev
   person reviews, as any plan is reviewed.
 - **A new goal ticket per apply.**
 - **Applied work is a snapshot.** Later template edits change nothing already applied.
-- **Authoring v1** is Save a Goal as Template… plus headless JSON. A visual step editor
-  is a later ticket.
+- **Authoring v1** is Save a Goal as Template… plus headless JSON. The visual editor of
+  Settings › Orchestration › Templates (HS2-1XCW6N) followed; it edits through the same
+  `set` and `retire` routes.
 - **Create steps search first**, propose reuse, and let the person switch a step to
   create.
 
@@ -7848,6 +7849,62 @@ template (or that it waits for the planner, with **Apply Again**), and **Open <g
 opens the new goal ticket. The planner's tool is the one Propose Plan would choose. On a
 phone the dialog is the compact drill-down (list, then detail, with Back to Templates).
 Refusals read through the shared refusal map.
+
+### Settings › Orchestration › Templates (HS2-1XCW6N)
+
+Settings › Orchestration lists the checked-in templates between Projects and Policy
+(`clients/web/src/components/orchestration-template-settings.tsx`): each template is a row
+with its input and step counts, version and description, retired ones last with a
+**Retired** badge. **New Template** opens a blank template (one search-first step in the
+first declared project); a row, or **Edit Template…** in its menu, opens the template;
+**Retire Template…** in the menu asks first (it can no longer be applied, its id is never
+reused, applied work keeps its work) and then calls `retire`. The list is read when the
+category shows and again on the project's `orchestration_changed` event; nothing polls.
+
+The editor (`clients/web/src/components/orchestration-template-editor.tsx`) is a Kerf
+`ListDetailDialog` like Use Template…: the template's parts on the left (**Template**,
+**Goal**, each input under **Inputs** and each step under **Steps**, with **Add Input** and
+**Add Step**), and the selected part's fields on the right:
+
+- **Template**: name, description and instructions for the planner.
+- **Goal**: goal title, details and tags (separated by commas).
+- **Input**: label, key, kind (Text, Number, Yes or No, Choice, Priority, Project, AI
+  Tool), Required, choices (one per line, for a choice input), a default suited to the kind
+  (a select of the choices, priorities or projects, a checkbox, or a text field), longest
+  value (a text input) and hint, with **Move Up**, **Move Down** and **Remove Input**.
+- **Step**: ticket title, project (a declared project or a Project input), Find an Open
+  Ticket First or Always Create a New Ticket, details, priority (or a Priority input),
+  category, preferred AI tool (or an AI Tool input), Include (always, or when a Yes or No
+  input is on), test profiles, and **Waits For**: each prerequisite step with what it
+  waits for (CI passed by default, finished, deployed or review approved), with **Move
+  Up**, **Move Down** and **Remove Step** (the last step cannot be removed).
+
+Inputs and steps keep stable local ids while edited. Renaming an input's key follows the
+fields that name it whole (`{{key}}` as a step's project, priority, tool or Include);
+renaming a step's key follows the steps that wait for it; removing an input clears those
+fields and removing a step drops the prerequisites on it. Placeholders inside text are not
+rewritten; the validator names them.
+
+The server's validator is the authority. The draft is checked through `validate` (a read)
+after a 400 ms pause in typing, on leaving a field and on each select, checkbox or
+structural change; its coded problems are mapped from their paths (`steps[1].after[0]`)
+onto the parts by id, so a moved step keeps its problems. A text field shows its problem as
+its error; a part's other problems are listed in a danger banner above its fields; the
+list shows a problem count on each part and the footer the total. **Save Template**
+checks the draft again and, with problems, is refused locally (`Fix N problems before
+saving.`, toasted and kept as a banner); otherwise it sends the whole template to `set`
+with the `expected_revision` the list was read at. A template changed elsewhere meanwhile
+is refused `template_conflict`: the **Changed Elsewhere** banner offers **Reload
+Templates**, which reopens an existing template as it now is (the draft's changes are
+discarded) or keeps a new template's draft against the new revision. A saved template is
+the next version and the list is read again. Cancel or Escape with unsaved changes asks
+before discarding them. A retired template opens read-only (its fields disabled, with
+**Close** only). On a phone the editor is the compact drill-down (parts, then one part,
+with Back to Parts). Every outcome is a toast (HS2-1K6122).
+
+Kerf's `Select` has no `error` text, so a problem of a select (a step's project, priority,
+tool, Include, Waits For, an input's kind or default) is listed in the part's banner
+rather than under the control until Kerf `KF-H4APEQ` adds it (HS2-324VN2).
 
 ### Headless surface
 

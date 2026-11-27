@@ -30,4 +30,18 @@ export const ORCHESTRATION_SETTINGS_ACTIONS = {
   /** HS2-1X1TXC, HS2-NPAZQW: a chosen model or resource's remove button. */
   removeLimitsValue: action('remove-orchestration-limits-value'),
   closeProjectDetail: action('close-orchestration-project'),
+  /** HS2-1XCW6N: Settings › Orchestration › Templates and the template editor. */
+  newTemplate: action('new-orchestration-template'),
+  editTemplate: action('edit-orchestration-template'),
+  retireTemplate: action('retire-orchestration-template'),
+  selectTemplatePart: action('select-orchestration-template-part'),
+  addTemplateInput: action('add-orchestration-template-input'),
+  addTemplateStep: action('add-orchestration-template-step'),
+  removeTemplatePart: action('remove-orchestration-template-part'),
+  moveTemplatePartUp: action('move-orchestration-template-part-up'),
+  moveTemplatePartDown: action('move-orchestration-template-part-down'),
+  addTemplateAfter: action('add-orchestration-template-after'),
+  removeTemplateAfter: action('remove-orchestration-template-after'),
+  saveTemplate: action('save-orchestration-template'),
+  reloadTemplate: action('reload-orchestration-template'),
 } as const;

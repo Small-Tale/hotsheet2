@@ -3,6 +3,8 @@ import { effect, type Signal } from 'kerfjs';
 import { Api } from '../api';
 import { orchestrationProjectPanel } from '../components/orchestration-project-detail';
 import type { OrchestrationSettingsProps } from '../components/orchestration-settings';
+import type { OrchestrationTemplateEditorProps } from '../components/orchestration-template-editor';
+import { templateSettingsRows } from '../components/orchestration-template-settings';
 import type { ProjectGeneralSettingsProps } from '../components/project-general-settings';
 import type { SettingsCategory } from '../components/settings-navigation';
 import type { SidebarPanelParts } from '../components/sidebar-panel';
@@ -19,6 +21,7 @@ import {
 } from '../orchestration-settings-model';
 import { isRemoteProjectId } from '../remote-projects/identity';
 import { createOrchestrationSettings } from './orchestration-settings';
+import { createOrchestrationTemplateEditing } from './orchestration-template-editing';
 
 /** Live application bindings Settings → General and Settings → Orchestration read (HS2-W27N1D). */
 export interface OrchestrationSettingsSurfaceDependencies {
@@ -46,6 +49,8 @@ export interface OrchestrationSettingsSurfaceDependencies {
   remoteServerLabels: () => Promise<Record<string, string>>;
   /** HS2-1K6122: the app's toast, for each change's outcome. */
   showToast?: (message: string) => void;
+  /** HS2-1XCW6N: the person acting, for the template routes' actor. */
+  personId?: () => string;
 }
 
 /**
@@ -79,6 +84,17 @@ export function createOrchestrationSettingsSurface(dependencies: OrchestrationSe
     hasTerminal: (projectId, terminalId) => dependencies.hasTerminal(`${projectId}:${terminalId}`),
     knownTools: () => dependencies.aiTools().map((tool) => tool.id),
     showInspector: dependencies.showInspector,
+    notify: dependencies.showToast,
+  });
+
+  // HS2-1XCW6N: Settings › Orchestration › Templates and its editor.
+  const templates = createOrchestrationTemplateEditing({
+    api: (projectId) => {
+      const open = projects.value.find((item) => item.id === projectId);
+      return open ? new Api(open.apiPath, '') : undefined;
+    },
+    personId: dependencies.personId ?? (() => 'person'),
+    confirm: dependencies.confirm,
     notify: dependencies.showToast,
   });
 
@@ -123,6 +139,7 @@ export function createOrchestrationSettingsSurface(dependencies: OrchestrationSe
     orchestrationKey = key;
     if (current && key) {
       void settings.loadSettings(current.id);
+      void templates.load(current.id);
       void settings.loadRemoteLabels(dependencies.remoteServerLabels);
     }
   });
@@ -138,6 +155,8 @@ export function createOrchestrationSettingsSurface(dependencies: OrchestrationSe
       type: showing,
       orchestration: showing && settingsCategory() === 'orchestration',
     });
+    // HS2-1XCW6N: a template checked in or retired elsewhere shows in the list.
+    if (showing && settingsCategory() === 'orchestration') void templates.load(current.id);
   }
 
   function projectGeneral(projectId: string): ProjectGeneralSettingsProps {
@@ -222,6 +241,33 @@ export function createOrchestrationSettingsSurface(dependencies: OrchestrationSe
           }
         : {}),
       policy: { draft: state?.draft, toolLabel: dependencies.toolLabel },
+      templates: (() => {
+        const list = templates.lists.value[current.id];
+        return {
+          rows: templateSettingsRows(list?.templates ?? []),
+          loading: list?.loading ?? true,
+          error: list?.error,
+          busy: list?.busy,
+        };
+      })(),
+    };
+  }
+
+  /** HS2-1XCW6N: the declared active projects, which a template step may run in. */
+  function declaredProjects(projectId: string): Array<{ target_id: string; label: string }> {
+    return (settings.settings.value[projectId]?.manifest?.targets ?? [])
+      .filter((target) => target.state === 'active')
+      .map((target) => ({ target_id: target.target_id, label: target.label }));
+  }
+
+  /** HS2-1XCW6N: the open template editor's props, or undefined while none is open. */
+  function templateEditor(): OrchestrationTemplateEditorProps | undefined {
+    const state = templates.editor.value;
+    if (!state) return undefined;
+    return {
+      state,
+      projects: declaredProjects(state.projectId),
+      tools: dependencies.aiTools().map((tool) => ({ id: tool.id, label: dependencies.toolLabel(tool.id) })),
     };
   }
 
@@ -290,6 +336,9 @@ export function createOrchestrationSettingsSurface(dependencies: OrchestrationSe
 
   return {
     settings,
+    templates,
+    templateEditor,
+    declaredProjects,
     settingsCategory,
     orchestrationProject,
     knownOrchestrationProject,

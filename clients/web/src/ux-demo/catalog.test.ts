@@ -478,6 +478,10 @@ describe('UX demo catalog', () => {
         'Show All Decisions… dialog opened from the cataloged OrchestrationInspector overview (HS2-77SRHC, demoed in place).',
       'orchestration-template-dialog':
         'Use Template… dialog opened from the cataloged OrchestrationToolbar (HS2-A4RVYA, demoed in place in every state).',
+      'orchestration-template-settings':
+        'Templates section of the cataloged OrchestrationSettings (HS2-1XCW6N, demoed there: rows, empty, loading, unreadable, retiring).',
+      'orchestration-template-editor':
+        'Template editor dialog opened from the Templates section of the cataloged OrchestrationSettings (HS2-1XCW6N, demoed in place in every state).',
       'orchestration-template-button':
         'Use Template… button rendered within the cataloged OrchestrationToolbar and OrchestrationTimelineView (HS2-A4RVYA, demoed).',
       'orchestration-home-outage':

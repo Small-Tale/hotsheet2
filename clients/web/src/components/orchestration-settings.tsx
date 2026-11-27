@@ -25,6 +25,10 @@ import {
 import { ORCHESTRATION_SETTINGS_ACTIONS as ACTIONS } from '../interaction-attrs/orchestration-settings';
 import type { AddChoice, OrchestrationProjectRow, SiteChoice } from '../orchestration-settings-model';
 import { OrchestrationPolicySettings, type OrchestrationPolicySettingsProps } from './orchestration-policy-settings';
+import {
+  OrchestrationTemplateSettings,
+  type OrchestrationTemplateSettingsProps,
+} from './orchestration-template-settings';
 
 /** HS2-92FJXM: one checkout the serving machine has open. */
 export interface HostedProjectChoiceView {
@@ -56,6 +60,8 @@ export interface OrchestrationSettingsProps {
   /** The name of that server, for the menu's heading. */
   hostedServer?: string;
   policy?: OrchestrationPolicySettingsProps;
+  /** HS2-1XCW6N: Settings › Orchestration › Templates; absent where templates are not offered. */
+  templates?: OrchestrationTemplateSettingsProps;
   /**
    * HS2-E9VVQF: each project row's Add a Site choices, by the project's target id. Absent for a
    * project open from another server, which offers no Add a Site.
@@ -205,6 +211,7 @@ export function OrchestrationSettings({
   hostedChoices,
   hostedServer = 'the server',
   policy = {},
+  templates,
   siteChoices,
   showAllSites = false,
   hostedSites = false,
@@ -357,6 +364,7 @@ export function OrchestrationSettings({
             )}
           </List>
         </section>
+        {templates ? <OrchestrationTemplateSettings {...templates} /> : null}
         <OrchestrationPolicySettings {...policy} saving={busy.includes('policy') || policy.saving} />
       </List>
     </section>
