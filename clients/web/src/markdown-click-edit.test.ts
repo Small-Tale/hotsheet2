@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import {
   clickBeginsMarkdownEdit,
+  clickCompletingShiftedPress,
   hasTextSelectionWithin,
   keyBeginsMarkdownEdit,
   MARKDOWN_INTERACTIVE_SELECTOR,
+  pressOnEditSurface,
   repeatPressWouldLeaveNewEditor,
   startsInInteractiveDescendant,
 } from './markdown-click-edit';
@@ -159,5 +161,76 @@ describe('single-click Markdown edit entry (HS2-H1K9YY)', () => {
     const stray = Object.assign(outside, { closest: () => null });
     expect(repeatPressWouldLeaveNewEditor(press(stray), textarea as unknown as Element)).toBe(false);
     expect(repeatPressWouldLeaveNewEditor(press(null), textarea as unknown as Element)).toBe(false);
+  });
+});
+
+describe('a click whose release a re-flow moved off the pressed surface (HS2-628K80)', () => {
+  const SELECTOR = '[data-edit-on-click="true"]';
+  function shiftedTree() {
+    const { surface, paragraph, text, link, outside } = tree();
+    const list = element('div');
+    surface.parentElement = list;
+    const sibling = element('p', list);
+    const closest = (node: FakeElement) =>
+      Object.assign(node, {
+        isConnected: true,
+        closest: (selector: string) => {
+          if (selector !== SELECTOR) return null;
+          for (let current: FakeElement | null = node; current; current = current.parentElement)
+            if (current === surface) return surface;
+          return null;
+        },
+      });
+    for (const node of [surface, paragraph, text, link, outside, list, sibling]) closest(node);
+    return { surface, paragraph, text, link, outside, list, sibling };
+  }
+  const mouse = (target: unknown, x = 10, y = 20, overrides: Partial<MouseEvent> = {}) =>
+    Object.assign(click(target, overrides), { clientX: x, clientY: y });
+  const collapsed = { isCollapsed: true };
+
+  it('records a primary press on plain surface content only', () => {
+    const { surface, text, link, outside } = shiftedTree();
+    expect(pressOnEditSurface(mouse(text), SELECTOR)).toEqual({ surface, x: 10, y: 20 });
+    expect(pressOnEditSurface(mouse(surface), SELECTOR)?.surface).toBe(surface);
+    // A nested link, a non-primary button, or a press outside any surface records nothing.
+    expect(pressOnEditSurface(mouse(link), SELECTOR)).toBeUndefined();
+    expect(pressOnEditSurface(mouse(text, 10, 20, { button: 2 }), SELECTOR)).toBeUndefined();
+    expect(pressOnEditSurface(mouse(outside), SELECTOR)).toBeUndefined();
+    expect(pressOnEditSurface(mouse(null), SELECTOR)).toBeUndefined();
+    expect(pressOnEditSurface(mouse({}), SELECTOR)).toBeUndefined();
+  });
+
+  it('completes the press when the click was retargeted to an ancestor at the press point', () => {
+    const { surface, text, list } = shiftedTree();
+    const press = pressOnEditSurface(mouse(text), SELECTOR);
+    expect(clickCompletingShiftedPress(mouse(list), press, collapsed)).toBe(surface);
+    // Within the slop a still pointer counts; no selection API (null) is no selection.
+    expect(clickCompletingShiftedPress(mouse(list, 14, 16), press, null)).toBe(surface);
+  });
+
+  it('leaves ordinary clicks, drags, selections, modified clicks, and detached surfaces alone', () => {
+    const { surface, text, list, sibling } = shiftedTree();
+    const press = pressOnEditSurface(mouse(text), SELECTOR)!;
+    // Inside the surface the ordinary delegated path handles the click, so it never begins twice.
+    expect(clickCompletingShiftedPress(mouse(text), press, collapsed)).toBeUndefined();
+    expect(clickCompletingShiftedPress(mouse(surface), press, collapsed)).toBeUndefined();
+    // A target that does not contain the surface was not a re-flowed release.
+    expect(clickCompletingShiftedPress(mouse(sibling), press, collapsed)).toBeUndefined();
+    expect(clickCompletingShiftedPress(mouse(null), press, collapsed)).toBeUndefined();
+    expect(clickCompletingShiftedPress(mouse({}), press, collapsed)).toBeUndefined();
+    // The pointer moved: a drag, not a click.
+    expect(clickCompletingShiftedPress(mouse(list, 15, 20), press, collapsed)).toBeUndefined();
+    expect(clickCompletingShiftedPress(mouse(list, 10, 25), press, collapsed)).toBeUndefined();
+    expect(clickCompletingShiftedPress(mouse(list), press, { isCollapsed: false })).toBeUndefined();
+    expect(clickCompletingShiftedPress(mouse(list, 10, 20, { button: 1 }), press, collapsed)).toBeUndefined();
+    expect(
+      clickCompletingShiftedPress(mouse(list, 10, 20, { defaultPrevented: true }), press, collapsed),
+    ).toBeUndefined();
+    for (const modifier of ['metaKey', 'ctrlKey', 'shiftKey', 'altKey'] as const)
+      expect(clickCompletingShiftedPress(mouse(list, 10, 20, { [modifier]: true }), press, collapsed)).toBeUndefined();
+    expect(clickCompletingShiftedPress(mouse(list), undefined, collapsed)).toBeUndefined();
+    expect(
+      clickCompletingShiftedPress(mouse(list), { ...press, surface: { ...surface, isConnected: false } }, collapsed),
+    ).toBeUndefined();
   });
 });

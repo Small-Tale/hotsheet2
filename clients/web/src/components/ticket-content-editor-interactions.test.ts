@@ -8,7 +8,15 @@ interface Registration {
   handle: (event: unknown, target: unknown) => unknown;
 }
 const registrations = vi.hoisted(() => [] as Registration[]);
-const entry = vi.hoisted(() => ({ click: true, key: true, repeat: false }));
+interface Entry {
+  click: boolean;
+  key: boolean;
+  repeat: boolean;
+  press?: unknown;
+  shifted?: unknown;
+  presses: unknown[];
+}
+const entry = vi.hoisted((): Entry => ({ click: true, key: true, repeat: false, presses: [] }));
 vi.mock('kerfjs', async (original) => ({
   ...(await original<typeof import('kerfjs')>()),
   delegate: (_root: unknown, event: string, selector: string, handle: Registration['handle']) => {
@@ -24,6 +32,11 @@ vi.mock('../markdown-click-edit', () => ({
   clickBeginsMarkdownEdit: () => entry.click,
   keyBeginsMarkdownEdit: () => entry.key,
   repeatPressWouldLeaveNewEditor: () => entry.repeat,
+  pressOnEditSurface: () => entry.press,
+  clickCompletingShiftedPress: (_event: unknown, press: unknown) => {
+    entry.presses.push(press);
+    return entry.shifted;
+  },
 }));
 const handler = (event: string, selector: string) =>
   [...registrations].reverse().find((item) => item.event === event && item.selector.includes(selector))!.handle;
@@ -166,6 +179,10 @@ describe('ticket content editor wiring (HS2-KM3DNM)', () => {
     handler('focusout', 'markdown-source')({ relatedTarget: inside }, field);
     handler('focusout', 'markdown-source')({ relatedTarget: outside }, field);
     handler('focusout', 'markdown-source')({ relatedTarget: null }, field);
+    const toggle = cancelable();
+    handler('mousedown', 'toggle-markdown-expanded')(toggle, {});
+    // WebKit never focuses a pressed button: the press keeps the source focused (HS2-628K80).
+    expect(toggle.preventDefault).toHaveBeenCalledTimes(1);
     handler('click', 'toggle-markdown-expanded')({}, {});
     expect(bindings.input).toHaveBeenCalledWith(field);
     expect(bindings.focusLeave.mock.calls).toEqual([
@@ -175,6 +192,37 @@ describe('ticket content editor wiring (HS2-KM3DNM)', () => {
     ]);
     expect(bindings.toggleExpanded).toHaveBeenCalledTimes(1);
     vi.unstubAllGlobals();
+  });
+
+  it('completes a press whose click a re-flow retargeted, for notes and Details (HS2-628K80)', () => {
+    const note = { begin: vi.fn(), beginPrompt: vi.fn(), input: vi.fn(), finish: vi.fn(), save: vi.fn() };
+    wireNoteEditor({} as HTMLElement, note);
+    const noteBody = { closest: () => ({ dataset: { noteId: 'n1' } }) },
+      pressNote = handler('capture:mousedown', '*'),
+      clickNote = handler('click', '*');
+    entry.presses.length = 0;
+    // The click consumes the recorded press, so a later click never reuses it.
+    entry.press = { surface: noteBody };
+    pressNote({}, {});
+    entry.shifted = noteBody;
+    clickNote({}, {});
+    entry.shifted = undefined;
+    clickNote({}, {});
+    expect(entry.presses).toEqual([{ surface: noteBody }, undefined]);
+    expect(note.begin.mock.calls).toEqual([['n1', noteBody]]);
+
+    const details = { begin: vi.fn(), input: vi.fn(), focusLeave: vi.fn() };
+    wireMarkdownDetailsEditor({} as HTMLElement, details);
+    const shiftedRegistrations = registrations.filter((item) => item.selector === '*'),
+      [pressDetails, clickDetails] = shiftedRegistrations.slice(-3, -1).map((item) => item.handle),
+      preview = { id: 'preview' };
+    entry.press = { surface: preview };
+    pressDetails({}, {});
+    entry.shifted = preview;
+    clickDetails({}, {});
+    entry.shifted = undefined;
+    entry.press = undefined;
+    expect(details.begin).toHaveBeenCalledExactlyOnceWith(preview);
   });
 
   it('leaves the expand toggle unwired when the host hides it', () => {

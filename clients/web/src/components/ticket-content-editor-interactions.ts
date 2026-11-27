@@ -2,10 +2,42 @@ import { attr, delegate, delegateCapture } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
 import { INSPECTOR_AND_EDITOR_ACTIONS, INSPECTOR_AND_EDITOR_TARGETS } from '../interaction-attrs/inspector-and-editor';
-import { clickBeginsMarkdownEdit, keyBeginsMarkdownEdit, repeatPressWouldLeaveNewEditor } from '../markdown-click-edit';
+import {
+  clickBeginsMarkdownEdit,
+  clickCompletingShiftedPress,
+  type EditSurfacePress,
+  keyBeginsMarkdownEdit,
+  pressOnEditSurface,
+  repeatPressWouldLeaveNewEditor,
+} from '../markdown-click-edit';
 
 /** MarkdownEditor's default expand toggle (`expandAction`). */
 const TOGGLE_MARKDOWN_EXPANDED = attr('data-action', 'toggle-markdown-expanded');
+
+/**
+ * Begin editing a click-to-edit surface whose release missed it because closing another editor
+ * re-flowed the panel between press and release (HS2-628K80). A click inside the surface keeps the
+ * ordinary delegated path; this handles only a click the browser retargeted to an ancestor.
+ */
+function wireShiftedPressEdit(root: HTMLElement, selector: string, begin: (surface: HTMLElement) => void): () => void {
+  const lifetime = createScope();
+  let press: EditSurfacePress | undefined;
+  lifetime.add(
+    delegateCapture(root, 'mousedown', '*', (event) => {
+      press = pressOnEditSurface(event as MouseEvent, selector);
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'click', '*', (event) => {
+      const surface = clickCompletingShiftedPress(event as MouseEvent, press);
+      press = undefined;
+      if (surface) begin(surface as HTMLElement);
+    }),
+  );
+  return () => {
+    lifetime.dispose();
+  };
+}
 
 /**
  * Side effects for the ticket content editors (HS2-KM3DNM): the NoteComposer, NoteCard inline note
@@ -96,6 +128,7 @@ export function wireNoteEditor(root: HTMLElement, bindings: NoteEditorBindings):
       if (clickBeginsMarkdownEdit(event as MouseEvent, target)) begin(target);
     }),
   );
+  lifetime.add(wireShiftedPressEdit(root, INSPECTOR_AND_EDITOR_TARGETS.editOnClick.selector, begin));
   lifetime.add(
     delegate(root, 'keydown', INSPECTOR_AND_EDITOR_TARGETS.editOnClick.selector, (event, target) => {
       if (!keyBeginsMarkdownEdit(event as KeyboardEvent, target)) return;
@@ -160,6 +193,7 @@ export interface MarkdownDetailsEditorBindings {
  */
 export function wireMarkdownDetailsEditor(root: HTMLElement, bindings: MarkdownDetailsEditorBindings): () => void {
   const lifetime = createScope();
+  lifetime.add(wireShiftedPressEdit(root, INSPECTOR_AND_EDITOR_ACTIONS.editMarkdown.selector, bindings.begin));
   lifetime.add(
     delegateCapture(root, 'mousedown', '*', (event) => {
       if (repeatPressWouldLeaveNewEditor(event as MouseEvent, document.activeElement)) event.preventDefault();
@@ -192,6 +226,13 @@ export function wireMarkdownDetailsEditor(root: HTMLElement, bindings: MarkdownD
   );
   if (bindings.toggleExpanded) {
     const toggle = bindings.toggleExpanded;
+    // A pointer press on the toggle keeps focus in the source, so expanding never ends the edit.
+    // WebKit never focuses a pressed button, so the blur would otherwise leave the editor (HS2-628K80).
+    lifetime.add(
+      delegate(root, 'mousedown', TOGGLE_MARKDOWN_EXPANDED.selector, (event) => {
+        event.preventDefault();
+      }),
+    );
     lifetime.add(
       delegate(root, 'click', TOGGLE_MARKDOWN_EXPANDED.selector, () => {
         toggle();

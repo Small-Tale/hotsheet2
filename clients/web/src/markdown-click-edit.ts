@@ -102,3 +102,62 @@ export function repeatPressWouldLeaveNewEditor(
     !!container && container.contains(active as unknown as Node) && !startsInInteractiveDescendant(target, container)
   );
 }
+
+/** A primary press on a click-to-edit surface, held until the click that completes it (HS2-628K80). */
+export interface EditSurfacePress {
+  readonly surface: Pick<Element, 'contains' | 'isConnected'>;
+  readonly x: number;
+  readonly y: number;
+}
+
+/** Pointer travel, in CSS pixels, between press and click that still reads as one click. */
+const CLICK_SLOP = 4;
+
+/**
+ * The click-to-edit surface (matching `selector`) that a primary `mousedown` pressed, or undefined
+ * when the press began elsewhere or on a nested link or control.
+ */
+export function pressOnEditSurface(
+  event: Pick<MouseEvent, 'button' | 'target' | 'clientX' | 'clientY'>,
+  selector: string,
+): EditSurfacePress | undefined {
+  if (event.button !== 0) return undefined;
+  const target = event.target as (ElementLike & Pick<Element, 'closest'>) | null;
+  if (!target || typeof target.closest !== 'function') return undefined;
+  const surface = target.closest(selector);
+  if (!surface || startsInInteractiveDescendant(target, surface)) return undefined;
+  return { surface, x: event.clientX, y: event.clientY };
+}
+
+/**
+ * The surface a click still begins editing although the browser targeted the click elsewhere.
+ *
+ * Pressing a surface moves focus to it, so another open editor (the Details source or a note
+ * edit) loses focus, saves, and closes before the button is released. Closing it re-flows the
+ * panel, the release lands on other content, and the browser sends the click to the nearest
+ * common ancestor of press and release, outside the surface. Without scroll anchoring (WebKit, so
+ * Safari and WKWebView, or any panel scrolled to the top) the content moves under a pointer that
+ * did not. A click at the press point whose target contains the pressed surface therefore still
+ * completes that press; a drag, a text selection, or a modified click does not.
+ */
+export function clickCompletingShiftedPress(
+  event: Pick<
+    MouseEvent,
+    'defaultPrevented' | 'button' | 'metaKey' | 'ctrlKey' | 'shiftKey' | 'altKey' | 'target' | 'clientX' | 'clientY'
+  >,
+  press: EditSurfacePress | undefined,
+  selection: Pick<Selection, 'isCollapsed'> | null = getSelection(),
+): EditSurfacePress['surface'] | undefined {
+  if (!press?.surface.isConnected) return undefined;
+  const target = event.target as Pick<Node, 'contains'> | null;
+  // A click inside the surface takes the ordinary path; a target that does not contain the
+  // surface is not a release the re-flow moved off it.
+  if (!target || typeof target.contains !== 'function' || press.surface.contains(target as Node)) return undefined;
+  if (!target.contains(press.surface as Node)) return undefined;
+  if (Math.abs(event.clientX - press.x) > CLICK_SLOP || Math.abs(event.clientY - press.y) > CLICK_SLOP)
+    return undefined;
+  if (event.defaultPrevented || event.button !== 0) return undefined;
+  if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return undefined;
+  if (selection && !selection.isCollapsed) return undefined;
+  return press.surface;
+}

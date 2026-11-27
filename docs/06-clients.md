@@ -1128,6 +1128,11 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   focused nested link likewise follows the link. A drag that finishes a text selection
   and a modified click (Cmd/Ctrl/Shift/Alt) do not start editing either, and the repeat
   press of a habitual double-click keeps focus in the editor the first click opened.
+  Pressing a field closes another open editor before the button is released, and the
+  re-flow can move the pressed field out from under a pointer that did not move; a still
+  click still opens the pressed field, while a drag does not (HS2-628K80). Pressing the
+  Markdown editor's expand toggle keeps the source focused, because WebKit never focuses
+  a pressed button.
   Rendered GFM task-list checkboxes stay read-only. The plain-text blocked reason and the
   ticket title keep double-click entry.
   Ticket numbers in a read-only blocked reason are links, the same ticket references
