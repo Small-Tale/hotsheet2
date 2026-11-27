@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   captureTicketDraft,
   clearTicketDraft,
+  loadRestorableTicketDraft,
   loadTicketDraft,
   planTicketDraftRestore,
   prepareCommittedDraftCleanup,
@@ -175,11 +176,13 @@ describe('planTicketDraftRestore (HS2-7D3MPP)', () => {
       kind: 'restore',
       base: 'Intro',
       draft: 'Intro mine',
+      merged: false,
     });
     expect(planTicketDraftRestore(stored('A\n\nB', 'A mine\n\nB'), 'A\n\nB theirs')).toEqual({
       kind: 'restore',
       base: 'A\n\nB theirs',
       draft: 'A mine\n\nB theirs',
+      merged: true,
     });
   });
 
@@ -202,6 +205,90 @@ describe('planTicketDraftRestore (HS2-7D3MPP)', () => {
       kind: 'restore',
       base: 'submitted',
       draft: 'old',
+      merged: false,
     });
+  });
+});
+
+describe('planTicketDraftRestore auto-resolution (HS2-JJ3R1G)', () => {
+  const stored = (base: string, draft: string) => ({ base, draft, at: 1 });
+
+  it('merges disjoint edits silently into the editor and says the restore was merged', () => {
+    // Different lines, then edits at the start and end of one line, then a whitespace-only edit kept exactly.
+    expect(planTicketDraftRestore(stored('a\nb\nc', 'A\nb\nc'), 'a\nb\nC')).toEqual({
+      kind: 'restore',
+      base: 'a\nb\nC',
+      draft: 'A\nb\nC',
+      merged: true,
+    });
+    expect(planTicketDraftRestore(stored('middle', 'start middle'), 'middle end')).toEqual({
+      kind: 'restore',
+      base: 'middle end',
+      draft: 'start middle end',
+      merged: true,
+    });
+    expect(planTicketDraftRestore(stored('a\nb', 'a  \nb'), 'a\nb theirs')).toEqual({
+      kind: 'restore',
+      base: 'a\nb theirs',
+      draft: 'a  \nb theirs',
+      merged: true,
+    });
+  });
+
+  it('restores an empty-base draft when the server stayed empty, and asks when both typed', () => {
+    expect(planTicketDraftRestore(stored('', 'typed'), '')).toEqual({
+      kind: 'restore',
+      base: '',
+      draft: 'typed',
+      merged: false,
+    });
+    expect(planTicketDraftRestore(stored('', 'mine'), 'theirs')).toEqual({
+      kind: 'conflict',
+      base: '',
+      mine: 'mine',
+      theirs: 'theirs',
+    });
+  });
+
+  it('clears the copy when the server already holds the merge (a reload during the merged save)', () => {
+    // The save merged `mine` with a disjoint change and committed; the page reloaded before the copy cleared.
+    expect(planTicketDraftRestore(stored('a\nb', 'A\nb'), 'A\nB')).toEqual({ kind: 'none', clear: true });
+    // A server that took my edit and then moved on elsewhere already holds my text.
+    expect(planTicketDraftRestore(stored('a\nb', 'A\nb'), 'A\nb\nc')).toEqual({ kind: 'none', clear: true });
+  });
+
+  it('asks again for a repeated conflict and keeps both texts each time', () => {
+    const copy = stored('Intro', 'Intro mine');
+    for (const theirs of ['Intro theirs', 'Intro theirs again'])
+      expect(planTicketDraftRestore(copy, theirs)).toEqual({
+        kind: 'conflict',
+        base: 'Intro',
+        mine: 'Intro mine',
+        theirs,
+      });
+  });
+
+  it('loads a copy without a merge base and falls back to the conflict card, never dropping it', () => {
+    const storage = memoryStorage(),
+      key = ticketDraftKey('p', 'git-local:1', 'details');
+    storage.setItem(key, JSON.stringify({ draft: 'Legacy text', at: 1 }));
+    expect(loadTicketDraft(storage, key)).toBeUndefined();
+    const legacy = loadRestorableTicketDraft(storage, key);
+    expect(legacy).toEqual({ legacy: true, draft: 'Legacy text' });
+    expect(planTicketDraftRestore(legacy, 'Server text')).toEqual({
+      kind: 'conflict',
+      base: '',
+      mine: 'Legacy text',
+      theirs: 'Server text',
+    });
+    expect(planTicketDraftRestore(legacy, 'Legacy text')).toEqual({ kind: 'none', clear: true });
+    // A current copy still loads normally; malformed shapes are ignored.
+    storage.setItem(key, JSON.stringify({ base: 'b', draft: 'd', at: 2 }));
+    expect(loadRestorableTicketDraft(storage, key)).toEqual({ base: 'b', draft: 'd', at: 2 });
+    for (const raw of ['{', '[]', JSON.stringify({ base: 3, draft: 'd' }), JSON.stringify({ draft: 4 })]) {
+      storage.setItem(key, raw);
+      expect(loadRestorableTicketDraft(storage, key), raw).toBeUndefined();
+    }
+    expect(loadRestorableTicketDraft(storage, 'missing')).toBeUndefined();
   });
 });

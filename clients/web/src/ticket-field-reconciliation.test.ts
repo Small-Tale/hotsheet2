@@ -5,6 +5,7 @@ import { beginFeedbackPromptEdit, endFeedbackPromptEdit } from './feedback-promp
 import {
   isTicketConcurrencyConflict,
   isWriteBehindUnavailable,
+  mergedEditNotice,
   noteEditPatch,
   rebaseDraftValue,
   reconcileActiveDraft,
@@ -51,13 +52,14 @@ describe('field-aware ticket reconciliation', () => {
     const result = reconcileTicketPatch(ticket(), ticket({ status: 'completed', concurrency_token: 'remote' }), {
       details: 'Mine',
     });
-    expect(result).toEqual({ retry: { details: 'Mine' }, conflicts: [] });
+    expect(result).toEqual({ retry: { details: 'Mine' }, conflicts: [], merged: [] });
   });
 
   it('does not resend a value that already converged remotely', () => {
     expect(reconcileTicketPatch(ticket(), ticket({ details: 'Mine' }), { details: 'Mine' })).toEqual({
       retry: {},
       conflicts: [],
+      merged: [],
     });
   });
 
@@ -82,7 +84,7 @@ describe('field-aware ticket reconciliation', () => {
     };
     expect(
       reconcileTicketPatch(ticket(), ticket({ notes: [...ticket().notes, extra] }), { note_id: 'N1', note: 'Mine' }),
-    ).toEqual({ retry: { note: 'Mine', note_id: 'N1' }, conflicts: [] });
+    ).toEqual({ retry: { note: 'Mine', note_id: 'N1' }, conflicts: [], merged: [] });
     expect(
       reconcileTicketPatch(ticket(), ticket({ notes: [{ ...ticket().notes[0], text: 'Theirs' }] }), {
         note_id: 'N1',
@@ -112,6 +114,7 @@ describe('field-aware ticket reconciliation', () => {
       expect(reconcileTicketPatch(withPrompt, remote, noteEditPatch(withPrompt, 'P1', 'Mine'))).toEqual({
         retry: { note: 'Mine', note_id: 'P1', edit_feedback_prompt: true },
         conflicts: [],
+        merged: [],
       });
     } finally {
       endFeedbackPromptEdit('P1');
@@ -126,7 +129,11 @@ describe('field-aware ticket reconciliation', () => {
         note_kind: 'activity',
         note_summary: 'Finished work',
       }),
-    ).toEqual({ retry: { note: 'Full detail', note_kind: 'activity', note_summary: 'Finished work' }, conflicts: [] });
+    ).toEqual({
+      retry: { note: 'Full detail', note_kind: 'activity', note_summary: 'Finished work' },
+      conflicts: [],
+      merged: [],
+    });
   });
 
   it('keeps note confidence attached to a retried note write and never treats it as a field (HS2-DWTJ43)', () => {
@@ -135,8 +142,12 @@ describe('field-aware ticket reconciliation', () => {
         note: 'Done',
         note_confidence: 0,
       }),
-    ).toEqual({ retry: { note: 'Done', note_confidence: 0 }, conflicts: [] });
-    expect(reconcileTicketPatch(ticket(), ticket(), { note_confidence: 82 })).toEqual({ retry: {}, conflicts: [] });
+    ).toEqual({ retry: { note: 'Done', note_confidence: 0 }, conflicts: [], merged: [] });
+    expect(reconcileTicketPatch(ticket(), ticket(), { note_confidence: 82 })).toEqual({
+      retry: {},
+      conflicts: [],
+      merged: [],
+    });
   });
 
   it('resends a note-metadata-only edit after unrelated token drift instead of dropping it (HS2-WZSFHK)', () => {
@@ -149,39 +160,47 @@ describe('field-aware ticket reconciliation', () => {
     expect(reconcileTicketPatch(base, drifted, { note_id: 'N1', note_summary: null })).toEqual({
       retry: { note_summary: null, note_id: 'N1' },
       conflicts: [],
+      merged: [],
     });
     expect(reconcileTicketPatch(base, drifted, { note_id: 'N1', note_confidence: 65 })).toEqual({
       retry: { note_confidence: 65, note_id: 'N1' },
       conflicts: [],
+      merged: [],
     });
     expect(reconcileTicketPatch(base, drifted, { note_id: 'N1', note_kind: 'feedback_needed' })).toEqual({
       retry: { note_kind: 'feedback_needed', note_id: 'N1' },
       conflicts: [],
+      merged: [],
     });
     // Relinking a response stays scoped to the note instead of becoming a ticket-level field.
     expect(reconcileTicketPatch(base, drifted, { note_id: 'N1', response_to: 'N0' })).toEqual({
       retry: { response_to: 'N0', note_id: 'N1' },
       conflicts: [],
+      merged: [],
     });
     expect(reconcileTicketPatch(base, drifted, { note_id: 'N1', response_to: null })).toEqual({
       retry: {},
       conflicts: [],
+      merged: [],
     });
     // Already saved remotely (or cleared there too): nothing to resend.
     expect(reconcileTicketPatch(base, drifted, { note_id: 'N1', note_summary: 'Headline' })).toEqual({
       retry: {},
       conflicts: [],
+      merged: [],
     });
     const cleared = ticket({ notes: [{ ...activity, summary: undefined }] });
     expect(reconcileTicketPatch(base, cleared, { note_id: 'N1', note_summary: null })).toEqual({
       retry: {},
       conflicts: [],
+      merged: [],
     });
     // A confirmed dialog value wins over a concurrent change to the same note field.
     const theirs = ticket({ notes: [{ ...activity, summary: 'Their headline' }] });
     expect(reconcileTicketPatch(base, theirs, { note_id: 'N1', note_summary: 'Mine' })).toEqual({
       retry: { note_summary: 'Mine', note_id: 'N1' },
       conflicts: [],
+      merged: [],
     });
   });
 
@@ -230,12 +249,45 @@ describe('field-aware ticket reconciliation', () => {
     expect(reconcileTicketPatch(base, remote, { details: 'Intro edited\nMiddle\nEnd' })).toEqual({
       retry: { details: 'Intro edited\nMiddle\nEnd\nAI appended' },
       conflicts: [],
+      merged: ['details'],
     });
     const note = { ...base.notes[0], text: 'Line one\nLine two' },
       noteRemote = ticket({ notes: [{ ...note, text: 'Line one\nLine two, theirs' }] });
     expect(
       reconcileTicketPatch(ticket({ notes: [note] }), noteRemote, { note_id: 'N1', note: 'Line one, mine\nLine two' }),
-    ).toEqual({ retry: { note: 'Line one, mine\nLine two, theirs', note_id: 'N1' }, conflicts: [] });
+    ).toEqual({ retry: { note: 'Line one, mine\nLine two, theirs', note_id: 'N1' }, conflicts: [], merged: ['note'] });
+  });
+
+  it('names only fields whose retry combines both edits (HS2-JJ3R1G)', () => {
+    const base = ticket({ details: 'a\nb', title: 'Fix the login bug', tags: ['one'] });
+    // Token drift, a converged value, and an edit the remote already adopted are not merges to announce.
+    expect(reconcileTicketPatch(base, ticket({ priority: 'high' }), { details: 'A\nb' }).merged).toEqual([]);
+    expect(reconcileTicketPatch(base, ticket({ details: 'A\nb' }), { details: 'A\nb' }).merged).toEqual([]);
+    expect(reconcileTicketPatch(base, ticket({ details: 'A\nb\nc' }), { details: 'A\nb' })).toEqual({
+      retry: {},
+      conflicts: [],
+      merged: [],
+    });
+    // Words of a single-line title and set-like tags combine; an overlap stays a conflict, not a merge.
+    const result = reconcileTicketPatch(
+      base,
+      ticket({ details: 'a\nb', title: 'Fix the login crash', tags: ['one', 'theirs'] }),
+      { title: 'Fix the signup bug', tags: ['one', 'mine'] },
+    );
+    expect(result.retry).toEqual({ title: 'Fix the signup crash', tags: ['one', 'theirs', 'mine'] });
+    expect(result.merged).toEqual(['title', 'tags']);
+    const overlap = reconcileTicketPatch(base, ticket({ details: 'a\nB theirs' }), { details: 'a\nB mine' });
+    expect(overlap.merged).toEqual([]);
+    expect(overlap.conflicts).toHaveLength(1);
+  });
+
+  it('words the merged-edit toast for one field, several fields, and a restore (HS2-JJ3R1G)', () => {
+    expect(mergedEditNotice(['details'])).toBe('Merged your edit with a newer change to Details.');
+    expect(mergedEditNotice(['note', 'note'])).toBe('Merged your edit with a newer change to Note.');
+    expect(mergedEditNotice(['title', 'tags'])).toBe('Merged your edit with newer changes.');
+    expect(mergedEditNotice(['blocked_reason'], { restored: true })).toBe(
+      'Restored an unsaved edit and merged it with a newer change to Blocked Reason.',
+    );
   });
 
   it('still reports overlapping edits of the same lines as a conflict', () => {
@@ -251,7 +303,7 @@ describe('field-aware ticket reconciliation', () => {
       reconcileTicketPatch(ticket({ tags: ['one', 'two'] }), ticket({ tags: ['one', 'two', 'remote'] }), {
         tags: ['two', 'mine'],
       }),
-    ).toEqual({ retry: { tags: ['two', 'remote', 'mine'] }, conflicts: [] });
+    ).toEqual({ retry: { tags: ['two', 'remote', 'mine'] }, conflicts: [], merged: ['tags'] });
     expect(
       reconcileTicketPatch(
         ticket({ blocked_reason: 'Waiting\non review' }),

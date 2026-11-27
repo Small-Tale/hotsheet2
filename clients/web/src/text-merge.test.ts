@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { mergeSet, mergeText } from './text-merge';
+import { mergeSet, mergeText, type TextMerge } from './text-merge';
 
 const text = (...rows: string[]) => rows.join('\n');
 
@@ -190,5 +190,54 @@ describe('mergeSet (HS2-A4XCXE)', () => {
     expect(mergeSet(['a', 'b'], ['a', 'c'], ['a', 'b', 'd'])).toEqual(['a', 'd', 'c']);
     expect(mergeSet(['a'], ['a', 'b'], [])).toEqual(['b']);
     expect(mergeSet([], ['x'], ['x'])).toEqual(['x']);
+  });
+});
+
+describe('three-way merge transition matrix (HS2-JJ3R1G)', () => {
+  const merged = (value: string): TextMerge => ({ clean: true, merged: value });
+  const conflict: TextMerge = { clean: false };
+  // Each row: name, base, mine, theirs, the expected result. Every row also holds with the sides swapped.
+  const rows: Array<[string, string, string, string, TextMerge]> = [
+    ['only mine changed', 'a\nb', 'a!\nb', 'a\nb', merged('a!\nb')],
+    ['only theirs changed', 'a\nb', 'a\nb', 'a\nb!', merged('a\nb!')],
+    ['both changed identically', 'a\nb', 'a\nB', 'a\nB', merged('a\nB')],
+    ['disjoint lines', 'one\ntwo\nthree', 'ONE\ntwo\nthree', 'one\ntwo\nTHREE', merged('ONE\ntwo\nTHREE')],
+    ['overlapping lines', 'one\ntwo', 'one\nmine', 'one\ntheirs', conflict],
+    ['edits at the start and the end', 'a\nb\nc', 'start a\nb\nc', 'a\nb\nc end', merged('start a\nb\nc end')],
+    ['lines inserted before the first and after the last', 'm', 'first\nm', 'm\nlast', merged('first\nm\nlast')],
+    ['different lines inserted at the start', 'm', 'x\nm', 'y\nm', conflict],
+    ['empty base, one side typed', '', 'typed', '', merged('typed')],
+    ['empty base, both typed differently', '', 'mine', 'theirs', conflict],
+    ['empty base, both typed the same', '', 'same', 'same', merged('same')],
+    ['whitespace-only edit beside a text edit', 'a\nb', 'a  \nb', 'a\nb!', merged('a  \nb!')],
+    ['trailing newline on one side, a word on the other', 'a\nb', 'a\nb\n', 'A\nb', merged('A\nb\n')],
+    [
+      'indentation on one side, a word on the other',
+      '- item one\n- item two',
+      '  - item one\n- item two',
+      '- item one\n- item 2',
+      merged('  - item one\n- item 2'),
+    ],
+    ['different whitespace in the same gap', 'a b', 'a  b', 'a\tb', conflict],
+    [
+      'a single-line title, different words',
+      'Fix the login bug',
+      'Fix the signup bug',
+      'Fix the login crash',
+      merged('Fix the signup crash'),
+    ],
+    ['a single-line title, adjacent words', 'Fix bug', 'Fix login bug', 'Fix crash', conflict],
+  ];
+  for (const [name, base, mine, theirs, expected] of rows)
+    it(name, () => {
+      expect(mergeText(base, mine, theirs)).toEqual(expected);
+      expect(mergeText(base, theirs, mine)).toEqual(expected);
+    });
+
+  it('treats tags as sets: concurrent additions and removals combine, theirs first', () => {
+    expect(mergeSet(['a'], ['a', 'mine'], ['a', 'theirs'])).toEqual(['a', 'theirs', 'mine']);
+    expect(mergeSet(['a', 'b'], ['b'], ['a', 'b', 'c'])).toEqual(['b', 'c']);
+    expect(mergeSet(['a'], ['a', 'x'], ['a', 'x'])).toEqual(['a', 'x']);
+    expect(mergeSet([], [], ['theirs'])).toEqual(['theirs']);
   });
 });

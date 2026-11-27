@@ -79,6 +79,8 @@ async function mockProject(page: Page) {
     onPatch: undefined as undefined | ((patch: Patch) => Promise<number | undefined> | number | undefined),
     /** Hold a detail read until the promise settles; the answer is the server state then. */
     onGet: undefined as undefined | ((id: string) => Promise<void> | undefined),
+    /** Long-poll requests waiting for a change event (HS2-JJ3R1G). */
+    polls: [] as Route[],
   };
   let tokenSeq = 0;
   const full = (id: string) => ({
@@ -158,6 +160,7 @@ async function mockProject(page: Page) {
     if (path.endsWith('/ws/poll')) {
       if (url.searchParams.get('since') === null)
         return route.fulfill({ json: { cursor: 1, events: [], overflow: false } });
+      server.polls.push(route);
       return;
     }
     if (
@@ -491,6 +494,8 @@ test('an edit begun on a stale cached detail merges with the refresh that lands 
   expect(server.patches.map((patch) => patch.expected_token)).toEqual(['T-remote']);
   expect(server.conflicts).toBe(0);
   await expect(page.locator('[data-component="ticket-field-conflict"]')).toHaveCount(0);
+  // The merge is announced once, without blocking (HS2-JJ3R1G).
+  await expect(page.locator('.app-toast')).toContainText('Merged your edit with a newer change to Details.');
 });
 
 test('an editor opened on a stale cached detail adopts the refresh when nothing was typed yet (HS2-7D3MPP)', async ({
@@ -522,5 +527,168 @@ test('an editor opened on a stale cached detail adopts the refresh when nothing 
   await editor.blur();
   await expect.poll(() => server.details['01']).toBe('Intro\n\nAppended elsewhere and mine');
   expect(server.patches.map((patch) => patch.expected_token)).toEqual(['T-remote']);
+  expect(server.conflicts).toBe(0);
+});
+
+// HS2-JJ3R1G: a conflict is resolved automatically whenever both edits can be kept; the field-conflict
+// card appears only for edits that overlap.
+const conflictCard = (page: Page) => page.locator('[data-component="ticket-field-conflict"]');
+const draftKey = 'hotsheet.ticket-draft:demo:git-local:01:details';
+
+test('a reload whose recovery copy touches other lines than the newer server value merges without a card (HS2-JJ3R1G)', async ({
+  page,
+}) => {
+  const server = await mockProject(page);
+  server.details['01'] = 'Intro\n\nMiddle\n\nEnd';
+  await openProject(page);
+  await ticketRow(page, 'HS2-EDIT').click();
+  let editor = await editDetails(page);
+  await editor.fill('Intro, mine\n\nMiddle\n\nEnd');
+  await expect.poll(() => storedDrafts(page)).toHaveLength(1);
+
+  // The page goes away mid-edit; meanwhile someone else edits a different paragraph.
+  server.details['01'] = 'Intro\n\nMiddle\n\nEnd, theirs';
+  server.tokens['01'] = 'T-remote';
+  await page.reload();
+  await ticketRow(page, 'HS2-EDIT').click();
+  editor = await editDetails(page);
+
+  // No card: the editor reopens on both edits and says so in a toast; nothing is written yet.
+  await expect(editor).toHaveValue('Intro, mine\n\nMiddle\n\nEnd, theirs');
+  await expect(page.locator('.app-toast')).toContainText(
+    'Restored an unsaved edit and merged it with a newer change to Details.',
+  );
+  await expect(conflictCard(page)).toHaveCount(0);
+  expect(server.patches).toEqual([]);
+
+  // Typing on after the merge keeps both edits; one focus-loss save writes against the current token.
+  await caretToEnd(editor);
+  await editor.pressSequentially('\n\nAfter the merge');
+  await page.waitForTimeout(300);
+  expect(server.patches).toEqual([]);
+  await editor.blur();
+  await expect.poll(() => server.details['01']).toBe('Intro, mine\n\nMiddle\n\nEnd, theirs\n\nAfter the merge');
+  expect(server.patches.map((patch) => patch.expected_token)).toEqual(['T-remote']);
+  expect(server.conflicts).toBe(0);
+  await expect.poll(() => storedDrafts(page)).toEqual([]);
+});
+
+test('a reload after the merged save committed restores nothing and clears the copy (HS2-JJ3R1G)', async ({ page }) => {
+  const server = await mockProject(page);
+  await openProject(page);
+  // The page reloaded while a merged save was in flight; that save committed, but its copy remained.
+  server.details['01'] = 'Intro, mine\n\nEnd, theirs';
+  await page.evaluate(
+    ([key, value]) => {
+      localStorage.setItem(key, value);
+    },
+    [draftKey, JSON.stringify({ base: 'Intro\n\nEnd', draft: 'Intro, mine\n\nEnd', at: 1 })],
+  );
+  await page.reload();
+  await ticketRow(page, 'HS2-EDIT').click();
+  const editor = await editDetails(page);
+  await expect(editor).toHaveValue('Intro, mine\n\nEnd, theirs');
+  await expect(conflictCard(page)).toHaveCount(0);
+  await expect(page.getByText('Restored an unsaved edit')).toHaveCount(0);
+  await expect.poll(() => storedDrafts(page)).toEqual([]);
+  await editor.blur();
+  expect(server.patches).toEqual([]);
+});
+
+test('a recovery copy without a merge base falls back to the conflict card (HS2-JJ3R1G)', async ({ page }) => {
+  const server = await mockProject(page);
+  await openProject(page);
+  await page.evaluate(
+    ([key, value]) => {
+      localStorage.setItem(key, value);
+    },
+    [draftKey, JSON.stringify({ draft: 'Intro from an older copy', at: 1 })],
+  );
+  await page.reload();
+  await ticketRow(page, 'HS2-EDIT').click();
+  const editor = await editDetails(page);
+  const card = conflictCard(page);
+  await expect(card).toBeVisible();
+  await expect(card).toContainText('Intro from an older copy');
+  await expect(editor).toHaveValue('Intro');
+  await card.getByRole('button', { name: 'Use Theirs' }).click();
+  await expect(card).toHaveCount(0);
+  await expect.poll(() => page.evaluate((key) => localStorage.getItem(key), draftKey)).toBeNull();
+  expect(server.patches).toEqual([]);
+});
+
+test('a save answered by a 409 merges a disjoint concurrent edit and retries once (HS2-JJ3R1G)', async ({ page }) => {
+  const server = await mockProject(page);
+  server.details['01'] = 'Intro\n\nEnd';
+  await openProject(page);
+  await ticketRow(page, 'HS2-EDIT').click();
+  const editor = await editDetails(page);
+  await editor.fill('Intro, mine\n\nEnd');
+  // Someone edits another paragraph before focus leaves; the client still holds the old token.
+  server.details['01'] = 'Intro\n\nEnd, theirs';
+  server.tokens['01'] = 'T-remote';
+  await editor.blur();
+  await expect.poll(() => server.details['01']).toBe('Intro, mine\n\nEnd, theirs');
+  expect(server.conflicts).toBe(1);
+  expect(server.patches.map((patch) => patch.expected_token)).toEqual(['T0', 'T-remote']);
+  await expect(conflictCard(page)).toHaveCount(0);
+  await expect(page.locator('.app-toast')).toContainText('Merged your edit with a newer change to Details.');
+  await expect(page.locator('#app-right-rail')).toContainText('End, theirs');
+  await expect.poll(() => storedDrafts(page)).toEqual([]);
+});
+
+test('a save answered by a 409 whose concurrent edit overlaps still shows the card (HS2-JJ3R1G)', async ({ page }) => {
+  const server = await mockProject(page);
+  await openProject(page);
+  await ticketRow(page, 'HS2-EDIT').click();
+  const editor = await editDetails(page);
+  await editor.fill('Intro, mine');
+  server.details['01'] = 'Intro, theirs';
+  server.tokens['01'] = 'T-remote';
+  await editor.blur();
+  const card = conflictCard(page);
+  await expect(card).toBeVisible();
+  await expect(card).toContainText('Intro, mine');
+  await expect(card).toContainText('Intro, theirs');
+  expect(server.details['01']).toBe('Intro, theirs');
+  await expect(page.getByText('Merged your edit')).toHaveCount(0);
+});
+
+test('a live change merged into an open unsaved draft is announced and saved on the next blur (HS2-JJ3R1G)', async ({
+  page,
+}) => {
+  const server = await mockProject(page);
+  server.details['01'] = 'Intro\n\nEnd';
+  let failing = true;
+  server.onPatch = () => (failing ? 503 : undefined);
+  await openProject(page);
+  await ticketRow(page, 'HS2-EDIT').click();
+  const editor = await editDetails(page);
+  await editor.fill('Intro, mine\n\nEnd');
+  // The save fails, so the editor stays open on unsaved text with nothing waiting to send.
+  await editor.blur();
+  await expect(page.locator('[data-component="app-error"]')).toContainText('The ticket store is unavailable.');
+  await expect(editor).toHaveValue('Intro, mine\n\nEnd');
+
+  // Another writer edits a different paragraph and the change stream reports it.
+  failing = false;
+  server.details['01'] = 'Intro\n\nEnd, theirs';
+  server.tokens['01'] = 'T-remote';
+  await expect.poll(() => server.polls.length).toBeGreaterThan(0);
+  await server.polls.shift()!.fulfill({
+    json: { cursor: 2, events: [{ store: 'git-local', kind: 'changed', id: '01', slug: 'HS2-EDIT' }], overflow: false },
+  });
+
+  // The open draft takes both edits without a card, the merge is announced, and nothing is written yet.
+  await expect(editor).toHaveValue('Intro, mine\n\nEnd, theirs');
+  await expect(page.locator('.app-toast')).toContainText('Merged your edit with a newer change to Details.');
+  await expect(conflictCard(page)).toHaveCount(0);
+  expect(server.patches).toHaveLength(1);
+
+  // The next focus loss saves the merged text once on the current token.
+  await editor.focus();
+  await editor.blur();
+  await expect.poll(() => server.details['01']).toBe('Intro, mine\n\nEnd, theirs');
+  expect(server.patches.at(-1)?.expected_token).toBe('T-remote');
   expect(server.conflicts).toBe(0);
 });

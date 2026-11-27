@@ -108,9 +108,11 @@ export function reconcileTicketPatch(
   base: FullTicket,
   remote: FullTicket,
   patch: TicketPatch,
-): { retry: TicketPatch; conflicts: TicketFieldConflict[] } {
+): { retry: TicketPatch; conflicts: TicketFieldConflict[]; merged: string[] } {
   const retry: TicketPatch = {};
   const conflicts: TicketFieldConflict[] = [];
+  /** Fields whose retry value combines this edit with the newer remote change (HS2-JJ3R1G). */
+  const merged: string[] = [];
   const noteId = typeof patch.note_id === 'string' ? patch.note_id : undefined;
   const fields = Object.keys(patch).filter(
     (field) =>
@@ -141,9 +143,11 @@ export function reconcileTicketPatch(
       continue;
     }
     // Both sides changed this field: merge disjoint text edits and tag additions/removals (HS2-A4XCXE).
-    const merged = mergeField(logicalField, baseValue, localValue, remoteValue);
-    if (merged) {
-      if (!equal(merged.value, remoteValue)) retry[field] = merged.value;
+    const mergedValue = mergeField(logicalField, baseValue, localValue, remoteValue);
+    if (mergedValue) {
+      if (!equal(mergedValue.value, remoteValue)) retry[field] = mergedValue.value;
+      // The saved value combines both edits, so the user is told (HS2-JJ3R1G).
+      if (!equal(mergedValue.value, localValue) && !equal(mergedValue.value, remoteValue)) merged.push(logicalField);
       continue;
     }
     conflicts.push({
@@ -163,7 +167,17 @@ export function reconcileTicketPatch(
   if (Object.hasOwn(retry, 'note') && patch.note_summary !== undefined) retry.note_summary = patch.note_summary;
   if (Object.hasOwn(retry, 'note') && patch.note_confidence !== undefined)
     retry.note_confidence = patch.note_confidence;
-  return { retry, conflicts };
+  return { retry, conflicts, merged };
+}
+
+/**
+ * The transient confirmation after an edit was three-way merged with a newer change instead of asking
+ * (HS2-JJ3R1G). `restored` words it for a recovery copy merged as its editor reopens.
+ */
+export function mergedEditNotice(fields: readonly string[], { restored = false } = {}): string {
+  const names = [...new Set(fields.map(ticketFieldLabel))],
+    target = names.length === 1 ? `a newer change to ${names[0]}` : 'newer changes';
+  return restored ? `Restored an unsaved edit and merged it with ${target}.` : `Merged your edit with ${target}.`;
 }
 
 /**

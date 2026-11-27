@@ -104,24 +104,61 @@ export function reconcileStoredTicketDraft(stored: StoredTicketDraft, current: s
 }
 
 /**
+ * A recovery copy that carries no merge base: an older or foreign shape (HS2-JJ3R1G). Every copy this
+ * client writes has stored `base` since HS2-RE1PS6, but a copy without one must never be dropped
+ * silently, and without a base it cannot be merged either, so reopening offers both versions.
+ */
+export interface LegacyTicketDraft {
+  legacy: true;
+  draft: string;
+}
+
+/** `loadTicketDraft`, also accepting a copy without a merge base; only editor restore reads that shape. */
+export function loadRestorableTicketDraft(
+  storage: Pick<Storage, 'getItem'>,
+  key: string,
+): StoredTicketDraft | LegacyTicketDraft | undefined {
+  const stored = loadTicketDraft(storage, key);
+  if (stored) return stored;
+  try {
+    const raw = storage.getItem(key),
+      parsed = raw ? parseJson(raw) : undefined;
+    return isRecord(parsed) && parsed.base === undefined && typeof parsed.draft === 'string'
+      ? { legacy: true, draft: parsed.draft }
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * What reopening an editor does with its stored recovery copy (HS2-7D3MPP): nothing to restore
  * (`clear` says whether the copy is now redundant), continue the draft on its reconciled base, or
  * offer both versions when the server changed the same text. A conflict keeps the copy, so the
- * user's text is never discarded without a choice.
+ * user's text is never discarded without a choice. A restore whose edit was three-way merged with a
+ * newer server change says so (`merged`) so the editor can tell the user (HS2-JJ3R1G). A merge whose
+ * result the server already holds (its save committed just before a reload) is nothing to restore.
  */
 export type TicketDraftRestore =
   | { kind: 'none'; clear: boolean }
-  | { kind: 'restore'; base: string; draft: string }
+  | { kind: 'restore'; base: string; draft: string; merged: boolean }
   | { kind: 'conflict'; base: string; mine: string; theirs: string };
 
-export function planTicketDraftRestore(stored: StoredTicketDraft | undefined, current: string): TicketDraftRestore {
+export function planTicketDraftRestore(
+  stored: StoredTicketDraft | LegacyTicketDraft | undefined,
+  current: string,
+): TicketDraftRestore {
   if (!stored) return { kind: 'none', clear: false };
+  if ('legacy' in stored)
+    return stored.draft === current
+      ? { kind: 'none', clear: true }
+      : { kind: 'conflict', base: '', mine: stored.draft, theirs: current };
   if ((stored.draft === stored.base && !stored.pendingIntent) || stored.draft === current)
     return { kind: 'none', clear: true };
   const next = reconcileStoredTicketDraft(stored, current);
-  return next.kind === 'conflict'
-    ? { kind: 'conflict', base: stored.base, mine: stored.draft, theirs: current }
-    : { kind: 'restore', base: next.base, draft: next.draft };
+  if (next.kind === 'conflict') return { kind: 'conflict', base: stored.base, mine: stored.draft, theirs: current };
+  if (next.draft === current) return { kind: 'none', clear: true };
+  return { kind: 'restore', base: next.base, draft: next.draft, merged: next.kind === 'merged' };
 }
 
 export function clearTicketDraft(storage: Pick<Storage, 'removeItem'>, key: string): void {

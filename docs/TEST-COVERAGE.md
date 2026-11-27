@@ -926,6 +926,32 @@ a failed save is not resent without new typing, and cancel during a save drops q
 text. `clients/web/src/ticket-draft-store.test.ts` covers the pure
 `planTicketDraftRestore` decision (none, restore, merge, conflict, native intent).
 
+HS2-JJ3R1G covers automatic conflict resolution, with the card kept only for overlapping edits.
+
+**Unit tests**
+
+- `clients/web/src/text-merge.test.ts # three-way merge transition matrix (HS2-JJ3R1G)`. Each row is checked in both side orders. The rows cover:
+  - one side changed, or both changed identically;
+  - disjoint and overlapping lines;
+  - edits at the start and end;
+  - an empty base;
+  - whitespace-only, trailing-newline and indentation edits, kept exactly;
+  - single-line title words, both merged and adjacent;
+  - tags as sets.
+- `clients/web/src/ticket-draft-store.test.ts # planTicketDraftRestore auto-resolution (HS2-JJ3R1G)` covers a merged restore, an empty base, a reload after the merged save committed, repeated conflicts, and a copy without a merge base falling back to the card.
+- `clients/web/src/ticket-field-reconciliation.test.ts` pins which 409 retries count as merges and the toast wording.
+
+**Browser tests**
+
+`clients/web/tests/ticket-editor-autosave-transitions.spec.ts` runs through the shipped inspector:
+
+- A reload with disjoint edits merges with no card, announces it, keeps typing after the merge, and writes once on the current token.
+- A reload after a committed merged save restores nothing.
+- A copy without a merge base shows the card.
+- A save-time 409 with disjoint edits merges and retries once.
+- An overlapping save-time 409 still shows the card.
+- The stale-cache merge on save shows the merged toast.
+
 HS2-P9A21R covers the five-view phone toolbar and reachable sidebar toggle
 through the shipped shell in `clients/web/tests/shell-composition.spec.ts`.
 `mobile-layout.spec.ts` keeps overlay and resize navigation in the affected

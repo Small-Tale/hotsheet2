@@ -94,7 +94,7 @@ import { createTicketDetailCache, sameTicketRevision } from '../ticket-detail-ca
 import {
   captureTicketDraft,
   clearTicketDraft,
-  loadTicketDraft,
+  loadRestorableTicketDraft,
   planTicketDraftRestore,
   prepareCommittedDraftCleanup,
   saveTicketDraft,
@@ -104,6 +104,7 @@ import {
 import {
   isTicketConcurrencyConflict,
   isWriteBehindUnavailable,
+  mergedEditNotice,
   noteEditPatch,
   rebaseDraftValue,
   reconcileTicketPatch,
@@ -575,8 +576,9 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
   function rebaseDraftPatch(
     patch: TicketPatch,
     base: FullTicket,
-  ): { patch: TicketPatch; recorded: TicketPatch; conflict?: TicketFieldConflict } {
+  ): { patch: TicketPatch; recorded: TicketPatch; conflict?: TicketFieldConflict; merged: string[] } {
     const next: TicketPatch = { ...patch },
+      merged: string[] = [],
       noteId = typeof patch.note_id === 'string' ? patch.note_id : undefined;
     for (const field of DRAFT_FIELDS) {
       if (!Object.hasOwn(patch, field)) continue;
@@ -590,6 +592,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
         return {
           patch,
           recorded: patch,
+          merged: [],
           conflict: {
             key: field === 'note' ? `note:${noteId}` : field,
             field,
@@ -599,10 +602,13 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
             theirs: current,
           },
         };
-      if (result.kind === 'merged')
+      if (result.kind === 'merged') {
         next[field] = field === 'blocked_reason' && !result.value.trim() ? null : result.value;
+        // The saved value combines both edits, so the user is told once it commits (HS2-JJ3R1G).
+        if (result.value !== mine && result.value !== current) merged.push(field);
+      }
     }
-    return { patch: next, recorded: { ...patch, ...adoptMergedDrafts(patch, next) } };
+    return { patch: next, recorded: { ...patch, ...adoptMergedDrafts(patch, next) }, merged };
   }
   async function applyTicketPatch(slug: string, patch: TicketPatch, dismissedRequestId?: string) {
     const current = project(),
@@ -657,7 +663,9 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
           Object.keys(patch).every((field) => queuedFields.has(field)),
         );
         const rebased =
-          useQueue || !ownsDrafts() || responseAppend ? { patch, recorded: patch } : rebaseDraftPatch(patch, base);
+          useQueue || !ownsDrafts() || responseAppend
+            ? { patch, recorded: patch, merged: [] as string[] }
+            : rebaseDraftPatch(patch, base);
         if (rebased.conflict) {
           if (mutationGenerations.get(slug) === generation) {
             tickets.value = tickets.value.map((item) => (item.slug === slug ? ticketRowFromFull(item, base) : item));
@@ -677,6 +685,8 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
         let pending = rebased.patch,
           recorded = rebased.recorded,
           updated: FullTicket | undefined;
+        /** Fields saved as a three-way merge with a newer change, announced once the save commits (HS2-JJ3R1G). */
+        const mergedFields = new Set(rebased.merged);
         const operationId = browserOutboxId();
         // Token drift from unrelated writes (an AI's notes, lease renewals) can land between a refetch and the
         // retry; rebase and retry a bounded number of times instead of failing the edit (HS2-A4XCXE).
@@ -755,6 +765,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
             }
             if (!responseAppend && ownsDrafts())
               recorded = { ...recorded, ...adoptMergedDrafts(pending, reconciled.retry) };
+            for (const field of reconciled.merged) mergedFields.add(field);
             if (
               isStaleFeedbackDismissal(dismissedRequestId, pending, remote.notes) ||
               isStaleDescriptionFeedbackDismissal(dismissedRequestId, pending, remote)
@@ -786,6 +797,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
         if (selectedTicket.value?.slug === slug && (!responseAppend || ownsDrafts())) selectedTicket.value = updated;
         if (!responseAppend && ownsDrafts()) recordCommittedDraftBases(recorded);
         error.value = updated.warnings?.join('\n') ?? '';
+        if (mergedFields.size) showToast(mergedEditNotice([...mergedFields]));
         reportMutationTiming({
           slug,
           optimistic_ms: optimistic,
@@ -926,7 +938,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     const storage = draftStorage(),
       key = selectedDraftKey(field, noteId);
     if (!storage || !key) return undefined;
-    const plan = planTicketDraftRestore(loadTicketDraft(storage, key), current);
+    const plan = planTicketDraftRestore(loadRestorableTicketDraft(storage, key), current);
     if (plan.kind === 'none') {
       if (plan.clear) clearTicketDraft(storage, key);
       return undefined;
@@ -942,7 +954,9 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       });
       return undefined;
     }
-    showToast('Restored an unsaved edit.');
+    // A merged restore opens on the combined text with the current value as its base, so the focus-loss
+    // save writes it against the current token without a conflict (HS2-JJ3R1G).
+    showToast(plan.merged ? mergedEditNotice([field], { restored: true }) : 'Restored an unsaved edit.');
     return { draft: plan.draft, base: plan.base };
   }
   /** A resolved field conflict settles the field's recovery copy: the user chose what to keep (HS2-7D3MPP). */

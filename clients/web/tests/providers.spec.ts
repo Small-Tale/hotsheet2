@@ -22695,6 +22695,7 @@ test('merges concurrent edits to different words of the same title (HS2-R8TYCG)'
   await title.blur();
   await expect.poll(() => liveFull.title).toBe('Fix the lexer crash');
   await expect(inspector.locator('[data-component="ticket-field-conflict"]')).toHaveCount(0);
+  await expect(page.locator('.app-toast')).toContainText('Merged your edit with a newer change to Title.');
   await inspector.locator('[data-action="edit-ticket-title"]').dblclick();
   await expect(title).toHaveValue('Fix the lexer crash');
   await page.screenshot({ path: test.info().outputPath('hs2-r8tycg-merged-title-wide.png') });

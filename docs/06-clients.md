@@ -1022,7 +1022,23 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   the edits are disjoint. When the same text changed, the copy is never discarded: the
   editor opens on the current value and the field-conflict card shows both versions; the
   copy survives reloads and selection changes until the card is resolved (Use Theirs, or
-  a successful Apply of the merged value) (HS2-7D3MPP). A
+  a successful Apply of the merged value) (HS2-7D3MPP).
+  Conflicts are resolved automatically whenever both edits can be kept (HS2-JJ3R1G).
+  The card appears only for edits that overlap. Every path runs the same three-way merge
+  with the edit-start value as its base: a restored copy, a save rebased before sending,
+  a save answered by a stale-token 409, and a live refresh into an open draft. The merge
+  takes the side that changed, or the shared result when both changed alike. Disjoint
+  lines combine, an overlapping line region retries word by word with whitespace kept
+  exactly, and tags merge as a set. A merge that combines both sides is announced once
+  through the app toast: "Merged your edit with a newer change to Details." A restored copy
+  reads "Restored an unsaved edit and merged it with a newer change to Details." Neither
+  blocks the editor. A merged restore opens on the combined text with the current value as
+  its base, so its focus-loss save writes once against the current token. Before this
+  change, the restore said only "Restored an unsaved edit."
+  A copy whose merge result the server already holds (the merged save committed just
+  before a reload) is cleared instead of restored. A copy stored without a merge base
+  cannot be merged, so it opens the card. The conservative choice for a single-line title
+  stands: different words merge, but adjacent or same-word edits still ask. A
   successful save or an explicit cancel clears the copy; tag chips remain immediate
   discrete saves (HS2-RE1PS6). A focus-loss save sends only what was typed before focus
   left: text typed after the user returns to an editor whose save is still in flight is

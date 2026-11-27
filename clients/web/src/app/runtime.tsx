@@ -336,6 +336,7 @@ import { aiCreatorLabel } from '../ticket-creator';
 import { parseTicketDeepLink, type TicketDeepLink, ticketDeepLinkRoot } from '../ticket-deep-link';
 import { loadTicketEditorSizes } from '../ticket-editor-size';
 import {
+  mergedEditNotice,
   reconcileActiveDraft,
   reconcileReaderNoteDraft,
   type TicketFieldConflict,
@@ -4398,6 +4399,8 @@ export async function startHotSheetWebClient() {
     // A merge must see the text the user typed, not a draft still waiting for a typing pause (HS2-EQTXTJ).
     flushDraftInputs();
     let conflict: TicketFieldConflict | undefined, settledConflictKey: string | undefined;
+    /** Open drafts a newer change was merged into, so their text moved under the user (HS2-JJ3R1G). */
+    const mergedFields = new Set<string>();
     if (detailsMode.value === 'write' && !detailsAutosave.pending()) {
       const next = reconcileActiveDraft(detailsDraftBase, detailsDraft.value, refreshed.details);
       detailsDraftBase = next.base;
@@ -4408,6 +4411,7 @@ export async function startHotSheetWebClient() {
       // A clean merge of both edits still has to be saved (HS2-A4XCXE).
       if (next.kind === 'merged') {
         syncFocusedDraftControl(document.activeElement, next.mine, next.draft);
+        mergedFields.add('details');
         detailsAutosave.schedule(next.draft);
       }
       if (next.kind === 'conflict') {
@@ -4432,6 +4436,7 @@ export async function startHotSheetWebClient() {
       // A clean merge of both edits still has to be saved (HS2-A4XCXE).
       if (next.kind === 'merged') {
         syncFocusedDraftControl(document.activeElement, next.mine, next.draft);
+        mergedFields.add('details');
         readerDetailsAutosave.schedule(next.draft);
       }
       if (next.kind === 'conflict' && !conflict) {
@@ -4456,6 +4461,7 @@ export async function startHotSheetWebClient() {
       // A clean merge of both edits still has to be saved (HS2-A4XCXE).
       if (next.kind === 'merged') {
         syncFocusedDraftControl(document.activeElement, next.mine, next.draft);
+        mergedFields.add('title');
         titleAutosave.schedule(next.draft);
       }
       if (next.kind === 'conflict' && !conflict) {
@@ -4481,6 +4487,7 @@ export async function startHotSheetWebClient() {
       // A clean merge of both edits still has to be saved (HS2-A4XCXE).
       if (next.kind === 'merged') {
         syncFocusedDraftControl(document.activeElement, next.mine, next.draft);
+        mergedFields.add('blocked_reason');
         blockedReasonAutosave.schedule(next.draft);
       }
       if (next.kind === 'conflict' && !conflict) {
@@ -4506,6 +4513,7 @@ export async function startHotSheetWebClient() {
       // A clean merge of both edits still has to be saved (HS2-A4XCXE).
       if (next.kind === 'merged') {
         syncFocusedDraftControl(document.activeElement, next.mine, next.draft);
+        mergedFields.add('blocked_reason');
         readerBlockedReasonAutosave.schedule(next.draft);
       }
       if (next.kind === 'conflict' && !conflict) {
@@ -4533,6 +4541,7 @@ export async function startHotSheetWebClient() {
       // A clean merge of both edits still has to be saved (HS2-A4XCXE).
       if (next.kind === 'merged') {
         syncFocusedDraftControl(document.activeElement, next.mine, next.draft);
+        mergedFields.add('note');
         noteAutosave.schedule({ id: noteId, value: next.draft });
       }
       if (next.kind === 'conflict' && !conflict) {
@@ -4569,6 +4578,7 @@ export async function startHotSheetWebClient() {
         // A clean merge of both edits still has to be saved (HS2-A4XCXE).
         if (next.kind === 'merged') {
           syncFocusedDraftControl(document.activeElement, next.mine, next.draft);
+          mergedFields.add('note');
           readerNoteAutosave.schedule({ id: readerNoteId, value: next.draft });
         }
         if (next.kind === 'conflict' && !conflict) {
@@ -4591,6 +4601,7 @@ export async function startHotSheetWebClient() {
       fieldConflict.value = undefined;
       fieldConflictResolution.value = '';
     }
+    if (mergedFields.size) showToast(mergedEditNotice([...mergedFields]));
   }
 
   const projectRefresh = createProjectRefresh({
