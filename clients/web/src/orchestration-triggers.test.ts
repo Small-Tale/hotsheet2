@@ -23,6 +23,7 @@ import {
   statusRows,
   type TriggerForm,
   type TriggerHistoryEntry,
+  triggerOverviewText,
   triggerProblemText,
   type TriggerView,
   warningText,
@@ -503,6 +504,32 @@ describe('HS2-KXKA7X the setup form', () => {
     const view = parseTriggerView({ ...rawTrigger(), ...spec })!;
     expect(view.action.template?.inputs).toEqual(spec.action.template?.inputs);
     expect(formToSpec(formFromTrigger(view), view.action.template?.inputs ?? {})).toEqual(spec);
+  });
+
+  it('HS2-X3FZJE words the overview Triggers row: counts by state and the earliest next run', () => {
+    const now = Date.UTC(2026, 10, 26, 12, 0);
+    const view = (overrides: Record<string, unknown>) => parseTriggerView(rawTrigger(overrides))!;
+    expect(triggerOverviewText(undefined, now, 'UTC')).toBe('Reading the triggers…');
+    expect(triggerOverviewText([], now, 'UTC')).toBe('None yet');
+    const triggers = [
+      view({ trigger_id: 'A', name: 'Nightly', state: 'on', next_runs_ms: [now + 3_600_000 * 14] }),
+      view({
+        trigger_id: 'B',
+        name: 'Hourly bump',
+        state: 'dry_run',
+        next_runs_ms: [now + 1_800_000, now + 5_400_000],
+      }),
+      view({ trigger_id: 'C', state: 'paused' }),
+      view({ trigger_id: 'D', state: 'needs_review' }),
+      view({ trigger_id: 'E', state: 'on' }),
+    ];
+    expect(triggerOverviewText(triggers, now, 'UTC')).toBe(
+      '2 on, 1 dry run, 1 paused, 1 need review · next Today 12:30, Hourly bump',
+    );
+    // Nothing scheduled: the counts alone; refilled after empty, the next run comes back.
+    expect(triggerOverviewText(triggers.slice(2), now, 'UTC')).toBe('1 on, 1 paused, 1 need review');
+    expect(triggerOverviewText([], now, 'UTC')).toBe('None yet');
+    expect(triggerOverviewText(triggers.slice(0, 1), now, 'UTC')).toBe('1 on · next Nov 27 02:00, Nightly');
   });
 
   it('names what keeps Save disabled', () => {

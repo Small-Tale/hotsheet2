@@ -504,6 +504,37 @@ export function whenText(atMs: number, now: number = Date.now(), zone?: string):
   return `${new Intl.DateTimeFormat('en', { ...options, month: 'short', day: 'numeric' }).format(new Date(atMs))} ${time}`;
 }
 
+const STATE_WORDS: Readonly<Record<TriggerState, string>> = {
+  on: 'on',
+  dry_run: 'dry run',
+  paused: 'paused',
+  needs_review: 'need review',
+};
+
+/**
+ * HS2-X3FZJE: the overview inspector's one Triggers row: how many are in each state, then the earliest next
+ * scheduled run and the trigger it belongs to ("2 on, 1 dry run · next Today 06:30, Dependency bump"). Before the
+ * first read it says so; with none it says "None yet".
+ */
+export function triggerOverviewText(
+  triggers: readonly TriggerView[] | undefined,
+  now: number = Date.now(),
+  zone?: string,
+): string {
+  if (triggers === undefined) return 'Reading the triggers…';
+  if (triggers.length === 0) return 'None yet';
+  const counts = (Object.keys(STATE_WORDS) as TriggerState[])
+    .map((state) => [state, triggers.filter((trigger) => trigger.state === state).length] as const)
+    .filter(([, count]) => count > 0)
+    .map(([state, count]) => `${count} ${STATE_WORDS[state]}`)
+    .join(', ');
+  const next = triggers
+    .flatMap((trigger) => trigger.next_runs_ms.map((at) => ({ at, name: trigger.name })))
+    .sort((a, b) => a.at - b.at)
+    .at(0);
+  return next ? `${counts} · next ${whenText(next.at, now, zone)}, ${next.name}` : counts;
+}
+
 const short = (commit: string | undefined) => (commit ? commit.slice(0, 7) : undefined);
 
 /** The event a delivery came from, in words. */

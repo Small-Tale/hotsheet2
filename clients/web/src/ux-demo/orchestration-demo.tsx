@@ -644,6 +644,8 @@ export function OrchestrationInspectorDemo() {
             contention: demoContention(),
             summary: demoSummary(),
             roles: demoRoles(),
+            // HS2-X3FZJE: the Triggers row, with the next scheduled run.
+            triggers: demoTriggers(),
           }}
         />
       </CatalogExample>

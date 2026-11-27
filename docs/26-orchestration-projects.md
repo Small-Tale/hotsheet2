@@ -8094,8 +8094,14 @@ and form mapping in `clients/web/src/orchestration-triggers.ts`):
   **Pause** and **Resume** in the footer.
 
 The dialog reads the list again on `orchestration_changed`. On a phone it is the
-compact drill-down. Refusals read through the shared refusal map. The overview
-inspector's Triggers row (HS2-X3FZJE) is a follow-up.
+compact drill-down. Refusals read through the shared refusal map.
+
+With no card selected, the overview inspector's **Scheduler** section has one
+**Triggers** row (HS2-X3FZJE): the count by state ("2 on, 1 dry run, 1 paused, 1 need
+review", or "None yet") and the earliest next scheduled run with its trigger's name
+("· next Today 06:30, Dependency bump"), and a **Triggers…** button that opens the
+dialog. The overview reads `triggers/list` with its other reads and again on
+`orchestration_changed` (no timer); the list the open dialog reads is the row's too.
 
 ### Audit
 

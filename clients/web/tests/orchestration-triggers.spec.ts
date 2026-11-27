@@ -456,3 +456,50 @@ test('HS2-40GPZK Triggers… gives fixed template inputs Use Template…’s typ
     await server.stop(page);
   }
 });
+
+test('HS2-X3FZJE the overview inspector’s Triggers row counts triggers, names the next run and opens Triggers…', async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  const server = await realTicketServer({ seed: ({ env }) => syntheticTool(env.HOTSHEET_HOME!) });
+  try {
+    await orchestrateSelf(server);
+    await resizeTo(page, { width: 1440, height: 900 });
+    await openProject(page, server);
+    const overview = page.locator('[data-orchestration-overview]');
+    // The Scheduler section's Triggers row (a term and its value).
+    const row = overview.locator('[data-orchestration-section="Scheduler"]');
+    await expect(row.getByRole('term').filter({ hasText: /^Triggers$/ })).toBeVisible();
+    await expect(row).toContainText('None yet');
+    // The row's Triggers… opens the dialog; a schedule saved there shows in the row once the dialog closes.
+    await row.getByRole('button', { name: 'Triggers…' }).click();
+    const dialog = dialogOf(page);
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: 'New Trigger…' }).click();
+    await dialog.getByLabel('Name', { exact: true }).fill('Morning start');
+    await dialog.getByRole('radio', { name: 'Start orchestration' }).check();
+    await dialog.getByRole('button', { name: 'Save as Dry Run' }).click();
+    await expect(dialog.getByRole('heading', { name: 'Morning start' })).toBeVisible();
+    await dialog.locator('[data-dialog-close]').first().click();
+    await expect(dialog).toBeHidden();
+    await expect(row).toContainText(/1 dry run · next .+, Morning start/);
+    await dismissToasts(page);
+    await row.scrollIntoViewIfNeeded();
+    await captureSizes(page, 'overview-row', async () => {
+      // On a phone the inspector is not beside the view; the capture shows the view as a person sees it.
+      await expect(page.locator('body')).toBeVisible();
+    });
+    await row.scrollIntoViewIfNeeded();
+    await capture(page, 'overview-row-1440-again-light');
+    // Paused: counted, with no next run.
+    await row.getByRole('button', { name: 'Triggers…' }).click();
+    await dismissToasts(page);
+    await dialog.getByRole('button', { name: 'Pause' }).click();
+    await expect(dialog.locator('[data-trigger-badge="paused"]')).toBeVisible();
+    await dialog.locator('[data-dialog-close]').first().click();
+    await expect(row).toContainText('1 paused');
+    await expect(row).not.toContainText(' · next ');
+  } finally {
+    await server.stop(page);
+  }
+});

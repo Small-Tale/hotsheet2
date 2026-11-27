@@ -71,6 +71,7 @@ import {
   parseTriggerReview,
   parseTriggerView,
   type TriggerForm,
+  type TriggerView,
 } from '../orchestration-triggers';
 import {
   parseValidationOperation,
@@ -520,6 +521,8 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
         summary?: ProgressSummaryView;
         /** HS2-70MHXJ: the summary read failed and none was read before. */
         summaryUnreadable?: boolean;
+        /** HS2-X3FZJE: this machine's triggers, for the overview's Triggers row. */
+        triggers?: readonly TriggerView[];
         error?: string;
       }
     | undefined
@@ -1079,11 +1082,13 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     if (!current || selectedStep.value || dependencies.viewMode.value !== 'orchestration') return;
     const client = clientFor(current);
     // HS2-5GRXFN: the scheduler's own dry-run plan says which resources hold work back; it logs nothing.
-    const [page, plan, summary] = await Promise.allSettled([
+    const [page, plan, summary, triggers] = await Promise.allSettled([
       client.orchestrationDecisions(current.id, { limit: 30 }),
       client.orchestrationSchedulerPlan(current.id, dependencies.personId()),
       // HS2-XJEH08: progress and cost from this machine's records.
       client.orchestrationSummary(current.id),
+      // HS2-X3FZJE: this machine's triggers, for the Triggers row.
+      client.orchestrationTriggers(current.id, 'list', {}, dependencies.personId()),
     ]);
     if (request !== overviewRequest) return;
     overview.value = {
@@ -1093,11 +1098,33 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
       roles: plan.status === 'fulfilled' ? parseRoleStandings(plan.value) : overview.value?.roles,
       summary: summary.status === 'fulfilled' ? parseProgressSummary(summary.value) : overview.value?.summary,
       summaryUnreadable: summary.status === 'rejected' && overview.value?.summary === undefined,
+      triggers: triggers.status === 'fulfilled' ? parseTriggerList(triggers.value) : overview.value?.triggers,
       error:
-        page.status === 'rejected' || plan.status === 'rejected' || summary.status === 'rejected'
+        page.status === 'rejected' ||
+        plan.status === 'rejected' ||
+        summary.status === 'rejected' ||
+        triggers.status === 'rejected'
           ? 'Some of the scheduler’s records could not be read.'
           : undefined,
     };
+  }
+
+  const shownOverview = () => overview.value;
+  /** HS2-X3FZJE: a trigger fired or changed (`orchestration_changed`): the overview's Triggers row reads them again. */
+  async function refreshOverviewTriggers() {
+    const current = dependencies.project();
+    const request = overviewRequest;
+    if (!current || !overview.value || selectedStep.value || dependencies.viewMode.value !== 'orchestration') return;
+    try {
+      const triggers = parseTriggerList(
+        await clientFor(current).orchestrationTriggers(current.id, 'list', {}, dependencies.personId()),
+      );
+      // A newer full read (or a project switch) since then wins.
+      const shown = shownOverview();
+      if (request === overviewRequest && shown) overview.value = { ...shown, triggers };
+    } catch {
+      // The row keeps what it last read; the next overview read tries again.
+    }
   }
 
   const openDecisions = () => decisionsDialog.value;
@@ -1567,7 +1594,13 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     change: (state: OrchestrationTriggerDialogState) => Partial<OrchestrationTriggerDialogState>,
   ) {
     const state = triggerDialog.value;
-    if (state?.session === session) triggerDialog.value = { ...state, ...change(state) };
+    if (state?.session !== session) return;
+    const next = { ...state, ...change(state) };
+    triggerDialog.value = next;
+    // HS2-X3FZJE: the list the dialog just read is the overview's Triggers row too, with no read of its own.
+    const shown = shownOverview();
+    if (next.triggers !== state.triggers && !next.loading && shown)
+      overview.value = { ...shown, triggers: next.triggers };
   }
 
   /** HS2-KXKA7X: Triggers…: read this machine's triggers and the templates a setup offers. */
@@ -2018,6 +2051,8 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     sessionsChanged: (projectId: string) => {
       const current = dependencies.project();
       if (current?.id === projectId && streamKey) void refreshPlanning(current, generation);
+      // HS2-X3FZJE: and the overview's Triggers row.
+      if (current?.id === projectId && streamKey) void refreshOverviewTriggers();
       // HS2-KXKA7X: a trigger fired or changed; the open Triggers… dialog reads them again.
       if (current?.id === projectId && triggerDialog.value && triggerDialog.value.mode === 'detail')
         void rereadTriggers();
