@@ -621,18 +621,21 @@ export function OrchestrationTemplateEditor({
     step = part.startsWith('step:') ? draft.steps.find((item) => `step:${item.id}` === part) : undefined;
   const content = (
     <List gap="m" rootAttributes={{ 'data-template-editor-part': part }}>
-      {retired ? (
-        <List controlInsets="trl">
+      {/* HS2-4EBCNH: every banner slot is always present (hidden when empty), so a validation answer that adds or
+          removes a problem never shifts the part's fields below: a shift rebuilt or moved them and closed an open
+          select (WebKit has no state-preserving moveBefore()). */}
+      <List controlInsets="trl" hidden={!retired}>
+        {retired ? (
           <StateBanner
             copyLayout="stacked"
             tone="info"
             title="Retired"
             detail="A retired template can no longer be applied, and it is kept as it was."
           />
-        </List>
-      ) : undefined}
-      {state.failure ? (
-        <List controlInsets="trl">
+        ) : undefined}
+      </List>
+      <List controlInsets="trl" hidden={!state.failure}>
+        {state.failure ? (
           <StateBanner
             copyLayout="stacked"
             tone={state.conflict ? 'warning' : 'danger'}
@@ -653,10 +656,10 @@ export function OrchestrationTemplateEditor({
               ) : undefined
             }
           />
-        </List>
-      ) : undefined}
-      {partProblems.length > 0 ? (
-        <List controlInsets="trl">
+        ) : undefined}
+      </List>
+      <List controlInsets="trl" hidden={partProblems.length === 0}>
+        {partProblems.length > 0 ? (
           <StateBanner
             copyLayout="stacked"
             tone="danger"
@@ -664,8 +667,8 @@ export function OrchestrationTemplateEditor({
             detail={partProblems.join(' ')}
             rootAttributes={{ 'data-template-part-problems': part }}
           />
-        </List>
-      ) : undefined}
+        ) : undefined}
+      </List>
       {part === 'template' ? (
         <TemplatePart context={context} />
       ) : part === 'goal' ? (

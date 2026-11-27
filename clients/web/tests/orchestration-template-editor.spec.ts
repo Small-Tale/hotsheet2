@@ -431,3 +431,57 @@ test('HS2-1XCW6N the catalog demo runs the production editor and shows each edit
   );
   expect(errors).toEqual([]);
 });
+
+test('HS2-4EBCNH an open select in a step stays open while a validation answer removes the problem banner above it', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer();
+  try {
+    await orchestrateSelf(server);
+    await resizeTo(page, { width: 1440, height: 900 });
+    await openProject(page, server);
+    const section = await showTemplatesSettings(page);
+    await section.getByRole('button', { name: 'New Template' }).click();
+    const editor = editorOf(page);
+    await partOf(editor, '1 · step-1').click();
+    // Validation answers carry a problem for the step's project (shown in the part's banner) until `problem` is
+    // cleared; the next answer is then held until the priority select is open, and removes the banner.
+    let problem = true;
+    let release: (() => void) | undefined;
+    const apiPath = `/__hotsheet/project-api/${server.checkoutId}`;
+    await page.route('**/orchestration/templates/validate', async (route) => {
+      if (!problem)
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+      const incoming = new URL(route.request().url());
+      const response = await proxyFetch(route, {
+        url: `${server.url}${incoming.pathname.slice(apiPath.length)}`,
+        headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+        timeout: 60_000,
+      });
+      const body = (await response.json()) as { problems?: unknown[] };
+      const added = problem ? [{ code: 'target_unknown', at: 'steps[0].target' }] : [];
+      await route.fulfill({ response, json: { ...body, problems: [...(body.problems ?? []), ...added] } });
+    });
+    const title = editor.locator('[data-template-field$=".title"]');
+    await fill(title, 'Add headers');
+    const banner = editor.locator('[data-template-part-problems]');
+    await expect(banner).toBeVisible();
+    problem = false;
+    await fill(title, 'Add rate limit headers');
+    await expect.poll(() => release !== undefined).toBe(true);
+    const priority = editor.locator('[data-template-field$=".priority"]').getByRole('combobox');
+    await priority.click();
+    await expect(page.getByRole('option', { name: 'High', exact: true })).toBeVisible();
+    release?.();
+    await expect(banner).toHaveCount(0);
+    await expect(priority).toHaveAttribute('aria-expanded', 'true');
+    await page.getByRole('option', { name: 'High', exact: true }).click();
+    await expect(priority).toContainText('High');
+    await page.unroute('**/orchestration/templates/validate');
+  } finally {
+    await server.stop(page);
+  }
+});
