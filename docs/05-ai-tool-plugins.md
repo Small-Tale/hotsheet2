@@ -3862,7 +3862,10 @@ and its launch command _executes_. So:
   manifest-only plugin can _write_ but never _executes host code_.
 
 CLI surface: `hotsheet plugin list | info <id> | install <path|url> | verify <id> |
-remove <id>`, and `hotsheet setup <tool|--detect>` (§5.1a).
+remove <id> | trust <id>`, and `hotsheet setup <tool|--detect>` (§5.1a). For a
+code-bearing plugin ([38](38-plugin-protocol.md)) `install` is the consent that records its
+approval, `list`/`info` show its trust state, `verify` starts it over both transports, and
+`trust` re-approves it after its files change (HS2-XY0VTN).
 
 > **Trust gate built (HS2-93, partial).** `hotsheet-cli plugin verify` checks a plugin
 > structurally — the MCP `format` is known, and every declared **write target stays

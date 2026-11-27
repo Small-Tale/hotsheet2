@@ -1304,6 +1304,8 @@ pub(crate) fn cmd_setup(
 }
 
 pub(crate) fn cmd_plugin(cmd: PluginCmd) -> Result<()> {
+    use hotsheet_cli::code_plugin;
+    use hotsheet_plugin_host::TrustStore;
     use hotsheet_plugins::{PluginSource, all_plugins, default_dirs, machine_plugins_dir};
     match cmd {
         PluginCmd::List => {
@@ -1335,8 +1337,38 @@ pub(crate) fn cmd_plugin(cmd: PluginCmd) -> Result<()> {
                     skipped.reason
                 );
             }
+            // HS2-XY0VTN: code-bearing plugins, with their trust state in the third column.
+            let store = TrustStore::new(&hotsheet_plugins::hotsheet_home());
+            for installed in code_plugin::installed(&machine_plugins_dir()) {
+                match &installed.manifest {
+                    Ok(m) => {
+                        let trust = match code_plugin::trust_state(&store, &m.id, &installed.dir)
+                            .as_str()
+                        {
+                            "trusted" => "trusted",
+                            "not trusted" => "untrusted",
+                            "changed since trusted" => "changed",
+                            _ => "unknown",
+                        };
+                        println!(
+                            "{:<10} {:<16} {:<9} {}",
+                            m.id,
+                            m.display_name,
+                            trust,
+                            installed.dir.display()
+                        );
+                    }
+                    Err(e) => eprintln!("warning: skipped plugin {}: {e}", installed.dir.display()),
+                }
+            }
         }
         PluginCmd::Info { id } => {
+            if let Some((dir, m)) = code_plugin::find(&machine_plugins_dir(), &id) {
+                let store = TrustStore::new(&hotsheet_plugins::hotsheet_home());
+                let trust = code_plugin::trust_state(&store, &id, &dir);
+                println!("{}", code_plugin::describe(&m, &dir, Some(&trust)));
+                return Ok(());
+            }
             let p =
                 hotsheet_plugins::find(&id).with_context(|| format!("unknown plugin '{id}'"))?;
             println!("{}", hotsheet_cli::plugin::describe(&p));
@@ -1350,6 +1382,27 @@ pub(crate) fn cmd_plugin(cmd: PluginCmd) -> Result<()> {
             }
         }
         PluginCmd::Verify { id } => {
+            if let Some((dir, m)) = code_plugin::find(&machine_plugins_dir(), &id) {
+                let home = hotsheet_plugins::hotsheet_home();
+                if let Err(e) = TrustStore::new(&home).check(&id, &dir) {
+                    bail!("{e}");
+                }
+                let result = code_plugin::verify_live(&home, &dir, &m);
+                for note in &result.notes {
+                    println!("  {note}");
+                }
+                for issue in &result.issues {
+                    eprintln!("  ! {issue}");
+                }
+                if !result.issues.is_empty() {
+                    bail!(
+                        "plugin '{id}' failed verification ({} issue(s))",
+                        result.issues.len()
+                    );
+                }
+                println!("Plugin '{id}' passed verification.");
+                return Ok(());
+            }
             let p =
                 hotsheet_plugins::find(&id).with_context(|| format!("unknown plugin '{id}'"))?;
             let issues = hotsheet_cli::plugin::verify(&p);
@@ -1366,6 +1419,24 @@ pub(crate) fn cmd_plugin(cmd: PluginCmd) -> Result<()> {
             }
         }
         PluginCmd::Install { dir, yes } => {
+            if hotsheet_plugins::is_code_bearing_dir(&dir) {
+                // HS2-XY0VTN: consent to install is the approval of these exact files.
+                let m = code_plugin::read_source(&dir)?;
+                println!("About to install and trust this plugin:");
+                println!("{}", code_plugin::describe(&m, &dir, None));
+                if !yes && !confirm("Install and trust this plugin? [y/N] ")? {
+                    println!("Aborted.");
+                    return Ok(());
+                }
+                let store = TrustStore::new(&hotsheet_plugins::hotsheet_home());
+                let dest = machine_plugins_dir();
+                let id = code_plugin::install(&dir, &dest, &store)?;
+                println!(
+                    "Installed and trusted plugin '{id}' in {}",
+                    dest.join(&id).display()
+                );
+                return Ok(());
+            }
             // Trust gate: disclose what the plugin writes + launches before installing.
             let p = hotsheet_plugins::Plugin::from_fs_dir(&dir)
                 .with_context(|| format!("not a valid plugin directory: {}", dir.display()))?;
@@ -1385,9 +1456,6 @@ pub(crate) fn cmd_plugin(cmd: PluginCmd) -> Result<()> {
             let dest = machine_plugins_dir();
             let id = hotsheet_cli::plugin::install(&dir, &dest)?;
             println!("Installed plugin '{id}' into {}", dest.join(&id).display());
-            eprintln!(
-                "note: an installed plugin's code is not yet sandboxed (behavioral boundary: HS2-93)"
-            );
         }
         PluginCmd::Remove { id } => {
             if hotsheet_cli::plugin::remove(&id, &machine_plugins_dir())? {
@@ -1395,6 +1463,24 @@ pub(crate) fn cmd_plugin(cmd: PluginCmd) -> Result<()> {
             } else {
                 println!("No installed plugin '{id}'");
             }
+            // HS2-XY0VTN: a reinstall must be trusted afresh.
+            let store = TrustStore::new(&hotsheet_plugins::hotsheet_home());
+            store.revoke(&id).map_err(|e| anyhow::anyhow!("{e}"))?;
+        }
+        PluginCmd::Trust { id, yes } => {
+            let (dir, m) = code_plugin::find(&machine_plugins_dir(), &id)
+                .with_context(|| format!("no installed code-bearing plugin '{id}'"))?;
+            let store = TrustStore::new(&hotsheet_plugins::hotsheet_home());
+            let trust = code_plugin::trust_state(&store, &id, &dir);
+            println!("{}", code_plugin::describe(&m, &dir, Some(&trust)));
+            if !yes && !confirm("Trust this plugin as it is now? [y/N] ")? {
+                println!("Aborted.");
+                return Ok(());
+            }
+            let digest = store
+                .approve(&id, &dir)
+                .map_err(|e| anyhow::anyhow!("{e}"))?;
+            println!("Trusted plugin '{id}' at {digest}");
         }
     }
     Ok(())
@@ -1752,10 +1838,19 @@ pub(crate) enum PluginCmd {
         #[arg(long)]
         yes: bool,
     },
-    /// Verify a plugin structurally (loads, known MCP format, safe write targets).
+    /// Verify a plugin: AI-tool plugins structurally (loads, known MCP format, safe write
+    /// targets); code-bearing plugins also by starting them over each transport.
     Verify { id: String },
-    /// Remove an installed external plugin by id.
+    /// Remove an installed external plugin by id (and its trust approval).
     Remove { id: String },
+    /// Trust a code-bearing plugin as its files are now (docs/38 §38.7). Needed after
+    /// any change to an installed plugin's files.
+    Trust {
+        id: String,
+        /// Skip the confirmation prompt.
+        #[arg(long)]
+        yes: bool,
+    },
 }
 
 #[derive(Subcommand)]

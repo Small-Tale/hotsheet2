@@ -22,6 +22,9 @@ hotsheet-ticketing.workspace = true
 hotsheet-extsync.workspace = true
 hotsheet-index.workspace = true
 hotsheet-plugins.workspace = true
+# Code-bearing plugins: install, trust, verify (docs/38, HS2-XY0VTN).
+hotsheet-plugin-host.workspace = true
+hotsheet-plugin-protocol.workspace = true
 hotsheet-notify.workspace = true
 hotsheet-resource-claims.workspace = true
 hotsheet-aitools.workspace = true

@@ -1169,6 +1169,12 @@ pub fn load_dir_reporting(dir: &Path) -> PluginDiscovery {
     for entry in entries.flatten() {
         let path = entry.path();
         if path.join("manifest.toml").is_file() {
+            // HS2-XY0VTN: a code-bearing plugin (docs/38) shares this directory; the
+            // out-of-process plugin host loads it, so it is neither an AI-tool plugin nor
+            // a failed one.
+            if is_code_bearing_dir(&path) {
+                continue;
+            }
             match Plugin::from_fs_dir(&path) {
                 Ok(p) => out.plugins.push(p),
                 Err(error) => out.skipped.push(SkippedPlugin {
@@ -1185,6 +1191,16 @@ pub fn load_dir_reporting(dir: &Path) -> PluginDiscovery {
     });
     out.skipped.sort_by(|a, b| a.path.cmp(&b.path));
     out
+}
+
+/// Whether `dir/manifest.toml` declares an `[executable]` table, which makes it a
+/// code-bearing plugin for `hotsheet-plugin-host` (docs/38 §38.3, HS2-XY0VTN) rather than
+/// an AI-tool data plugin.
+pub fn is_code_bearing_dir(dir: &Path) -> bool {
+    fs::read_to_string(dir.join("manifest.toml"))
+        .ok()
+        .and_then(|text| text.parse::<toml::Table>().ok())
+        .is_some_and(|table| table.contains_key("executable"))
 }
 
 /// Every plugin directory under `search_dirs` that discovery skipped, in search-dir

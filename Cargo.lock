@@ -1125,6 +1125,8 @@ dependencies = [
  "hotsheet-jobs",
  "hotsheet-model",
  "hotsheet-notify",
+ "hotsheet-plugin-host",
+ "hotsheet-plugin-protocol",
  "hotsheet-plugins",
  "hotsheet-process-journal",
  "hotsheet-resource-claims",
