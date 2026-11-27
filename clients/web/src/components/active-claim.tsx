@@ -1,25 +1,46 @@
 import './active-claim.css';
 
+import { type CssForegroundColor, foregroundColorVar } from '@kerfjs/ui/css-values';
+import { LoadingSpinner } from '@kerfjs/ui/loading-spinner';
 import { ProgressRing } from '@kerfjs/ui/progress-ring';
 import { StateBanner } from '@kerfjs/ui/state-banner';
 import { Text } from '@kerfjs/ui/text';
 
 import type { ClaimEtaPresentation } from '../active-ticket-work';
 
+/** The live-claim spinner's pixel size, converted to rem by Kerf. */
+export const ACTIVE_CLAIM_SPINNER_SIZE = 16.8;
+
 /**
- * The live-work symbol the ticket row and the inspector/reader header share (HS2-XQMDQB, HS2-QKNQXC): one
- * small Kerf ProgressRing, determinate while an ETA is on track and indeterminate otherwise. A live claim
- * is long work of unknown length, which Kerf assigns to an indeterminate ProgressRing rather than to
- * LoadingSpinner's brief busy glyph. The ring also spins its whole SVG box, which WebKit composites;
- * LoadingSpinner spins a shape inside its SVG and repainted every frame for as long as a claim was live,
- * keeping an idle Safari web app at 20% CPU or more per spinner (HS2-GFZYCZ). Chromium still runs the ring's
- * `rotate` animation on the main thread until Kerf animates `transform` instead (KF-M4WWRW).
+ * The live-claim activity spinner shared by ticket rows and the inspector/reader header (HS2-XQMDQB,
+ * HS2-QKNQXC). Kerf owns its size and color through LoadingSpinner props. Since Kerf beta.139 the spinner
+ * rotates its whole svg box with `transform` (KF-M4WWRW), which WebKit and Chromium composite, so an idle
+ * app showing live claims does no per-frame repaint or style work (HS2-GFZYCZ, HS2-Y913AE).
  */
-export function ActiveClaimIndicator({ label, eta }: { label: string; eta?: ClaimEtaPresentation }) {
+export function ActiveClaimSpinner({
+  label,
+  color = foregroundColorVar('--hs-ticket-state-up-next'),
+}: {
+  label: string;
+  color?: CssForegroundColor;
+}) {
+  return <LoadingSpinner label={label} size={ACTIVE_CLAIM_SPINNER_SIZE} color={color} />;
+}
+
+/** The live-work symbol is determinate while an ETA is on track and indeterminate otherwise. */
+export function ActiveClaimIndicator({
+  label,
+  eta,
+  color,
+}: {
+  label: string;
+  eta?: ClaimEtaPresentation;
+  color?: CssForegroundColor;
+}) {
   return eta?.kind === 'estimate' ? (
     <ProgressRing value={eta.percent} max={100} size="small" label={`${label}; ${eta.label}`} />
   ) : (
-    <ProgressRing size="small" label={label} />
+    <ActiveClaimSpinner label={label} color={color} />
   );
 }
 
@@ -85,7 +106,13 @@ export function LiveClaimNotice({ agentName, eta, standing }: LiveClaimNoticePro
           detail="Not confirmed yet; another machine may hold it."
           tone="warning"
           urgency="status"
-          icon={<ActiveClaimIndicator label={label} eta={eta} />}
+          icon={
+            <ActiveClaimIndicator
+              label={label}
+              eta={eta}
+              color={foregroundColorVar('--kui-state-banner-warning-foreground')}
+            />
+          }
           action={eta ? <ClaimEta eta={eta} /> : undefined}
         />
       </div>
@@ -98,7 +125,13 @@ export function LiveClaimNotice({ agentName, eta, standing }: LiveClaimNoticePro
         title={`${visibleClaimHolder(agentName)} is working on this.`}
         tone="info"
         urgency="status"
-        icon={<ActiveClaimIndicator label={label} eta={eta} />}
+        icon={
+          <ActiveClaimIndicator
+            label={label}
+            eta={eta}
+            color={foregroundColorVar('--kui-state-banner-info-foreground')}
+          />
+        }
         action={eta ? <ClaimEta eta={eta} /> : undefined}
       />
     </div>

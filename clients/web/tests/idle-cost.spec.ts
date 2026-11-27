@@ -18,6 +18,10 @@ const idleObservationMs = 8_000;
  * live claims in two projects, lets it settle, and proves the idle window costs nothing per frame:
  * no running animation targets an SVG shape, no requestAnimationFrame callback runs, the DOM stays
  * still apart from the minute-granular ETA countdown, and no request reaches the servers.
+ *
+ * HS2-Y913AE: Kerf beta.139 turns LoadingSpinner's whole svg box with `transform` (KF-M4WWRW), so live
+ * claims show the yellow spinner again. In Chromium the idle window also bounds style recalculation:
+ * Kerf's old `rotate` animation ran on the main thread at about 60 recalcs a second.
  */
 async function seedClaimedTickets(fixture: { store: string; root: string; env: NodeJS.ProcessEnv; cli: string }) {
   const cli = (args: string[]) => execute(fixture.cli, args, { cwd: fixture.root, env: fixture.env });
@@ -132,7 +136,10 @@ function runningAnimations(page: Page) {
   });
 }
 
-test('keeps an idle app with live claims free of per-frame work and requests (HS2-GFZYCZ)', async ({ page }) => {
+test('keeps an idle app with live claims free of per-frame work and requests (HS2-GFZYCZ)', async ({
+  page,
+  browserName,
+}) => {
   test.setTimeout(120_000);
   const alpha = await realTicketServer({ seed: seedClaimedTickets });
   const bravo = await realTicketServer({ seed: seedClaimedTickets });
@@ -176,7 +183,17 @@ test('keeps an idle app with live claims free of per-frame work and requests (HS
       state.frames = 0;
       state.mutations = [];
     });
+    // Chromium reports style recalculations through CDP; WebKit's cost is bounded by the checks below.
+    const cdp = browserName === 'chromium' ? await page.context().newCDPSession(page) : undefined;
+    const recalcStyleCount = async () => {
+      if (!cdp) return 0;
+      const { metrics } = await cdp.send('Performance.getMetrics');
+      return metrics.find((metric) => metric.name === 'RecalcStyleCount')?.value ?? 0;
+    };
+    await cdp?.send('Performance.enable');
+    const recalcBefore = await recalcStyleCount();
     await page.waitForTimeout(idleObservationMs);
+    const recalcs = (await recalcStyleCount()) - recalcBefore;
     const idle = await page.evaluate(
       () => (window as unknown as { hs2IdleCost: { frames: number; mutations: string[] } }).hs2IdleCost,
     );
@@ -184,10 +201,16 @@ test('keeps an idle app with live claims free of per-frame work and requests (HS
 
     // WebKit composites a spinning <svg> box; it repaints a spinning SVG shape every frame.
     expect(animations.filter((animation) => animation.svgShape)).toEqual([]);
-    // The activity ring and the live-claim ring still spin, so the check above is not vacuous.
+    // The activity ring and the yellow live-claim spinner still turn, so the check above is not vacuous.
     expect(animations.map((animation) => animation.name)).toEqual(
-      expect.arrayContaining(['project-tab-activity-rotate', 'kui-progress-ring-spin']),
+      expect.arrayContaining(['project-tab-activity-rotate', 'kui-loading-spinner-rotate']),
     );
+    expect(
+      animations.filter((animation) => animation.name === 'kui-loading-spinner-rotate').map(({ target }) => target),
+    ).toEqual(['svg', 'svg']);
+    // Composited turns need no style work: Kerf's old main-thread `rotate` cost about 480 recalcs here
+    // (HS2-Y913AE, KF-M4WWRW). The countdown and caret leave a handful.
+    expect(recalcs).toBeLessThanOrEqual(idleObservationMs / 1_000);
     expect(idle.frames).toBe(0);
     // Only the minute-granular ETA countdown may touch the DOM, and at most once in the window.
     expect(idle.mutations.filter((mutation) => !/progress-ring|text>|data-date-prefix/.test(mutation))).toEqual([]);

@@ -285,10 +285,8 @@ describe('TicketRow', () => {
       TicketRow({ ...base, claimEta: { kind: 'overrun', label: 'Soon', title: 'Past its estimate' } }),
     );
     expect(overrun).toContain('data-claim-eta="overrun"');
-    // Overrun work of unknown length spins Kerf's indeterminate ring, not a LoadingSpinner (HS2-GFZYCZ).
-    expect(overrun).toMatch(/data-component="progress-ring"[^>]*data-indeterminate/);
-    expect(overrun).not.toContain('aria-valuenow');
-    expect(overrun).not.toContain('data-component="loading-spinner"');
+    expect(overrun).not.toContain('data-component="progress-ring"');
+    expect(overrun).toContain('data-component="loading-spinner"');
     expect(overrun).toContain('>Soon<');
     // No ETA without live work, even if a stale presentation is passed.
     expect(
@@ -569,7 +567,7 @@ describe('TicketRow', () => {
     expect(active.indexOf('data-component="status-badge"')).toBeLessThan(active.indexOf('ticket-list-row__claim'));
     expect(active.indexOf('ticket-list-row__claim')).toBeLessThan(active.indexOf('ticket-list-row__owner'));
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-row.css'), 'utf8');
-    expect(active).toMatch(/data-component="progress-ring"[^>]*data-indeterminate/);
+    expect(active).toContain('data-component="loading-spinner"');
     expect(active).not.toContain('data-lucide="lock-keyhole"');
     expect(css).toContain('color: var(--hs-ticket-state-up-next)');
     expect(css).toContain('.ticket-list-row__claim');

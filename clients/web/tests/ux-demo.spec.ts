@@ -90,6 +90,24 @@ const TOP_MENU_ITEMS =
   ':scope > .kui-popup-menu__menu > .kui-popup-menu__item, :scope > .kui-popup-menu__menu > .kui-popup-menu__submenu-host > .kui-popup-menu__item';
 
 /**
+ * A Kerf LoadingSpinner's laid-out [width, height], rounded to 0.1px. Since beta.139 the whole svg turns
+ * with `transform` (KF-M4WWRW), so a mid-turn bounding box is the rotated square's bounds: measure at the
+ * start of a turn, then let it spin on (HS2-Y913AE).
+ */
+async function spinnerLayoutSize(spinner: Locator): Promise<number[]> {
+  return spinner.evaluate((node) => {
+    const turns = node.getAnimations();
+    for (const turn of turns) {
+      turn.pause();
+      turn.currentTime = 0;
+    }
+    const box = node.getBoundingClientRect();
+    for (const turn of turns) turn.play();
+    return [box.width, box.height].map((n) => Math.round(n * 10) / 10);
+  });
+}
+
+/**
  * Open or close Kerf's Catalog settings pane (KF-0AY6AE). Below the narrow breakpoint the pane is a
  * transient overlay that collapses on resize, Escape, or an outside press, so steps that need the form
  * reopen it first and steps that press the stage close it first (HS2-HMVBZW).
@@ -2982,17 +3000,16 @@ test('switches the TicketInspector live-claim header through every claim state (
   await setLiveClaim('no-eta');
   await expect(notice).toContainText('Claude is working on this.');
   await expect(eta).toHaveCount(0);
-  // Without an ETA the live-work symbol is Kerf's indeterminate ProgressRing, whose whole svg box spins,
-  // never a LoadingSpinner (HS2-GFZYCZ).
-  await expect(notice.locator('[data-component="loading-spinner"]')).toHaveCount(0);
-  const spinningRing = notice.locator('[data-component="progress-ring"][data-indeterminate]');
-  await expect(spinningRing).toBeVisible();
-  await expect(spinningRing).toHaveAttribute('aria-label', 'Claude is actively working on this ticket');
-  await expect(spinningRing).not.toHaveAttribute('aria-valuenow', /.*/);
-  await expect(spinningRing.locator(':scope > svg')).toHaveCSS('animation-iteration-count', 'infinite');
-  const spinningBox = await spinningRing.boundingBox();
-  expect(spinningBox!.width).toBeCloseTo(16, 1);
-  expect(spinningBox!.height).toBeCloseTo(16, 1);
+  // Without an ETA the live-work symbol is Kerf's LoadingSpinner in the banner's foreground; its whole svg
+  // box turns, which browsers composite (KF-M4WWRW, HS2-Y913AE).
+  await expect(notice.locator('[data-component="progress-ring"]')).toHaveCount(0);
+  const spinner = notice.locator('[data-component="loading-spinner"]');
+  await expect(spinner).toBeVisible();
+  await expect(spinner).toHaveAttribute('aria-label', 'Claude is actively working on this ticket');
+  await expect(spinner).toHaveAttribute('style', /color:var\(--kui-state-banner-info-foreground\)/);
+  await expect(spinner).toHaveCSS('animation-name', 'kui-loading-spinner-rotate');
+  await expect(spinner.locator('path')).toHaveCSS('animation-name', 'none');
+  expect(await spinnerLayoutSize(spinner)).toEqual([16.8, 16.8]);
   await setLiveClaim('none');
   await expect(notice).toHaveCount(0);
   await setLiveClaim('estimate');
@@ -3076,17 +3093,15 @@ test('uses the row claim slot for one compact ring or spinner at wide and phone 
     expect(ringBox!.height).toBeCloseTo(16, 1);
     await expect(row.locator('[data-claim-eta]')).toHaveText('~45m left');
     await setClaimEta('none');
-    // Without an ETA the slot holds Kerf's indeterminate ProgressRing, whose whole svg box spins, never a
-    // LoadingSpinner (HS2-GFZYCZ).
-    const spinner = row.locator('.ticket-list-row__claim [data-component="progress-ring"][data-indeterminate]');
+    // Without an ETA the slot holds the yellow LoadingSpinner, whose whole svg box turns (KF-M4WWRW,
+    // HS2-Y913AE).
+    const spinner = row.locator('.ticket-list-row__claim [data-component="loading-spinner"]');
     await expect(spinner).toBeVisible();
-    await expect(row.locator('.ticket-list-row__claim [data-component="progress-ring"]')).toHaveCount(1);
-    await expect(row.locator('[data-component="loading-spinner"]')).toHaveCount(0);
-    await expect(spinner).not.toHaveAttribute('aria-valuenow', /.*/);
-    await expect(spinner.locator(':scope > svg')).toHaveCSS('animation-iteration-count', 'infinite');
-    const box = await spinner.boundingBox();
-    expect(box!.width).toBeCloseTo(16, 1);
-    expect(box!.height).toBeCloseTo(16, 1);
+    await expect(row.locator('.ticket-list-row__claim [data-component="progress-ring"]')).toHaveCount(0);
+    await expect(spinner).toHaveAttribute('style', /color:var\(--hs-ticket-state-up-next\)/);
+    await expect(spinner).toHaveCSS('animation-iteration-count', 'infinite');
+    await expect(spinner.locator('path')).toHaveCSS('animation-name', 'none');
+    expect(await spinnerLayoutSize(spinner)).toEqual([16.8, 16.8]);
     await setClaimEta('estimate');
     await setDemoSettingsOpen(page, false);
     await page.screenshot({ path: test.info().outputPath(`live-claim-row-${width}.png`) });
