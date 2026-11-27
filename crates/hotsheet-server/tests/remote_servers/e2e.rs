@@ -1171,3 +1171,33 @@ impl PlainListener {
             .unwrap();
     }
 }
+
+/// Rewrite a project's coordination pool as the role commands would leave it.
+///
+/// HS2-M2KQPA: this holds the pool's own mutation lock across the read and the write and
+/// replaces the file atomically, as `Coordinator` does. The loop writes the same pool
+/// concurrently (renewing a member, recording a site handoff), so an unlocked
+/// read-modify-write here could be overwritten by a loop write that read the pool before
+/// it, losing the edit, or let the loop read a half-written file.
+pub(super) fn edit_pool_state(
+    project: &Path,
+    change: impl FnOnce(&mut hotsheet_cli::coordination::State),
+) {
+    let directory = project.join(".git").join("hotsheet-coordination");
+    let lock = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .read(true)
+        .write(true)
+        .open(directory.join("state.lock"))
+        .unwrap();
+    let _lock = hotsheet_ticketing::FileLock::acquire(lock).unwrap();
+    let path = directory.join("state.json");
+    let mut state: hotsheet_cli::coordination::State =
+        serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    change(&mut state);
+    state.revision += 1;
+    let mut temporary = tempfile::NamedTempFile::new_in(&directory).unwrap();
+    std::io::Write::write_all(&mut temporary, &serde_json::to_vec(&state).unwrap()).unwrap();
+    hotsheet_sync::files::persist(temporary, &path).unwrap();
+}

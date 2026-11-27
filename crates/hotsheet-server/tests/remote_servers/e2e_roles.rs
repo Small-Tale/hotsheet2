@@ -4,7 +4,7 @@
 //! integrator once work is handed off there; and winds all of them down when nothing
 //! is left. Where the test plays an agent (joining the pool, claiming, handing off,
 //! integrating), it does what the role skills do, on the peer's own checkout.
-use super::e2e::{Fleet, Side, TARGET_A, TARGET_B, TOOL_A, TOOL_B};
+use super::e2e::{Fleet, Side, TARGET_A, TARGET_B, TOOL_A, TOOL_B, edit_pool_state};
 use super::e2e_loop::{placed, works};
 use super::session_work::{launch_report, now_ms};
 use super::*;
@@ -18,20 +18,9 @@ fn pool(fleet: &Fleet) -> Coordinator {
         .unwrap()
 }
 
-/// Rewrite B's pool as the integrator's own commands would leave it.
+/// Rewrite B's pool as the integrator's own commands would leave it (HS2-M2KQPA: locked).
 fn edit_pool(fleet: &Fleet, change: impl FnOnce(&mut State)) {
-    let mut state = pool(fleet).state().unwrap();
-    change(&mut state);
-    state.revision += 1;
-    std::fs::write(
-        fleet
-            .b_project
-            .join(".git")
-            .join("hotsheet-coordination")
-            .join("state.json"),
-        serde_json::to_vec(&state).unwrap(),
-    )
-    .unwrap();
+    edit_pool_state(&fleet.b_project, change);
 }
 
 fn now_s() -> i64 {

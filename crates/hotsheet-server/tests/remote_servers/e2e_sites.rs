@@ -13,7 +13,7 @@
 //! do, through the hosting server's own routes and the shared remotes. Each machine's
 //! sync loop is played by one `sync_pass` of its store clone. Nothing is waited for by
 //! time: every wait is woken by an event stream or a file change, with a deadline.
-use super::e2e::{ACTIONS, ACTOR, Fleet, Side, TARGET_A, TARGET_B, TOOL_A};
+use super::e2e::{ACTIONS, ACTOR, Fleet, Side, TARGET_A, TARGET_B, TOOL_A, edit_pool_state};
 use super::orchestration::api;
 use super::session_work::{launch_report, now_ms, received_prompt};
 use super::*;
@@ -1207,18 +1207,7 @@ async fn hs2_xa9dza_a_push_on_a_site_reaches_the_followed_feed() {
 
 /// HS2-SK9B3T: rewrite the home's pool as its people's own commands would leave it.
 fn edit_home_pool(fleet: &Fleet, change: impl FnOnce(&mut State)) {
-    let mut state = home_pool(fleet).state().unwrap();
-    change(&mut state);
-    state.revision += 1;
-    std::fs::write(
-        fleet
-            .a_project
-            .join(".git")
-            .join("hotsheet-coordination")
-            .join("state.json"),
-        serde_json::to_vec(&state).unwrap(),
-    )
-    .unwrap();
+    edit_pool_state(&fleet.a_project, change);
 }
 
 /// HS2-SK9B3T: the request the peer recorded on a hosted worker session: its kind and
