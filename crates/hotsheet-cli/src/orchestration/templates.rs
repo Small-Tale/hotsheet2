@@ -1,0 +1,1124 @@
+//! HS2-A4RVYA: reusable plan templates over the shared runtime.
+//!
+//! Templates are checked in beside the plan (`.hotsheet2/orchestration-templates.json`)
+//! and change only the orchestration project, so defining, editing, retiring and
+//! saving one never asks anybody. Applying one is the maintainer's decision "the
+//! planner AI adapts the template each run": it opens one new goal ticket whose
+//! details carry the rendered brief, then hands that goal to the existing planner
+//! flow (Propose Plan while the plan is empty, Update Plan once it has steps). What
+//! the planner proposes is the preview a person reviews, through the plan as it
+//! already is reviewed.
+//!
+//! [`OrchestrationRuntime::template_apply`] is the one way to apply a template, for a
+//! person, an AI session or a trigger (HS2-KXKA7X): "apply template T with inputs I as
+//! actor A under operation id O". It is idempotent by the operation id: the goal's id
+//! and the planner's proposal id are recorded before they are acted on, so a repeat,
+//! even after a crash, creates no second goal and starts no second planner.
+use std::collections::{BTreeMap, BTreeSet};
+
+use hotsheet_ticketing::actor::MutationActor;
+use hotsheet_ticketing::ops;
+use hotsheet_ticketing::orchestration::{
+    ApplyDecision, ApplyGoal, ApplyState, AuditOutcome, AuditRecord, DeclarationState,
+    DenialReason, GateRequirement, InputKind, MAX_APPLY_OPERATION_ID, PermissionAction,
+    PermissionKey, Prerequisite, ReadinessError, StepAfter, StepTicket, TEMPLATE_GOAL_TAG,
+    TargetAction, Template, TemplateApply, TemplateApplyStore, TemplateError, TemplateGoal,
+    TemplateInput, TemplateProblem, TemplateState, TemplateStep, TemplateStore, TemplatesFile,
+    TicketKey, decide_apply, render_brief, resolve_inputs, validate_template,
+};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+
+use super::access::{ActionRequest, Authorized, is_person};
+use super::plan_update::UpdatePlan;
+use super::planning::{ProposeOutcome, ProposePlan};
+use super::tickets::{OrchestrationTicket, identifier};
+use super::*;
+
+/// The newest applies the list answer carries.
+pub const MAX_LISTED_APPLIES: usize = 20;
+
+/// Names one template.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TemplateRef {
+    pub template_id: String,
+}
+
+/// Add or replace templates, merged by `template_id` into the checked-in file. A
+/// template without an id gets a fresh one. `expected_revision` refuses the write
+/// when the file changed since it was read (`template_conflict`).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SetTemplates {
+    pub templates: Vec<Template>,
+    #[serde(default)]
+    pub expected_revision: Option<String>,
+}
+
+/// Check one template without writing it.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ValidateTemplate {
+    pub template: Template,
+}
+
+/// Save a goal's current plan steps as a template (Save a Goal as Template…).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SaveGoalTemplate {
+    pub goal: OrchestrationTicket,
+    pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    /// Make each project the steps name an input (defaulting to that project), so the
+    /// template can be applied to other projects.
+    #[serde(default)]
+    pub targets_as_inputs: bool,
+}
+
+/// What applying would do, before anything is applied.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PreviewTemplate {
+    pub template_id: String,
+    #[serde(default)]
+    pub inputs: BTreeMap<String, Value>,
+    #[serde(default)]
+    pub choices: BTreeMap<String, StepTicket>,
+}
+
+/// Apply a template: the API a person, an AI session and a trigger share.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ApplyTemplate {
+    pub template_id: String,
+    #[serde(default)]
+    pub inputs: BTreeMap<String, Value>,
+    /// Steps the person switched from search-first to create (or back).
+    #[serde(default)]
+    pub choices: BTreeMap<String, StepTicket>,
+    /// The AI tool a new planner runs in; an open planner keeps its own.
+    pub tool: String,
+    #[serde(default)]
+    pub model: Option<String>,
+    #[serde(default)]
+    pub effort: Option<String>,
+    /// Retained by the caller: the same id is the same apply.
+    pub operation_id: String,
+}
+
+/// Names one apply.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ApplyRef {
+    pub operation_id: String,
+}
+
+/// A recent apply, as the list shows it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApplySummary {
+    pub operation_id: String,
+    pub template_id: String,
+    pub template_name: String,
+    pub template_version: u32,
+    pub state: ApplyState,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub goal: Option<ApplyGoal>,
+    pub created_at_ms: u64,
+}
+
+/// The checked-in templates and this machine's recent applies.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TemplateList {
+    /// The file's revision; absent while nothing is checked in.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revision: Option<String>,
+    pub templates: Vec<Template>,
+    /// Newest first, at most [`MAX_LISTED_APPLIES`].
+    pub applies: Vec<ApplySummary>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TemplateValidation {
+    pub valid: bool,
+    pub problems: Vec<TemplateProblem>,
+}
+
+/// Whether one kind of action will ask a person.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AccessNeed {
+    /// It is the applying person's own act.
+    Person,
+    /// A remembered rule allows it.
+    Remembered,
+    /// It asks through the permission card.
+    Asks,
+}
+
+/// One project the brief names, and what will ask there.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PreviewTarget {
+    pub target_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    /// The project is declared and active.
+    pub declared: bool,
+    /// The steps there.
+    pub steps: Vec<String>,
+    /// Applying: a person's own act, or a request an AI session waits on.
+    pub apply: AccessNeed,
+    /// The planner's ticket writes there (the planner is an AI session).
+    pub ticket_writes: AccessNeed,
+}
+
+/// The pre-run summary: the inputs as resolved, the problems that keep Apply
+/// disabled, the steps as the brief describes them, the projects and what asks.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TemplatePreview {
+    pub template: Template,
+    pub inputs: BTreeMap<String, Value>,
+    pub problems: Vec<TemplateProblem>,
+    pub goal_title: String,
+    pub steps: Vec<hotsheet_ticketing::orchestration::BriefStep>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub skipped: Vec<String>,
+    pub targets: Vec<PreviewTarget>,
+    /// `propose` while the live plan is empty, `update` once it has steps.
+    pub planning: String,
+    /// Whether placement starts planned work by itself; otherwise the proposed plan
+    /// waits for Start Orchestration.
+    pub placement_automatic: bool,
+}
+
+/// Where one apply stands.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TemplateApplyView {
+    #[serde(flatten)]
+    pub apply: TemplateApply,
+    /// `applied` when this call did something, `existing` when it answered with a
+    /// finished apply as recorded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub outcome: Option<String>,
+}
+
+fn template_error(error: TemplateError) -> OrchestrationError {
+    OrchestrationError::Template(error)
+}
+
+impl OrchestrationRuntime {
+    fn template_store(&self, owner: &Checkout) -> TemplateStore {
+        TemplateStore::new(std::path::Path::new(&owner.root))
+    }
+
+    fn template_applies(&self, owner_id: &str) -> Result<TemplateApplyStore, OrchestrationError> {
+        TemplateApplyStore::new(&self.home, owner_id)
+    }
+
+    fn template_audit(
+        &self,
+        owner_id: &str,
+        actor: Option<&MutationActor>,
+        action: &str,
+        operation_id: Option<&str>,
+        (outcome, reason): (AuditOutcome, Option<&str>),
+        tx: &Transaction<'_>,
+    ) -> Result<(), OrchestrationError> {
+        self.audit_record(
+            owner_id,
+            AuditRecord {
+                at_ms: tx.clock.now_ms(),
+                actor_role: access::role_code(actor),
+                actor_id: actor.and_then(|actor| actor.id.clone()),
+                target_id: None,
+                action: action.into(),
+                operation_id: operation_id.map(Into::into),
+                outcome,
+                reason: reason.map(Into::into),
+                permission_id: None,
+                requested_by: None,
+            },
+        )
+    }
+
+    /// The templates as checked in, and this machine's recent applies. Reads only.
+    pub fn template_list(&self, owner_id: &str) -> Result<TemplateList, OrchestrationError> {
+        let owner = self.owner(owner_id)?;
+        let document = self.template_store(&owner).read()?;
+        let mut applies = self.template_applies(owner_id)?.applies()?;
+        applies.sort_by(|a, b| {
+            b.created_at_ms
+                .cmp(&a.created_at_ms)
+                .then_with(|| b.operation_id.cmp(&a.operation_id))
+        });
+        applies.truncate(MAX_LISTED_APPLIES);
+        Ok(TemplateList {
+            revision: document.as_ref().map(|document| document.revision.clone()),
+            templates: document
+                .map(|document| document.templates)
+                .unwrap_or_default(),
+            applies: applies
+                .into_iter()
+                .map(|apply| ApplySummary {
+                    template_name: apply.snapshot.name.clone(),
+                    template_version: apply.snapshot.version,
+                    operation_id: apply.operation_id,
+                    template_id: apply.template_id,
+                    state: apply.state,
+                    goal: apply.goal,
+                    created_at_ms: apply.created_at_ms,
+                })
+                .collect(),
+        })
+    }
+
+    /// One template by id (`template_not_found`).
+    pub fn template_show(
+        &self,
+        owner_id: &str,
+        reference: &TemplateRef,
+    ) -> Result<Template, OrchestrationError> {
+        let owner = self.owner(owner_id)?;
+        self.template_store(&owner)
+            .templates()?
+            .into_iter()
+            .find(|template| template.template_id == reference.template_id)
+            .ok_or(template_error(TemplateError::NotFound))
+    }
+
+    /// Check a definition without writing it: the validator's problems, plus a
+    /// literal project id the orchestration project does not declare.
+    pub fn template_validate(
+        &self,
+        owner_id: &str,
+        request: &ValidateTemplate,
+    ) -> Result<TemplateValidation, OrchestrationError> {
+        let mut problems = validate_template(&request.template);
+        problems.extend(self.undeclared_literals(owner_id, &request.template)?);
+        problems.sort();
+        Ok(TemplateValidation {
+            valid: problems.is_empty(),
+            problems,
+        })
+    }
+
+    fn active_targets(
+        &self,
+        owner_id: &str,
+    ) -> Result<BTreeMap<String, String>, OrchestrationError> {
+        Ok(self
+            .declarations(owner_id)?
+            .targets
+            .into_iter()
+            .filter(|target| target.state == DeclarationState::Active)
+            .map(|target| (target.target_id, target.label))
+            .collect())
+    }
+
+    fn undeclared_literals(
+        &self,
+        owner_id: &str,
+        template: &Template,
+    ) -> Result<Vec<TemplateProblem>, OrchestrationError> {
+        let active = self.active_targets(owner_id)?;
+        Ok(template
+            .steps
+            .iter()
+            .enumerate()
+            .filter(|(_, step)| {
+                hotsheet_ticketing::orchestration::reference(&step.target).is_none()
+                    && !active.contains_key(&step.target)
+            })
+            .map(|(n, _)| TemplateProblem {
+                code: "target_unknown".into(),
+                at: format!("steps[{n}].target"),
+            })
+            .collect())
+    }
+
+    /// Add or replace templates, merged by template id. A changed definition gets the
+    /// next version; the same definition changes nothing. Only the orchestration
+    /// project changes, so this never asks. Refused as `template_invalid` (a problem
+    /// in a definition), `template_conflict` (one id twice with different
+    /// definitions, or a stale `expected_revision`) or `capacity_reached`. Audited
+    /// as `template_set`.
+    pub fn template_set(
+        &self,
+        owner_id: &str,
+        request: SetTemplates,
+        actor: Option<&MutationActor>,
+        tx: &mut Transaction<'_>,
+    ) -> Result<TemplatesFile, OrchestrationError> {
+        if actor.and_then(|actor| actor.id.as_ref()).is_none() {
+            return Err(OrchestrationError::Invalid(
+                "an identified actor is required to change templates",
+            ));
+        }
+        let owner = self.owner(owner_id)?;
+        let store = self.template_store(&owner);
+        let _lock = store.lock()?;
+        let previous = store.read()?;
+        if let Some(expected) = &request.expected_revision
+            && previous.as_ref().map(|document| &document.revision) != Some(expected)
+        {
+            return Err(template_error(TemplateError::Conflict));
+        }
+        let mut templates: BTreeMap<String, Template> = previous
+            .as_ref()
+            .map(|document| document.templates.clone())
+            .unwrap_or_default()
+            .into_iter()
+            .map(|template| (template.template_id.clone(), template))
+            .collect();
+        let mut seen: BTreeMap<String, Template> = BTreeMap::new();
+        let now = tx.clock.now_ms();
+        for mut template in request.templates {
+            if template.template_id.is_empty() {
+                template.template_id =
+                    hotsheet_ticketing::mint_ulid(tx.clock, &mut *tx.rng).to_string();
+            }
+            if template
+                .template_id
+                .parse::<ulid::Ulid>()
+                .map(|id| id.to_string())
+                != Ok(template.template_id.clone())
+            {
+                return Err(OrchestrationError::Invalid(
+                    "a template id is a canonical ULID",
+                ));
+            }
+            if !validate_template(&template).is_empty() {
+                return Err(template_error(TemplateError::Invalid));
+            }
+            if let Some(other) = seen.get(&template.template_id) {
+                if !other.same_definition(&template) {
+                    return Err(template_error(TemplateError::Conflict));
+                }
+                continue;
+            }
+            seen.insert(template.template_id.clone(), template.clone());
+            let next = match templates.get(&template.template_id) {
+                Some(known) if known.same_definition(&template) => known.clone(),
+                Some(known) => Template {
+                    version: known.version + 1,
+                    created_at_ms: known.created_at_ms,
+                    updated_at_ms: now,
+                    updated_by: actor.and_then(|actor| actor.id.clone()),
+                    ..template
+                },
+                None => Template {
+                    version: 1,
+                    created_at_ms: now,
+                    updated_at_ms: now,
+                    updated_by: actor.and_then(|actor| actor.id.clone()),
+                    ..template
+                },
+            };
+            templates.insert(next.template_id.clone(), next);
+        }
+        let document =
+            store.write_locked(previous.as_ref(), templates.into_values().collect(), tx)?;
+        let changed =
+            previous.as_ref().map(|previous| &previous.revision) != Some(&document.revision);
+        self.template_audit(
+            owner_id,
+            actor,
+            "template_set",
+            Some(&document.revision),
+            (
+                if changed {
+                    AuditOutcome::Changed
+                } else {
+                    AuditOutcome::Succeeded
+                },
+                None,
+            ),
+            tx,
+        )?;
+        Ok(document)
+    }
+
+    /// Retire a template: it can no longer be applied, its id is never reused, and
+    /// work applied from it is unchanged. Retiring again changes nothing.
+    pub fn template_retire(
+        &self,
+        owner_id: &str,
+        reference: &TemplateRef,
+        actor: Option<&MutationActor>,
+        tx: &mut Transaction<'_>,
+    ) -> Result<Template, OrchestrationError> {
+        let mut template = self.template_show(owner_id, reference)?;
+        template.state = TemplateState::Retired;
+        let document = self.template_set(
+            owner_id,
+            SetTemplates {
+                templates: vec![template],
+                expected_revision: None,
+            },
+            actor,
+            tx,
+        )?;
+        document
+            .templates
+            .into_iter()
+            .find(|template| template.template_id == reference.template_id)
+            .ok_or(OrchestrationError::Corrupt)
+    }
+
+    /// Save a Goal as Template…: the goal's title and details and its current plan
+    /// steps become a new template. Each step searches first; its prerequisites on
+    /// other steps of the goal become `after` with their gates. With
+    /// `targets_as_inputs`, each project becomes a `target` input defaulting to it.
+    pub fn template_save_goal(
+        &self,
+        owner_id: &str,
+        request: SaveGoalTemplate,
+        actor: Option<&MutationActor>,
+        tx: &mut Transaction<'_>,
+    ) -> Result<Template, OrchestrationError> {
+        let (store, id, connection_id) = self.orchestration_store(owner_id, &request.goal)?;
+        let goal = store
+            .read_ticket(&id)
+            .map_err(|_| template_error(TemplateError::GoalEmpty))?;
+        let native = id.to_string();
+        let mut steps: Vec<_> = self
+            .plan()
+            .records(owner_id)?
+            .into_iter()
+            .map(|record| record.step)
+            .filter(|step| {
+                step.ticket.connection_id == connection_id && step.ticket.native_id == native
+            })
+            .collect();
+        if steps.is_empty() {
+            return Err(template_error(TemplateError::GoalEmpty));
+        }
+        steps.sort_by(|a, b| {
+            a.created_at_ms
+                .cmp(&b.created_at_ms)
+                .then_with(|| a.step_id.cmp(&b.step_id))
+        });
+        let (_, targets) = self.timeline_targets(owner_id)?;
+        let keys: BTreeMap<TicketKey, String> = steps
+            .iter()
+            .enumerate()
+            .map(|(n, step)| {
+                (
+                    hotsheet_ticketing::orchestration::ticket_key(&step.target),
+                    format!("step-{}", n + 1),
+                )
+            })
+            .collect();
+        let mut target_inputs: BTreeMap<String, String> = BTreeMap::new();
+        let mut inputs: Vec<TemplateInput> = Vec::new();
+        if request.targets_as_inputs {
+            for step in &steps {
+                if target_inputs.contains_key(&step.target.target_id) {
+                    continue;
+                }
+                let key = format!("project-{}", target_inputs.len() + 1);
+                let label = targets
+                    .iter()
+                    .find(|target| target.target_id == step.target.target_id)
+                    .map_or_else(|| "Project".to_owned(), |target| target.label.clone());
+                inputs.push(TemplateInput {
+                    key: key.clone(),
+                    label: format!("{label} Project").chars().take(200).collect(),
+                    kind: InputKind::Target,
+                    required: true,
+                    default: Some(Value::String(step.target.target_id.clone())),
+                    choices: Vec::new(),
+                    max_len: None,
+                    hint: None,
+                });
+                target_inputs.insert(step.target.target_id.clone(), key);
+            }
+        }
+        let template_steps: Vec<TemplateStep> = steps
+            .iter()
+            .map(|step| {
+                let key = hotsheet_ticketing::orchestration::ticket_key(&step.target);
+                let title = targets
+                    .iter()
+                    .find(|target| target.target_id == step.target.target_id)
+                    .and_then(|target| self.local_ticket_label(target, &key))
+                    .and_then(|label| label.title.or(label.slug))
+                    .unwrap_or_else(|| format!("Work on {}", step.target.native_id));
+                TemplateStep {
+                    key: keys[&key].clone(),
+                    target: target_inputs.get(&step.target.target_id).map_or_else(
+                        || step.target.target_id.clone(),
+                        |input| format!("{{{{{input}}}}}"),
+                    ),
+                    title: sanitize_line(&title),
+                    details: None,
+                    category: None,
+                    priority: None,
+                    ticket: StepTicket::Search,
+                    after: step
+                        .prerequisites
+                        .iter()
+                        .filter_map(|prerequisite| match prerequisite {
+                            Prerequisite::Ticket { gates, .. } => prerequisite
+                                .ticket_key()
+                                .and_then(|other| keys.get(&other))
+                                .map(|other| StepAfter {
+                                    step: other.clone(),
+                                    gates: Some(
+                                        match gates {
+                                            GateRequirement::None => "none",
+                                            GateRequirement::Ci => "ci",
+                                            GateRequirement::Deployment => "deployment",
+                                            GateRequirement::Review => "review",
+                                        }
+                                        .into(),
+                                    ),
+                                }),
+                            Prerequisite::Validation { .. } => None,
+                        })
+                        .collect(),
+                    validation: Vec::new(),
+                    tool: step.tool.clone(),
+                    when: None,
+                }
+            })
+            .collect();
+        let template = Template {
+            template_id: String::new(),
+            name: request.name,
+            description: request.description.unwrap_or_default(),
+            state: TemplateState::Active,
+            version: 0,
+            inputs,
+            goal: TemplateGoal {
+                title: sanitize_line(&goal.title),
+                details: Some(goal.details.chars().take(4000).collect::<String>())
+                    .filter(|details| !details.trim().is_empty() && !details.contains("{{")),
+                tags: Vec::new(),
+            },
+            steps: template_steps,
+            instructions: None,
+            created_at_ms: 0,
+            updated_at_ms: 0,
+            updated_by: None,
+        };
+        let before: BTreeSet<String> = self
+            .template_list(owner_id)?
+            .templates
+            .into_iter()
+            .map(|template| template.template_id)
+            .collect();
+        let document = self.template_set(
+            owner_id,
+            SetTemplates {
+                templates: vec![template],
+                expected_revision: None,
+            },
+            actor,
+            tx,
+        )?;
+        document
+            .templates
+            .into_iter()
+            .find(|template| !before.contains(&template.template_id))
+            .ok_or(OrchestrationError::Corrupt)
+    }
+
+    fn active_template(
+        &self,
+        owner: &Checkout,
+        template_id: &str,
+    ) -> Result<Template, OrchestrationError> {
+        let template = self
+            .template_store(owner)
+            .templates()?
+            .into_iter()
+            .find(|template| template.template_id == template_id)
+            .ok_or(template_error(TemplateError::NotFound))?;
+        if template.state == TemplateState::Retired {
+            return Err(template_error(TemplateError::Retired));
+        }
+        Ok(template)
+    }
+
+    /// What the planner's ticket writes in a project will need.
+    fn ticket_writes_need(&self, owner_id: &str, target_id: &str) -> AccessNeed {
+        let key = PermissionKey {
+            target: TargetRef {
+                owner_checkout_id: owner_id.into(),
+                target_id: target_id.into(),
+            },
+            action: PermissionAction::TicketsWrite,
+            tool: None,
+        };
+        match self.remembered(&key) {
+            Ok(Some(_)) => AccessNeed::Remembered,
+            _ => AccessNeed::Asks,
+        }
+    }
+
+    /// The pre-run summary of an apply. Writes nothing and asks nobody.
+    pub fn template_preview(
+        &self,
+        owner_id: &str,
+        request: &PreviewTemplate,
+        actor: Option<&MutationActor>,
+    ) -> Result<TemplatePreview, OrchestrationError> {
+        let owner = self.owner(owner_id)?;
+        let template = self.active_template(&owner, &request.template_id)?;
+        let (inputs, mut problems) = resolve_inputs(&template, &request.inputs);
+        let active = self.active_targets(owner_id)?;
+        let brief = render_brief(&template, &inputs, &request.choices, "preview", &active);
+        for (n, step) in brief.steps.iter().enumerate() {
+            if !active.contains_key(&step.target_id) && !step.target_id.contains("{{") {
+                problems.push(TemplateProblem {
+                    code: "target_unknown".into(),
+                    at: format!("steps[{n}].target"),
+                });
+            }
+        }
+        for key in request.choices.keys() {
+            if template.step(key).is_none() {
+                problems.push(TemplateProblem {
+                    code: "choice_unknown".into(),
+                    at: format!("choices.{key}"),
+                });
+            }
+        }
+        problems.sort();
+        problems.dedup();
+        let person = is_person(actor);
+        let targets = brief
+            .targets()
+            .into_iter()
+            .map(|target_id| {
+                let need = self.ticket_writes_need(owner_id, &target_id);
+                PreviewTarget {
+                    label: active.get(&target_id).cloned(),
+                    declared: active.contains_key(&target_id),
+                    steps: brief
+                        .steps
+                        .iter()
+                        .filter(|step| step.target_id == target_id)
+                        .map(|step| step.key.clone())
+                        .collect(),
+                    apply: if person { AccessNeed::Person } else { need },
+                    ticket_writes: need,
+                    target_id,
+                }
+            })
+            .collect();
+        let placement_automatic = self
+            .policy(owner_id)?
+            .policy
+            .is_some_and(|policy| self.placement_on(owner_id, &policy.placement));
+        Ok(TemplatePreview {
+            planning: if self.plan().records(owner_id)?.is_empty() {
+                "propose".into()
+            } else {
+                "update".into()
+            },
+            goal_title: brief.goal_title,
+            steps: brief.steps,
+            skipped: brief.skipped,
+            template,
+            inputs,
+            problems,
+            targets,
+            placement_automatic,
+        })
+    }
+
+    /// One apply as recorded (`template_apply_not_found`).
+    pub fn template_apply_show(
+        &self,
+        owner_id: &str,
+        reference: &ApplyRef,
+    ) -> Result<TemplateApplyView, OrchestrationError> {
+        self.owner(owner_id)?;
+        let apply = self
+            .template_applies(owner_id)?
+            .find(&reference.operation_id)?
+            .ok_or(template_error(TemplateError::ApplyNotFound))?;
+        Ok(TemplateApplyView {
+            apply,
+            outcome: None,
+        })
+    }
+
+    /// Apply a template as `actor` under the caller's retained `operation_id`:
+    ///
+    /// 1. A person's apply is their own act. Any other actor asks through the
+    ///    permission card for ticket writes in each project the brief names (one
+    ///    request per project, under `<operation id>.t<n>`), and the call answers
+    ///    `permission_required` until a person answers; then the same call goes on.
+    /// 2. One new goal ticket opens in the orchestration project with the rendered
+    ///    brief. Its id is recorded first, so a repeat creates the same ticket.
+    /// 3. The planner takes the goal: Propose Plan while the live plan is empty,
+    ///    Update Plan once it has steps, under the proposal id `<operation id>` (a
+    ///    later attempt `<operation id>.p<n>`), recorded before asking.
+    ///
+    /// A repeat of a finished apply changes nothing (`outcome: existing`); a repeat
+    /// with another template, other inputs or other choices is `template_apply_conflict`.
+    /// The record keeps the template as applied, so a repeat after the template
+    /// changed still uses the snapshot. A planner at work on another proposal leaves
+    /// the apply `waiting_planner` with its goal open: a repeat asks again, and any
+    /// later Propose Plan or Update Plan plans that goal as well. Audited as
+    /// `template_apply`.
+    pub fn template_apply(
+        &self,
+        owner_id: &str,
+        request: ApplyTemplate,
+        actor: Option<&MutationActor>,
+        tx: &mut Transaction<'_>,
+    ) -> Result<TemplateApplyView, OrchestrationError> {
+        if actor.and_then(|actor| actor.id.as_ref()).is_none() {
+            return Err(OrchestrationError::Invalid(
+                "an identified actor is required to apply a template",
+            ));
+        }
+        identifier(&request.tool, "bounded tool id required")?;
+        identifier(&request.operation_id, "bounded operation id required")?;
+        if request.operation_id.len() > MAX_APPLY_OPERATION_ID {
+            return Err(OrchestrationError::Invalid(
+                "an apply's operation id is at most 140 characters",
+            ));
+        }
+        let owner = self.owner(owner_id)?;
+        let store = self.template_applies(owner_id)?;
+        let _lock = store.lock()?;
+        let existing = store.find(&request.operation_id)?;
+        let mut apply = match decide_apply(
+            existing.as_ref(),
+            &request.template_id,
+            &request.inputs,
+            &request.choices,
+        ) {
+            ApplyDecision::Conflict => {
+                self.template_audit(
+                    owner_id,
+                    actor,
+                    "template_apply",
+                    Some(&request.operation_id),
+                    (
+                        AuditOutcome::Failed,
+                        Some(TemplateError::ApplyConflict.code()),
+                    ),
+                    tx,
+                )?;
+                return Err(template_error(TemplateError::ApplyConflict));
+            }
+            ApplyDecision::Answer => {
+                let apply = existing.ok_or(OrchestrationError::Corrupt)?;
+                return Ok(TemplateApplyView {
+                    apply,
+                    outcome: Some("existing".into()),
+                });
+            }
+            ApplyDecision::Resume => existing.ok_or(OrchestrationError::Corrupt)?,
+            ApplyDecision::New => {
+                let template = self.active_template(&owner, &request.template_id)?;
+                let (inputs, problems) = resolve_inputs(&template, &request.inputs);
+                if !problems.is_empty()
+                    || request
+                        .choices
+                        .keys()
+                        .any(|key| template.step(key).is_none())
+                {
+                    return Err(template_error(TemplateError::InputsInvalid));
+                }
+                let now = tx.clock.now_ms();
+                TemplateApply {
+                    operation_id: request.operation_id.clone(),
+                    template_id: template.template_id.clone(),
+                    snapshot: template,
+                    inputs,
+                    choices: request.choices.clone(),
+                    tool: request.tool.clone(),
+                    model: request.model.clone(),
+                    effort: request.effort.clone(),
+                    actor_role: access::role_code(actor),
+                    actor_id: actor.and_then(|actor| actor.id.clone()),
+                    state: ApplyState::WaitingPermission,
+                    goal: None,
+                    proposal_id: None,
+                    planning: None,
+                    attempts: 0,
+                    permission_requests: Vec::new(),
+                    reason: None,
+                    created_at_ms: now,
+                    updated_at_ms: now,
+                }
+            }
+        };
+        let result = self.template_apply_steps(&owner, &store, &mut apply, actor, tx);
+        let reason = match &result {
+            Ok(()) => match apply.state {
+                ApplyState::Planning => "template_planning",
+                ApplyState::WaitingPlanner => "template_waiting_planner",
+                ApplyState::WaitingPermission => "permission_required",
+                ApplyState::Denied => "permission_denied",
+            },
+            Err(error) => error.code(),
+        };
+        self.template_audit(
+            owner_id,
+            actor,
+            "template_apply",
+            Some(&request.operation_id),
+            (
+                if result.is_ok() {
+                    AuditOutcome::Succeeded
+                } else {
+                    AuditOutcome::Failed
+                },
+                Some(reason),
+            ),
+            tx,
+        )?;
+        result?;
+        Ok(TemplateApplyView {
+            apply,
+            outcome: Some("applied".into()),
+        })
+    }
+
+    fn template_apply_steps(
+        &self,
+        owner: &Checkout,
+        store: &TemplateApplyStore,
+        apply: &mut TemplateApply,
+        actor: Option<&MutationActor>,
+        tx: &mut Transaction<'_>,
+    ) -> Result<(), OrchestrationError> {
+        let owner_id = owner.id.as_str();
+        let active = self.active_targets(owner_id)?;
+        let brief = render_brief(
+            &apply.snapshot,
+            &apply.inputs,
+            &apply.choices,
+            &apply.operation_id,
+            &active,
+        );
+        let targets = brief.targets();
+        if targets.iter().any(|target| !active.contains_key(target)) {
+            return Err(template_error(TemplateError::TargetUnknown));
+        }
+        let goal_created = apply.goal.as_ref().is_some_and(|goal| goal.created);
+        // 1. A non-person apply asks for ticket writes in each project, until the goal
+        // exists (after that the decision was taken and used).
+        let mut allowed: Vec<(TargetRef, Authorized)> = Vec::new();
+        if !goal_created && !is_person(actor) {
+            let mut waiting = Vec::new();
+            for (n, target_id) in targets.iter().enumerate() {
+                let target = TargetRef {
+                    owner_checkout_id: owner_id.into(),
+                    target_id: target_id.clone(),
+                };
+                match self.authorize(
+                    &target,
+                    actor,
+                    ActionRequest::new(TargetAction::TicketsWrite)
+                        .operation(format!("{}.t{n}", apply.operation_id)),
+                    tx,
+                ) {
+                    Ok(authorized) => allowed.push((target, authorized)),
+                    Err(OrchestrationError::PermissionRequired { request_id }) => {
+                        waiting.push(request_id);
+                    }
+                    Err(OrchestrationError::Denied(DenialReason::PermissionDenied)) => {
+                        apply.state = ApplyState::Denied;
+                        apply.reason = Some(DenialReason::PermissionDenied.code().into());
+                        apply.updated_at_ms = tx.clock.now_ms();
+                        store.write(apply)?;
+                        return Ok(());
+                    }
+                    Err(error) => return Err(error),
+                }
+            }
+            if let Some(first) = waiting.first().cloned() {
+                apply.state = ApplyState::WaitingPermission;
+                apply.permission_requests = waiting;
+                apply.reason = Some(DenialReason::PermissionRequired.code().into());
+                apply.updated_at_ms = tx.clock.now_ms();
+                store.write(apply)?;
+                return Err(OrchestrationError::PermissionRequired { request_id: first });
+            }
+            apply.permission_requests.clear();
+        }
+        // 2. The goal ticket, under an id recorded before it is created.
+        if !goal_created {
+            let source = owner
+                .sources
+                .iter()
+                .find(|source| source.provider == "git")
+                .ok_or(OrchestrationError::TargetOperation(
+                    hotsheet_ticketing::orchestration::TargetOpError::LinksUnsupported,
+                ))?;
+            if apply.goal.is_none() {
+                apply.goal = Some(ApplyGoal {
+                    connection_id: source.connection_id.clone(),
+                    native_id: hotsheet_ticketing::mint_ulid(tx.clock, &mut *tx.rng).to_string(),
+                    slug: None,
+                    created: false,
+                });
+                apply.state = ApplyState::WaitingPlanner;
+                apply.reason = None;
+                apply.updated_at_ms = tx.clock.now_ms();
+                store.write(apply)?;
+            }
+            let goal = apply.goal.clone().ok_or(OrchestrationError::Corrupt)?;
+            let ticket_store = owner
+                .verified_git_source(&goal.connection_id)
+                .map_err(checkout_error)?;
+            let id: ulid::Ulid = goal
+                .native_id
+                .parse()
+                .map_err(|_| OrchestrationError::Corrupt)?;
+            let failed = |_| {
+                OrchestrationError::TargetOperation(
+                    hotsheet_ticketing::orchestration::TargetOpError::Failed,
+                )
+            };
+            let slug = match ticket_store.read_ticket(&id) {
+                Ok(ticket) => ticket.slug,
+                Err(_) => {
+                    let prefix = ticket_store.metadata().map_err(failed)?.ticket_prefix;
+                    let mut tags = vec![TEMPLATE_GOAL_TAG.to_owned()];
+                    tags.extend(apply.snapshot.goal.tags.iter().cloned());
+                    ops::create_by(
+                        &ticket_store,
+                        id,
+                        &prefix,
+                        super::tickets::timestamp(tx),
+                        ops::NewTicket {
+                            title: brief.goal_title.chars().take(200).collect(),
+                            category: "task".into(),
+                            details: brief.goal_details.clone(),
+                            tags,
+                            ..ops::NewTicket::default()
+                        },
+                        hotsheet_ticketing::actor::note_actor(actor),
+                    )
+                    .map_err(failed)?
+                    .slug
+                }
+            };
+            for (target, authorized) in &allowed {
+                self.record_outcome(target, authorized, true, Some("template_goal_opened"), tx)?;
+            }
+            apply.goal = Some(ApplyGoal {
+                slug: Some(slug),
+                created: true,
+                ..goal
+            });
+            apply.state = ApplyState::WaitingPlanner;
+            apply.updated_at_ms = tx.clock.now_ms();
+            store.write(apply)?;
+        }
+        // 3. The planner takes the goal. A proposal asked for and not answered (a
+        // crash in between) is asked again under the same id.
+        let interrupted = apply.state == ApplyState::WaitingPlanner
+            && apply.reason.is_none()
+            && apply.proposal_id.is_some();
+        let proposal_id = if interrupted {
+            apply
+                .proposal_id
+                .clone()
+                .ok_or(OrchestrationError::Corrupt)?
+        } else {
+            let next = if apply.attempts == 0 {
+                apply.operation_id.clone()
+            } else {
+                format!("{}.p{}", apply.operation_id, apply.attempts)
+            };
+            apply.attempts += 1;
+            apply.proposal_id = Some(next.clone());
+            apply.reason = None;
+            apply.updated_at_ms = tx.clock.now_ms();
+            store.write(apply)?;
+            next
+        };
+        let goal = apply.goal.clone().ok_or(OrchestrationError::Corrupt)?;
+        let goal_ref = OrchestrationTicket {
+            connection_id: goal.connection_id.clone(),
+            native_id: goal.native_id.clone(),
+        };
+        let update = apply.planning.as_deref() == Some("update")
+            || (apply.planning.is_none() && !self.plan().records(owner_id)?.is_empty());
+        apply.planning = Some(if update { "update" } else { "propose" }.into());
+        let taken: Result<bool, OrchestrationError> = if update {
+            let mut request = UpdatePlan {
+                tool: apply.tool.clone(),
+                model: apply.model.clone(),
+                effort: apply.effort.clone(),
+                operation_id: Some(proposal_id.clone()),
+                automatic: false,
+                goal: None,
+            };
+            request.goal = Some(goal_ref);
+            match self.plan_update(owner_id, request, actor, tx) {
+                Ok(view) => Ok(view.update_id == proposal_id
+                    && view.state == hotsheet_ticketing::orchestration::PlanUpdateState::Drafting),
+                Err(OrchestrationError::Readiness(ReadinessError::PlannerBusy)) => Ok(false),
+                Err(error) => Err(error),
+            }
+        } else {
+            self.plan_propose(
+                owner_id,
+                ProposePlan {
+                    tool: apply.tool.clone(),
+                    model: apply.model.clone(),
+                    effort: apply.effort.clone(),
+                    goal: Some(goal_ref),
+                    operation_id: Some(proposal_id.clone()),
+                    plan_update: false,
+                },
+                actor,
+                tx,
+            )
+            .map(|proposal| {
+                matches!(
+                    proposal.outcome,
+                    ProposeOutcome::Started | ProposeOutcome::Replanned
+                ) || proposal.proposal_id == proposal_id
+            })
+        };
+        apply.updated_at_ms = tx.clock.now_ms();
+        match taken {
+            Ok(true) => {
+                apply.state = ApplyState::Planning;
+                apply.reason = None;
+            }
+            Ok(false) => {
+                apply.state = ApplyState::WaitingPlanner;
+                apply.reason = Some(ReadinessError::PlannerBusy.code().into());
+                // The next attempt chooses again between Propose and Update.
+                apply.planning = None;
+            }
+            Err(error) => {
+                apply.state = ApplyState::WaitingPlanner;
+                apply.reason = Some(error.code().into());
+                apply.planning = None;
+            }
+        }
+        store.write(apply)
+    }
+}
+
+/// One line of at most 200 characters, for a title taken from a ticket.
+fn sanitize_line(text: &str) -> String {
+    let line: String = text
+        .chars()
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .take(200)
+        .collect::<String>()
+        .replace("{{", "{ {");
+    let line = line.trim().to_owned();
+    if line.is_empty() {
+        "Untitled".into()
+    } else {
+        line
+    }
+}

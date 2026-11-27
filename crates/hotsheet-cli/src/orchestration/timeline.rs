@@ -181,7 +181,7 @@ impl OrchestrationRuntime {
     }
 
     /// Declared targets with where this machine's binding puts them.
-    fn timeline_targets(
+    pub(super) fn timeline_targets(
         &self,
         owner_id: &str,
     ) -> Result<(bool, Vec<TimelineTarget>), OrchestrationError> {
@@ -226,7 +226,11 @@ impl OrchestrationRuntime {
 
     /// A target ticket's label from its store when the target is a checkout on this
     /// machine; `None` otherwise.
-    fn local_ticket_label(&self, target: &TimelineTarget, key: &TicketKey) -> Option<TicketLabel> {
+    pub(super) fn local_ticket_label(
+        &self,
+        target: &TimelineTarget,
+        key: &TicketKey,
+    ) -> Option<TicketLabel> {
         if target.location != TargetLocation::Local {
             return None;
         }

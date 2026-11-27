@@ -448,6 +448,7 @@ impl OrchestrationRuntime {
             effort: newest.session.effort.clone(),
             operation_id: None,
             automatic: true,
+            goal: None,
         };
         memory.asked();
         match self.plan_update(owner_id, request, Some(actor), tx) {
