@@ -2204,6 +2204,9 @@ open streams included, persist at most once per minute. `remote sessions renew
 <device-id>` renews one device in place, before or after it expired, keeping its
 credential, role and grants. A desktop asks a remote host to renew its own binding with
 `remote renew <binding-id>` and reads its lifetime with `remote session <binding-id>`.
+`remote machine <binding-id>` reads a paired remote's host health, live CPU and
+capacity with no open project, over the same binding connection (HS2-VQ92XZ,
+[08](08-distributed-and-remote.md) §8.2.1).
 A refused session answers 401 with `code` `session_expired`, `session_revoked` or
 `session_invalid`. The browser host checks same-origin writes,
 and for the session cookie the server requires the matching Origin and CSRF token

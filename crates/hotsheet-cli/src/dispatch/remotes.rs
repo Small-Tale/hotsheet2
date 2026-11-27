@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use clap::{Args, Subcommand};
+use hotsheet_cli::remote_servers::machine::MachineRead;
 use hotsheet_cli::remote_servers::{
     RemoteCredentialInput, RemoteRuntime, read_remote_credential_input,
 };
@@ -89,6 +90,80 @@ enum RemoteCmd {
     /// credential and selected projects stay; the host approves with `remote sessions renew`
     /// or Settings → Devices (HS2-4B0KSD).
     Renew { id: String },
+    /// Read a paired remote server's machine with no open project: its host health, live
+    /// CPU and capacity, through the binding's own connection after fresh discovery
+    /// re-checks it (HS2-VQ92XZ). With no reading named, prints health, CPU and capacity
+    /// (capacity is left out, with why, when the remote has no available project). Prints
+    /// only the readings, never a session or credential; repeating it changes nothing.
+    Machine(MachineArgs),
+}
+
+#[derive(Args)]
+struct MachineArgs {
+    /// The binding id from `remote list`.
+    id: String,
+    /// The latest evaluated host sample (`GET /host-health`).
+    #[arg(long)]
+    health: bool,
+    /// The live CPU frame (`GET /host-health/cpu`).
+    #[arg(long)]
+    cpu: bool,
+    /// The machine's capacity, read through the first available project
+    /// (`GET /checkouts/{checkout}/target-capacity`).
+    #[arg(long)]
+    capacity: bool,
+    /// Also list live claims of this resource-claim namespace (with --capacity). Repeatable.
+    #[arg(long = "claims", requires = "capacity")]
+    claims: Vec<String>,
+    /// The CPU frame `seq` or capacity `version` you have; with --wait-seconds, answer
+    /// when a newer one arrives instead of at once. Needs exactly one of --cpu or
+    /// --capacity.
+    #[arg(long, requires = "wait_seconds")]
+    after: Option<String>,
+    /// How long to wait for a newer reading, at most 8 seconds.
+    #[arg(long, requires = "after")]
+    wait_seconds: Option<u64>,
+}
+
+impl MachineArgs {
+    /// The reads to make, in order, and whether capacity may be skipped for want of a
+    /// project (only when no reading was named).
+    fn reads(&self) -> Result<(Vec<MachineRead>, bool)> {
+        let wait_ms = self
+            .wait_seconds
+            .map(|seconds| seconds.saturating_mul(1000));
+        if self.after.is_some() && usize::from(self.cpu) + usize::from(self.capacity) != 1 {
+            anyhow::bail!("--after needs exactly one of --cpu or --capacity");
+        }
+        let cpu_after = match (&self.after, self.cpu) {
+            (Some(after), true) => Some(
+                after
+                    .parse::<u64>()
+                    .map_err(|_| anyhow::anyhow!("--after with --cpu takes a frame seq number"))?,
+            ),
+            _ => None,
+        };
+        let all = !(self.health || self.cpu || self.capacity);
+        let mut reads = Vec::new();
+        if all || self.health {
+            reads.push(MachineRead::Health);
+        }
+        if all || self.cpu {
+            reads.push(MachineRead::Cpu {
+                after: cpu_after,
+                wait_ms: cpu_after.and(wait_ms),
+            });
+        }
+        if all || self.capacity {
+            let after = self.after.clone().filter(|_| self.capacity);
+            reads.push(MachineRead::Capacity {
+                wait_ms: after.as_ref().and(wait_ms),
+                after,
+                claim_namespaces: self.claims.clone(),
+            });
+        }
+        Ok((reads, all))
+    }
 }
 
 #[derive(Subcommand)]
@@ -267,6 +342,10 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
         RemoteCmd::Checkouts { id } => serde_json::to_value(runtime.discover(&id)?)?,
         RemoteCmd::Session { id } => serde_json::to_value(runtime.peer_session(&id, false)?)?,
         RemoteCmd::Renew { id } => serde_json::to_value(runtime.peer_session(&id, true)?)?,
+        RemoteCmd::Machine(arguments) => {
+            let (reads, capacity_optional) = arguments.reads()?;
+            runtime.machine(&arguments.id, &reads, capacity_optional)?
+        }
     };
     println!("{}", serde_json::to_string_pretty(&output)?);
     Ok(())
@@ -305,7 +384,57 @@ fn credential_input(path: &std::path::Path) -> Result<RemoteCredentialInput> {
 
 #[cfg(test)]
 mod tests {
-    use super::device_change;
+    use super::{MachineArgs, MachineRead, device_change};
+
+    fn machine(flags: (bool, bool, bool), after: Option<&str>) -> MachineArgs {
+        MachineArgs {
+            id: "01ARZ3NDEKTSV4RRFFQ69G5FAV".into(),
+            health: flags.0,
+            cpu: flags.1,
+            capacity: flags.2,
+            claims: Vec::new(),
+            after: after.map(str::to_owned),
+            wait_seconds: after.map(|_| 5),
+        }
+    }
+
+    #[test]
+    fn hs2_vq92xz_machine_reads_what_is_named_or_all_three() {
+        let (reads, optional) = machine((false, false, false), None).reads().unwrap();
+        assert!(optional);
+        assert_eq!(
+            reads.iter().map(MachineRead::key).collect::<Vec<_>>(),
+            ["health", "cpu", "capacity"]
+        );
+        let (reads, optional) = machine((true, false, true), None).reads().unwrap();
+        assert!(!optional);
+        assert_eq!(
+            reads.iter().map(MachineRead::key).collect::<Vec<_>>(),
+            ["health", "capacity"]
+        );
+        // A long poll applies to the one reading named.
+        let (reads, _) = machine((false, true, false), Some("7")).reads().unwrap();
+        assert_eq!(
+            reads,
+            [MachineRead::Cpu {
+                after: Some(7),
+                wait_ms: Some(5_000)
+            }]
+        );
+        let (reads, _) = machine((true, false, true), Some("ab12")).reads().unwrap();
+        assert_eq!(
+            reads[1],
+            MachineRead::Capacity {
+                after: Some("ab12".into()),
+                wait_ms: Some(5_000),
+                claim_namespaces: Vec::new()
+            }
+        );
+        // Ambiguous or malformed cursors are refused before any request.
+        assert!(machine((false, false, false), Some("7")).reads().is_err());
+        assert!(machine((false, true, true), Some("7")).reads().is_err());
+        assert!(machine((false, true, false), Some("v1")).reads().is_err());
+    }
 
     #[test]
     fn hs2_dxm0yn_update_sends_only_the_values_given() {

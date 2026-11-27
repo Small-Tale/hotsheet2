@@ -216,9 +216,21 @@ It is no new auth path:
   refused session, a failure, a re-review or a removal.
 - Only the content type of the answer comes back.
 
-The headless equivalents are `hotsheet-cli orchestration capacity show --project
-<owner> --target <target>` (a bound target's machine through the orchestration gate)
-and the remote host's own `host-health` routes.
+The headless equivalent is `hotsheet-cli remote machine <binding> [--health]
+[--cpu] [--capacity [--claims <namespace>]] [--after <seq|version> --wait-seconds <n>]`
+(HS2-VQ92XZ). It rides the CLI's own private connection for the binding (the one
+`remote checkouts` and orchestration targets use, a paired session or a device
+certificate), re-checks the binding with fresh authenticated discovery on every run
+and refuses one whose revision or server id changed, and reads only the same three
+routes with only their own query parameters. Waits are capped at 8 seconds.
+Capacity goes through the first checkout discovery reports available. With no
+reading named it prints health, CPU and capacity; capacity is then left out with
+`capacity_unavailable: no_available_checkout` when the remote has no available
+project, while a named `--capacity` fails with that code. It prints the binding id,
+label, server id, host name and the readings only, never a session or credential,
+and a refusal keeps only the status and the peer's stable code. `hotsheet-cli
+orchestration capacity show --project <owner> --target <target>` still reads a
+bound target's machine through the orchestration gate.
 
 Listing performs no network requests and marks cached checkout observations stale.
 Explicit discovery returns live checkouts only on successful authenticated identity

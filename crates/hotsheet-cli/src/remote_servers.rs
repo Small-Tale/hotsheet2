@@ -76,6 +76,41 @@ impl RemoteRuntime {
         )
     }
 
+    /// HS2-VQ92XZ: the machine readings of paired remote `id` with no open project, each
+    /// read once, in order. Fresh discovery re-checks the binding first; the reads ride the
+    /// binding's own private connection. A capacity read not asked for by name
+    /// (`capacity_optional`) is skipped, not failed, when the remote has no available project.
+    pub fn machine(
+        &self,
+        id: &str,
+        reads: &[machine::MachineRead],
+        capacity_optional: bool,
+    ) -> Result<serde_json::Value, machine::MachineError> {
+        use hotsheet_ticketing::remote_servers::RemoteCheckoutTransport;
+        let discovery = self.discover(id)?;
+        let (binding, credentials) = self.bridge_connection(id)?;
+        let checkout = machine::checked_binding(&discovery, &binding)?;
+        let mut readings = Vec::new();
+        let mut capacity_unavailable = false;
+        for read in reads {
+            let Some(path) = read.server_path(checkout.as_deref()) else {
+                if capacity_optional {
+                    capacity_unavailable = true;
+                    continue;
+                }
+                return Err(machine::MachineError::NoCheckout);
+            };
+            let reply = MtlsRemoteTransport
+                .target_call(&binding.origin, &credentials, "GET", &path, None)
+                .map_err(machine::MachineError::Transport)?;
+            readings.push((
+                read.key(),
+                machine::reading(read, reply.status, &reply.body)?,
+            ));
+        }
+        Ok(machine::report(&discovery, readings, capacity_unavailable))
+    }
+
     pub fn selected_projects(
         &self,
     ) -> Result<Vec<hotsheet_ticketing::remote_servers::RemoteSelectedProject>, RemoteError> {
@@ -708,6 +743,9 @@ fn remote_auth_headers(
     }
     headers
 }
+
+#[path = "remote_servers/machine.rs"]
+pub mod machine;
 
 #[cfg(test)]
 #[path = "remote_servers/tests.rs"]
