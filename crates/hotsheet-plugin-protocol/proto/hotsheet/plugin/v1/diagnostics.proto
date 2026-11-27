@@ -1,0 +1,52 @@
+// The `diagnostics` capability (docs/38 §38.11, HS2-XY0VTN): transport checks every
+// plugin may implement and `hotsheet-cli plugin verify` exercises over both transports.
+// The test plugin implements all of it, including the fault-injection methods.
+syntax = "proto3";
+
+package hotsheet.plugin.v1;
+
+import "hotsheet/plugin/v1/envelope.proto";
+
+// diagnostics.Echo: returns the request unchanged.
+message EchoRequest {
+  string text = 1;
+  bytes data = 2;
+}
+
+message EchoResponse {
+  string text = 1;
+  bytes data = 2;
+}
+
+// diagnostics.Count: streams `count` items, then ends.
+message CountRequest {
+  uint64 count = 1;
+}
+
+message CountItem {
+  uint64 seq = 1;
+}
+
+message CountResponse {
+  uint64 sent = 1;
+}
+
+// diagnostics.Sleep: answers after `millis`, or with `cancelled` when cancelled first.
+message SleepRequest {
+  uint64 millis = 1;
+}
+
+// diagnostics.Fail: answers with the given error.
+message FailRequest {
+  PluginError error = 1;
+}
+
+// diagnostics.Exit: the plugin exits immediately with `status` without answering.
+message ExitRequest {
+  int32 status = 1;
+}
+
+// diagnostics.Environment: the environment variables the plugin can see, by name only.
+message EnvironmentResponse {
+  repeated string names = 1;
+}

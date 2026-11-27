@@ -1,0 +1,110 @@
+// Hot Sheet out-of-process plugin protocol, version 1 (docs/38-plugin-protocol.md, HS2-XY0VTN).
+//
+// These messages are the protocol's own envelope: the handshake, the protobuf-transport
+// frame, structured errors and logs. Capability services (ticket_source, ai_drive,
+// notifier, diagnostics) live in their own files and travel as `payload` bytes (protobuf
+// transport) or as canonical proto3 JSON (JSON-RPC transport).
+syntax = "proto3";
+
+package hotsheet.plugin.v1;
+
+// `$/hello`, always sent by the host as the first JSON-RPC line on stdin.
+message Hello {
+  // Protocol major versions the host speaks, newest first.
+  repeated uint32 protocol_versions = 1;
+  // Transports the host accepts, in preference order: "protobuf", "json".
+  repeated string transports = 2;
+  HostInfo host = 3;
+  // The plugin id from its manifest.
+  string plugin_id = 4;
+  // The plugin's private data directory (also in HOTSHEET_PLUGIN_DATA_DIR).
+  string data_dir = 5;
+}
+
+message HostInfo {
+  string name = 1;
+  string version = 2;
+}
+
+// The plugin's answer to `$/hello`, always one JSON-RPC response line on stdout.
+message HelloAck {
+  uint32 protocol_version = 1;
+  // "protobuf" or "json". After this line both sides speak the chosen transport.
+  string transport = 2;
+  PluginInfo plugin = 3;
+  repeated Capability capabilities = 4;
+}
+
+message PluginInfo {
+  string version = 1;
+}
+
+message Capability {
+  // "ticket_source", "ai_drive", "notifier", "diagnostics".
+  string name = 1;
+  // Optional methods the plugin implements for this capability.
+  repeated string features = 2;
+}
+
+// One frame of the protobuf transport: a 4-byte little-endian length, then this message.
+message Frame {
+  oneof kind {
+    Request request = 1;
+    Response response = 2;
+    StreamItem stream_item = 3;
+    Cancel cancel = 4;
+    Log log = 5;
+  }
+}
+
+message Request {
+  // Per-direction request id, never reused within a process.
+  uint64 id = 1;
+  // "<capability>.<Method>", or "$/shutdown".
+  string method = 2;
+  // The encoded request message.
+  bytes payload = 3;
+  // Milliseconds the caller will wait; 0 means no deadline.
+  uint64 deadline_ms = 4;
+}
+
+// Ends a call. For a streaming call it follows the last StreamItem.
+message Response {
+  uint64 id = 1;
+  oneof outcome {
+    bytes payload = 2;
+    PluginError error = 3;
+  }
+}
+
+message StreamItem {
+  uint64 id = 1;
+  bytes payload = 2;
+}
+
+// Asks the other side to stop work on request `id`. It still answers, usually with
+// a `cancelled` error.
+message Cancel {
+  uint64 id = 1;
+}
+
+message Log {
+  // "error", "warn", "info", "debug".
+  string level = 1;
+  string message = 2;
+}
+
+message PluginError {
+  // One of: not_found, unsupported, authentication, conflict, rate_limited,
+  // invalid_argument, unavailable, internal, deadline_exceeded, cancelled.
+  string code = 1;
+  string message = 2;
+  // Set with rate_limited.
+  optional uint64 retry_after_seconds = 3;
+  // With conflict: the caller's concurrency token is stale.
+  bool stale = 4;
+  // With unsupported: the capability or feature that is missing.
+  string capability = 5;
+}
+
+message Empty {}

@@ -17,6 +17,7 @@ members = [
     "crates/hotsheet-notify",
     "crates/hotsheet-resource-claims",
     "crates/hotsheet-jobs",
+    "crates/hotsheet-plugin-protocol",
 ]
 
 [workspace.package]
@@ -58,6 +59,13 @@ security-framework = "3.7"
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_NetworkManagement_IpHelper", "Win32_NetworkManagement_Ndis", "Win32_Networking_WinSock", "Win32_Security", "Win32_Security_Authorization", "Win32_Security_Credentials", "Win32_Storage_FileSystem", "Win32_System_Console", "Win32_System_Diagnostics_ToolHelp", "Win32_System_IO", "Win32_System_JobObjects", "Win32_System_Power", "Win32_System_ProcessStatus", "Win32_System_Registry", "Win32_System_SystemInformation", "Win32_System_SystemServices", "Win32_System_Threading"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
 sha2 = "0.10"
+# HS2-XY0VTN: the out-of-process plugin protocol (docs/38). Its generated code is checked in;
+# prost-build, pbjson-build and the vendored protoc are used only by its `regen` feature.
+prost = "0.13"
+pbjson = "0.7"
+prost-build = "0.13"
+pbjson-build = "0.7"
+protoc-bin-vendored = "3"
 getrandom = "0.3"
 ring = "0.17"
 image = { version = "=0.25.9", default-features = false, features = ["png", "jpeg", "webp", "gif", "avif", "avif-native", "bmp", "ico"] }
@@ -102,3 +110,4 @@ hotsheet-process-journal = { path = "crates/hotsheet-process-journal" }
 hotsheet-notify = { path = "crates/hotsheet-notify" }
 hotsheet-resource-claims = { path = "crates/hotsheet-resource-claims" }
 hotsheet-jobs = { path = "crates/hotsheet-jobs" }
+hotsheet-plugin-protocol = { path = "crates/hotsheet-plugin-protocol" }

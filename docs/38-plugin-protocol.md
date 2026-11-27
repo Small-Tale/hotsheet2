@@ -27,7 +27,7 @@ speaks to over this protocol, never a `.dylib`.
 
 | Topic              | Decision                                                                                                                                                                                                                                          |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Contract language  | Protobuf (`proto/hotsheet/plugin/v1/`) is the single source of truth. Generated Rust is checked in and byte-checked; `protoc` is vendored, never assumed.                                                                                         |
+| Contract language  | Protobuf (`crates/hotsheet-plugin-protocol/proto/hotsheet/plugin/v1/`) is the single source of truth. Generated Rust is checked in and byte-checked; `protoc` is vendored, never assumed.                                                         |
 | Transports         | JSON-RPC 2.0 as newline-delimited JSON over stdio (always supported) and length-prefixed protobuf frames over stdio (negotiated, high-performance). Benchmark: [plugin-transport-benchmark-2026-11-27](plugin-transport-benchmark-2026-11-27.md). |
 | gRPC               | Not a host transport. Revisit only for networked or remote plugins.                                                                                                                                                                               |
 | Process model      | One long-lived process per plugin per host process, multiplexing connections. Requests may be in flight concurrently.                                                                                                                             |
@@ -84,8 +84,13 @@ required = true
 
 ## 38.4 Contract
 
-- **Location.** The protobuf files live in `proto/hotsheet/plugin/v1/`:
+- **Location.** The protobuf files live in
+  `crates/hotsheet-plugin-protocol/proto/hotsheet/plugin/v1/`. Generated Rust (prost types
+  plus pbjson canonical-JSON impls) is checked in under `src/gen/`; regenerate with
+  `cargo run -p hotsheet-plugin-protocol --features regen --bin hotsheet-plugin-protocol-regen`,
+  and `tests/regen.rs` fails when it is stale (HS2-XY0VTN). The files are:
   - `envelope.proto`: frames, handshake, errors, cancellation, logs;
+  - `diagnostics.proto`: the `diagnostics` transport-check capability (§38.11);
   - `ticket_source.proto`;
   - `ai_drive.proto`;
   - `notifier.proto`;
@@ -214,7 +219,7 @@ On the JSON transport the error is the JSON-RPC `error` object. Its `code` is
   - Five crashes within 10 minutes open a circuit: affected connections report
     `disabled` with the plugin's last stderr lines, until the user re-enables them or
     the plugin's digest changes.
-- **One supervisor.** The `hotsheet-plugins` host owns the supervisor (spawn,
+- **One supervisor.** The `hotsheet-plugin-host` crate owns the supervisor (spawn,
   handshake, multiplexing, backoff and shutdown) for every capability. It replaces the
   duplicated notifier and claim-backend runners and the two near-identical JSON-RPC
   engines in `hotsheet-aitools`.
@@ -347,13 +352,14 @@ Shared machinery also stays in the host:
 
 ## 38.13 Workspace layout
 
-| Crate                                                 | Role                                                                                |
-| ----------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| `hotsheet-plugin-protocol`                            | `.proto` files, checked-in generated types, framing and handshake; no async runtime |
-| `hotsheet-plugins`                                    | loader (existing) plus supervisor, trust gate and capability client adapters        |
-| `hotsheet-plugin-sdk`                                 | plugin-author helpers (used by first-party plugins too)                             |
-| `hotsheet-plugin-conformance`                         | per-capability conformance suites                                                   |
-| `plugins/<id>/` crates (e.g. `plugins/github-source`) | first-party plugin executables, built and shipped beside the CLI and server         |
+| Crate                                                 | Role                                                                                                                             |
+| ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `hotsheet-plugin-protocol`                            | `.proto` files, checked-in generated types, framing and handshake; no async runtime                                              |
+| `hotsheet-plugin-host`                                | code-bearing manifest, trust gate, supervisor and capability client adapters (kept out of the 18k-line loader crate, HS2-XY0VTN) |
+| `hotsheet-plugins`                                    | AI-tool plugin loader (existing); installs code-bearing plugins with their binaries                                              |
+| `hotsheet-plugin-sdk`                                 | plugin-author helpers (used by first-party plugins too)                                                                          |
+| `hotsheet-plugin-conformance`                         | per-capability conformance suites                                                                                                |
+| `plugins/<id>/` crates (e.g. `plugins/github-source`) | first-party plugin executables, built and shipped beside the CLI and server                                                      |
 
 `hotsheet-extsync` shrinks to the shared helpers the first-party source plugins use,
 or is folded into them. The policy test from HS2-WXBD02 then pins that host crates

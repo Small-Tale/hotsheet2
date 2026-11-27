@@ -1,0 +1,31 @@
+[package]
+name = "hotsheet-plugin-protocol"
+description = "Hot Sheet 2 out-of-process plugin protocol: contract types, both stdio transports, handshake (docs/38)."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[features]
+# Regenerates `src/gen/` from `proto/` with a vendored protoc (HS2-XY0VTN). Builds never
+# need protoc: the generated code is checked in and byte-checked by `tests/regen.rs`.
+regen = ["dep:prost-build", "dep:pbjson-build", "dep:protoc-bin-vendored"]
+
+[[bin]]
+name = "hotsheet-plugin-protocol-regen"
+path = "src/bin/regen.rs"
+required-features = ["regen"]
+
+[dependencies]
+prost.workspace = true
+pbjson.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+prost-build = { workspace = true, optional = true }
+pbjson-build = { workspace = true, optional = true }
+protoc-bin-vendored = { workspace = true, optional = true }
+
+[dev-dependencies]
+tempfile.workspace = true
