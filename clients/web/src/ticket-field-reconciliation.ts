@@ -21,6 +21,8 @@ export type DraftReconciliation =
   | { kind: 'conflict'; base: string; draft: string };
 
 const labels: Record<string, string> = {
+  // An attachment batch label is ticket text with the same restore and conflict rules (HS2-9DQXGY).
+  attachment_label: 'Attachment Label',
   blocked_reason: 'Blocked Reason',
   category: 'Category',
   details: 'Details',

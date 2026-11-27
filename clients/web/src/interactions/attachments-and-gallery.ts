@@ -12,7 +12,11 @@ import {
 } from '../api';
 import { type AttachmentFilenameEditing, createAttachmentFilenameEditor } from '../attachment-filename-editing';
 import { wireAttachmentFilenameEditor } from '../attachment-filename-interactions';
-import { type AttachmentLabelEditing, createAttachmentLabelEditor } from '../attachment-label-editing';
+import {
+  type AttachmentLabelConflict,
+  type AttachmentLabelEditing,
+  createAttachmentLabelEditor,
+} from '../attachment-label-editing';
 import { attachmentOwnerTarget } from '../attachment-owner';
 import { browserRandomId } from '../browser-id';
 import {
@@ -94,6 +98,8 @@ export interface AttachmentAndGalleryInteractionsDependencies {
   readonly attachmentMessage: Signal<string>;
   /** The open batch label editor, owned by application state (HS2-SG0AZY). */
   readonly attachmentLabelEditing: Signal<AttachmentLabelEditing | undefined>;
+  /** An unmergeable batch label recovery copy waiting for the user's choice (HS2-9DQXGY). */
+  readonly attachmentLabelConflict?: Signal<AttachmentLabelConflict | undefined>;
   readonly attachmentFilenameEditing: Signal<AttachmentFilenameEditing | undefined>;
   readonly showToast: (message: string) => void;
   readonly refreshProject: ({ showLoading }?: { showLoading?: boolean }) => Promise<void>;
@@ -173,6 +179,7 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
     api,
     attachmentMessage,
     attachmentLabelEditing,
+    attachmentLabelConflict,
     attachmentFilenameEditing,
     showToast,
     refreshProject,
@@ -351,6 +358,8 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
         scopeFrame(edit.scope),
       ),
     notify: showToast,
+    conflict: attachmentLabelConflict,
+    ticketKey: (scope) => attachmentOwner(scopeFrame(scope))?.ticket.qualified_id,
   });
   const flushLabelOnHide = () => {
     void labelEditor.flush();

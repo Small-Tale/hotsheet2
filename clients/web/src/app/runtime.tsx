@@ -61,7 +61,7 @@ import {
   terminalDrawerMinimum,
 } from '../app-region-resize';
 import type { AttachmentFilenameEditing } from '../attachment-filename-editing';
-import { type AttachmentLabelEditing } from '../attachment-label-editing';
+import { type AttachmentLabelConflict, type AttachmentLabelEditing } from '../attachment-label-editing';
 import { type BoardColumnPage, isPerColumnBoardView } from '../board-pagination';
 import { browserOutboxId, browserRandomId } from '../browser-id';
 import { type BulkUpdateProgress, createBulkUpdateProgress } from '../bulk-update-progress';
@@ -1187,6 +1187,8 @@ export async function startHotSheetWebClient() {
   // The open attachment batch label editor lives in application state so a live rerender keeps it
   // open (HS2-SG0AZY).
   const attachmentLabelEditing = signal<AttachmentLabelEditing | undefined>(undefined);
+  // A batch label recovery copy that overlaps a newer label waits here for the user's choice (HS2-9DQXGY).
+  const attachmentLabelConflict = signal<AttachmentLabelConflict | undefined>(undefined);
   const attachmentFilenameEditing = signal<AttachmentFilenameEditing | undefined>(undefined);
 
   const editingNoteId = signal<string | undefined>(undefined),
@@ -6605,6 +6607,7 @@ export async function startHotSheetWebClient() {
       api,
       attachmentContext,
       attachmentLabelEditing,
+      attachmentLabelConflict,
       attachmentFilenameEditing,
       attachmentMessage,
       attachmentsEditableFor,
@@ -6657,6 +6660,7 @@ export async function startHotSheetWebClient() {
     attachmentContext,
     attachmentItems,
     attachmentLabelEditing,
+    attachmentLabelConflict,
     attachmentFilenameEditing,
     attachmentMenuSurfaceProps,
     attachmentMessage,
@@ -7945,6 +7949,7 @@ export async function startHotSheetWebClient() {
     api,
     attachmentMessage,
     attachmentLabelEditing,
+    attachmentLabelConflict,
     attachmentFilenameEditing,
     refreshProject,
     galleryImages,

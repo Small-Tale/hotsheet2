@@ -8,6 +8,8 @@ import { action } from 'kerfjs/actions';
  */
 export const ATTACHMENTS_AND_GALLERY_ACTIONS = {
   editAttachmentBatchLabel: action('edit-attachment-batch-label'),
+  acceptRemoteAttachmentLabel: action('accept-remote-attachment-label'),
+  applyAttachmentLabelMerge: action('apply-attachment-label-merge'),
   openAttachmentRow: action('open-attachment-row'),
   openAttachmentGallery: action('open-attachment-gallery'),
   closeAttachmentGallery: action('close-attachment-gallery'),
@@ -45,6 +47,7 @@ export const ATTACHMENTS_AND_GALLERY_ACTIONS = {
  */
 export const ATTACHMENTS_AND_GALLERY_TARGETS = {
   attachmentBatchLabelField: attr('name', 'attachment-batch-label'),
+  attachmentLabelConflictResolutionField: attr('name', 'attachment-label-conflict-resolution'),
   attachmentBatchPurposeField: attr('name', 'attachment-batch-purpose'),
   galleryImage: attr('data-gallery-image', 'true'),
   galleryMedia: attr('data-gallery-media', 'true'),

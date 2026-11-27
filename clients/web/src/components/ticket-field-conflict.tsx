@@ -18,6 +18,13 @@ import type { TicketFieldConflict as TicketFieldConflictState } from '../ticket-
 export interface TicketFieldConflictProps {
   conflict: TicketFieldConflictState;
   resolution: string;
+  /**
+   * The `data-action` of Use Theirs and Apply Merged Value, and the merged field's `name`. They default
+   * to the ticket-field handlers; an attachment batch label routes them to its own (HS2-9DQXGY).
+   */
+  acceptAction?: string;
+  mergeAction?: string;
+  resolutionName?: string;
 }
 
 function Version({ label, value }: { label: string; value: string }) {
@@ -34,7 +41,13 @@ function Version({ label, value }: { label: string; value: string }) {
 }
 
 /** Concurrent-edit resolution card: both versions, an editable merge, and the two resolutions. */
-export function TicketFieldConflict({ conflict, resolution }: TicketFieldConflictProps) {
+export function TicketFieldConflict({
+  conflict,
+  resolution,
+  acceptAction = INSPECTOR_AND_EDITOR_ACTIONS.acceptRemoteTicketField.value,
+  mergeAction = INSPECTOR_AND_EDITOR_ACTIONS.applyTicketFieldMerge.value,
+  resolutionName = 'ticket-conflict-resolution',
+}: TicketFieldConflictProps) {
   const field = conflict.label.toLocaleLowerCase();
   return (
     <section
@@ -61,20 +74,14 @@ export function TicketFieldConflict({ conflict, resolution }: TicketFieldConflic
             <Version label="Your version" value={conflict.mine} />
           </Grid>
           <div class="ticket-field-conflict__merge">
-            <TextField
-              multiline
-              name="ticket-conflict-resolution"
-              label={`Merged ${field}`}
-              size="compact"
-              value={resolution}
-            />
+            <TextField multiline name={resolutionName} label={`Merged ${field}`} size="compact" value={resolution} />
           </div>
           <Row hAlign="right" gap="xs" wrap>
             <Button
               size="compact"
               emphasis="secondary"
               type="button"
-              action={INSPECTOR_AND_EDITOR_ACTIONS.acceptRemoteTicketField.value}
+              action={acceptAction}
               icon={<LucideIcon size="s" icon={RotateCcw} name="rotate-ccw" />}
             >
               Use Theirs
@@ -83,7 +90,7 @@ export function TicketFieldConflict({ conflict, resolution }: TicketFieldConflic
               size="compact"
               tone={'brand'}
               type="button"
-              action={INSPECTOR_AND_EDITOR_ACTIONS.applyTicketFieldMerge.value}
+              action={mergeAction}
               icon={<LucideIcon size="s" icon={GitMerge} name="git-merge" />}
             >
               Apply Merged Value

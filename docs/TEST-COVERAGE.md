@@ -952,6 +952,13 @@ HS2-JJ3R1G covers automatic conflict resolution, with the card kept only for ove
 - An overlapping save-time 409 still shows the card.
 - The stale-cache merge on save shows the merged toast.
 
+HS2-9DQXGY applies the same rule to attachment batch labels, which previously discarded an
+unmergeable recovery copy.
+
+- `clients/web/src/attachment-label-editing.test.ts # attachment label conflicts keep the recovery copy (HS2-9DQXGY)` covers a merged restore with its toast, a committed merge that restores nothing, an overlap kept in the card and scoped to its surface and ticket, coalesced merged-value typing, a failed then retried Apply Merged Value, Use Theirs, a copy without a merge base, and a reopen that no longer conflicts.
+- `clients/web/src/components/ticket-field-conflict.test.ts` and `clients/web/src/components/ticket-attachments-interactions.test.ts` pin the card's routed actions and field name and the batch's handler wiring.
+- `clients/web/tests/providers.spec.ts # keeps an unmergeable attachment label recovery copy in a conflict card and auto-merges a disjoint one (HS2-9DQXGY)` runs through the shipped inspector attachment list: a reload whose copy overlaps a newer label shows the card with the copy kept, Apply Merged Value writes once, Use Theirs writes nothing, and a disjoint copy merges with the toast.
+
 HS2-P9A21R covers the five-view phone toolbar and reachable sidebar toggle
 through the shipped shell in `clients/web/tests/shell-composition.spec.ts`.
 `mobile-layout.spec.ts` keeps overlay and resize navigation in the affected

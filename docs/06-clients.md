@@ -2916,7 +2916,13 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   merged against that edit-start label, and the editor shows its draft until the write commits.
   Enter or Escape returns keyboard focus to the batch title once that write settles and the
   editor closes, however long the save takes (HS2-VRBDPV). Reopening the batch restores an
-  unsaved copy. Escape in any inline editor of the inspector (the
+  unsaved copy with the ticket fields' restore rules: a copy that a newer label changed in other
+  words is three-way merged and announced with the merge toast (HS2-JJ3R1G), and a copy that
+  overlaps the newer label is never discarded. The editor stays closed and the batch shows the
+  ticket fields' conflict card with both versions and an editable merged value; Use Theirs drops
+  the copy, and Apply Merged Value writes once and drops the copy only after that write commits.
+  The card belongs to its surface, ticket, and batch, so a linked reader frame shows its own
+  (HS2-9DQXGY). Escape in any inline editor of the inspector (the
   batch label, the title, notes, details, tags, and the blocked reason) acts on that editor only: the
   label restores its value, the others finish their edit (blur autosaves), and the key stops there,
   so the narrow-layout inspector overlay stays open until a second Escape outside the editor

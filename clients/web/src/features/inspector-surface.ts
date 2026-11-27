@@ -13,6 +13,8 @@ import type {
 import type { AttachmentFilenameEditing } from '../attachment-filename-editing';
 import { attachmentRoundNumbers } from '../attachment-grouping';
 import {
+  type AttachmentLabelConflict,
+  attachmentLabelConflictFor,
   type AttachmentLabelEditing,
   attachmentLabelEditingDraft,
   attachmentLabelEditingKey,
@@ -43,6 +45,8 @@ export interface InspectorSurfaceDependencies {
   api: () => Api;
   attachmentContext: (ticket: FullTicket, current?: Project) => AttachmentReferenceContext | undefined;
   attachmentLabelEditing: Signal<AttachmentLabelEditing | undefined>;
+  /** An unmergeable batch label recovery copy waiting for the user's choice (HS2-9DQXGY). */
+  attachmentLabelConflict?: Signal<AttachmentLabelConflict | undefined>;
   attachmentFilenameEditing?: Signal<AttachmentFilenameEditing | undefined>;
   attachmentMessage: Signal<string>;
   attachmentsEditableFor: (connectionId: string) => boolean;
@@ -126,6 +130,7 @@ export function createInspectorSurface(dependencies: InspectorSurfaceDependencie
     api,
     attachmentContext,
     attachmentLabelEditing,
+    attachmentLabelConflict,
     attachmentFilenameEditing,
     attachmentMessage,
     attachmentsEditableFor,
@@ -297,6 +302,11 @@ export function createInspectorSurface(dependencies: InspectorSurfaceDependencie
           : undefined,
       attachmentLabelEditing: attachmentLabelEditingKey(attachmentLabelEditing.value, INSPECTOR_ATTACHMENT_LABEL_SCOPE),
       attachmentLabelDraft: attachmentLabelEditingDraft(attachmentLabelEditing.value, INSPECTOR_ATTACHMENT_LABEL_SCOPE),
+      attachmentLabelConflict: attachmentLabelConflictFor(
+        attachmentLabelConflict?.value,
+        INSPECTOR_ATTACHMENT_LABEL_SCOPE,
+        ticket.qualified_id,
+      ),
       fieldConflict: readerOpen.value ? undefined : fieldConflict.value,
       fieldConflictResolution: fieldConflictResolution.value,
     };
