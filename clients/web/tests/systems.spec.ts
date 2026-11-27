@@ -347,6 +347,14 @@ test('HS2-5H8R0N Systems shows admission for each project placed here and this m
       label: 'Widgets',
       actor: { role: 'human' },
     });
+    // HS2-3VGYFG: a policy tool no machine has, so admission is asked on every host. Without one the
+    // asked tools are the host's installed ones, and a CI runner with none asks nothing.
+    const stored = await server.request<{ revision: string | null }>(`${base}/policy`);
+    await server.request(`${base}/policy`, 'PUT', {
+      expected_revision: stored.revision,
+      policy: { tools: [{ tool: 'synthetic-tool', max_sessions: 2 }] },
+      actor: { role: 'human' },
+    });
     await ownerLimits(server.home, { max_sessions: 3, min_free_ram_mb: 1024 });
     const paths = await openMachines(page, server);
     const reads = recordReads(page, paths);
@@ -358,13 +366,12 @@ test('HS2-5H8R0N Systems shows admission for each project placed here and this m
     await page.locator('[aria-label="Global Dashboards"]').first().getByRole('button', { name: 'Systems' }).click();
     const inspector = page.locator('[data-component="systems-inspector"]');
     await expect(inspector).toHaveAttribute('data-machine-id', 'local');
-    // Admission by Project: Widgets with the real admission answer (the fixture host may lack every tool).
+    // Admission by Project: Widgets with the real admission answer. The synthetic tool is refused as not
+    // installed on every host; a tool this host happens to have may answer either way.
     const admission = inspector.getByRole('region', { name: 'Admission by Project' });
     await expect(admission.locator('[data-systems-admission]')).toHaveCount(1, { timeout: 30_000 });
     await expect(admission).toContainText('Widgets');
-    await expect(admission).toContainText(/Can start \d+|Refused|No AI tool allowed here|Unknown/u, {
-      timeout: 30_000,
-    });
+    await expect(admission).toContainText('Refused · not installed there', { timeout: 30_000 });
     // Placement Limits: the owner's two limits, the rest left to each project.
     const limits = inspector.getByRole('region', { name: 'Placement Limits' });
     const limit = (label: string) => limits.locator(`[data-systems-limit="${label}"]`);
