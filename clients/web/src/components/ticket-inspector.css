@@ -48,6 +48,12 @@
 /* Persisted editor heights (ticket-editor-size.ts) differ per presentation. The inspector maps them
    onto its children's public height tokens instead of reaching into the textareas they render
    (HS2-DYAR0S): MarkdownEditor's source, TicketInfoPanel's blocked reason, and NoteCard's editor. */
+/* The Details editor replaces its rendered preview in place, so it opens at its text's height and
+   grows with it instead of starting one line tall with the text scrolling inside it; a stored
+   manual height still wins, and the Inspector stays the one scroll owner (HS2-VMZST8). */
+.ticket-inspector__body[data-presentation] {
+  --markdown-editor-source-field-sizing: content;
+}
 .ticket-inspector__body[data-presentation='sidebar'] {
   --markdown-editor-source-height: var(--hs-details-sidebar-height, auto);
   --ticket-info-panel-blocked-reason-height: var(--hs-blocked-reason-sidebar-height, auto);

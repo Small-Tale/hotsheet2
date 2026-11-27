@@ -836,3 +836,83 @@ test('a live change merged into an open unsaved draft is announced and saved on 
   expect(server.patches.at(-1)?.expected_token).toBe('T-remote');
   expect(server.conflicts).toBe(0);
 });
+
+// HS2-VMZST8: with a mouse and no stored height, the Details editor opened 48 px tall for long
+// text, with the rest scrolling inside it. It now opens at its text's height on every open path.
+test('the Details editor opens at its text height on open, after reload, and after a merged restore (HS2-VMZST8)', async ({
+  page,
+}) => {
+  const server = await mockProject(page);
+  const lines = (count: number, suffix = '') =>
+    Array.from({ length: count }, (_, index) => `Line ${index + 1} of the synthetic details${suffix}.`);
+  server.details['01'] = lines(18).join('\n');
+  await openProject(page);
+  expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(false);
+  await ticketRow(page, 'HS2-EDIT').click();
+  const sizing = (editor: Locator) =>
+    editor.evaluate((node: HTMLTextAreaElement) => {
+      const style = getComputedStyle(node);
+      return {
+        client: node.clientHeight,
+        scroll: node.scrollHeight,
+        resize: style.resize,
+        inline: node.style.height,
+      };
+    });
+  const expectFitted = async (editor: Locator) => {
+    const size = await sizing(editor);
+    expect(size.client).toBeGreaterThan(200);
+    // No text scrolls inside the editor; the Inspector stays the one scroll owner.
+    expect(size.scroll).toBeLessThanOrEqual(size.client + 1);
+    // The fine-pointer grip stays, and fitting writes no inline height a pointerup would persist.
+    expect(size.resize).toBe('vertical');
+    expect(size.inline).toBe('');
+  };
+
+  let editor = await editDetails(page);
+  await expectFitted(editor);
+  // Typing more lines grows the editor rather than scrolling inside it.
+  const before = (await sizing(editor)).client;
+  await caretToEnd(editor);
+  await editor.pressSequentially('\nOne more line\nAnd another');
+  await expect.poll(async () => (await sizing(editor)).client).toBeGreaterThan(before);
+  await editor.blur();
+  await expect(editor).toBeHidden();
+
+  // After a reload.
+  await page.reload();
+  await ticketRow(page, 'HS2-EDIT').click();
+  editor = await editDetails(page);
+  await expectFitted(editor);
+
+  // After a reload whose recovery copy merges with a newer server value.
+  await caretToEnd(editor);
+  await editor.pressSequentially('\nTyped before the reload');
+  await expect.poll(() => storedDrafts(page)).toHaveLength(1);
+  server.details['01'] = `Changed elsewhere\n${server.details['01'].split('\n').slice(1).join('\n')}`;
+  server.tokens['01'] = 'T-remote';
+  await page.reload();
+  await ticketRow(page, 'HS2-EDIT').click();
+  editor = await editDetails(page);
+  await expect(page.locator('.app-toast')).toContainText('Restored an unsaved edit and merged it');
+  await expect(editor).toHaveValue(/^Changed elsewhere\n[\s\S]*Typed before the reload$/);
+  await expectFitted(editor);
+  await editor.blur();
+  await expect(editor).toBeHidden();
+
+  // Short text keeps the one-line minimum.
+  await ticketRow(page, 'HS2-NEXT').click();
+  const short = await editDetails(page);
+  expect((await sizing(short)).client).toBe(48);
+  await short.blur();
+  await expect(short).toBeHidden();
+
+  // A height the user dragged still wins over the text height.
+  await page.evaluate(() => {
+    localStorage.setItem('hotsheet.ticket-editor-height.details.sidebar', '120');
+  });
+  await page.reload();
+  await ticketRow(page, 'HS2-EDIT').click();
+  editor = await editDetails(page);
+  expect(await editor.evaluate((node) => Math.round(node.getBoundingClientRect().height))).toBe(120);
+});

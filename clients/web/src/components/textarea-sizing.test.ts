@@ -48,8 +48,23 @@ describe('touch textarea sizing (HS2-6PC150)', () => {
         selector,
         resize: 'resize: var(--hotsheet-textarea-resize, vertical);',
       });
-      expect(body, `${selector} in ${path}`).toContain('field-sizing: var(--hotsheet-textarea-field-sizing, fixed);');
+      // A host may size a component's textarea to its content through that component's public token,
+      // which still falls back to the shared touch token (HS2-VMZST8).
+      expect(body, `${selector} in ${path}`).toMatch(
+        /field-sizing: (?:var\(--[a-z-]+-field-sizing, )?var\(--hotsheet-textarea-field-sizing, fixed\)\)?;/,
+      );
     }
+  });
+
+  it('sizes the inspector Details editor to its text on every pointer, keeping the grip (HS2-VMZST8)', () => {
+    const inspector = readFileSync(new URL('./ticket-inspector.css', import.meta.url), 'utf8'),
+      editor = readFileSync(new URL('./markdown-editor.css', import.meta.url), 'utf8');
+    expect(inspector).toMatch(
+      /\n\.ticket-inspector__body\[data-presentation\] \{\s*--markdown-editor-source-field-sizing: content;\s*\}/,
+    );
+    expect(editor).toMatch(
+      /markdown-editor--embedded \.markdown-editor__source \{[^}]*height: var\(--markdown-editor-source-height, auto\);[^}]*field-sizing: var\(--markdown-editor-source-field-sizing, var\(--hotsheet-textarea-field-sizing, fixed\)\);[^}]*resize: var\(--hotsheet-textarea-resize, vertical\);/,
+    );
   });
 
   it('drops stored desktop editor heights on touch so the editors can grow', () => {

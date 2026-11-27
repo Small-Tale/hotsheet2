@@ -49,8 +49,10 @@
   /* A host that persists the editor height sets it through this public token (HS2-DYAR0S). */
   height: var(--markdown-editor-source-height, auto);
   padding: remify(12px);
-  /* Auto-grows instead of offering a resize grip on touch screens (HS2-6PC150). */
-  field-sizing: var(--hotsheet-textarea-field-sizing, fixed);
+  /* Auto-grows instead of offering a resize grip on touch screens (HS2-6PC150). A host that opens
+     the editor in place of its rendered preview sizes it to its text on every pointer through this
+     public token, keeping the grip on fine pointers (HS2-VMZST8). */
+  field-sizing: var(--markdown-editor-source-field-sizing, var(--hotsheet-textarea-field-sizing, fixed));
   resize: var(--hotsheet-textarea-resize, vertical);
 }
 /* `inset="flush"`: the host surface owns the inset, so preview and source text sit on its column

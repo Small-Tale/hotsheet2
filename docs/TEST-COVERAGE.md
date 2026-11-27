@@ -938,6 +938,11 @@ a failed save is not resent without new typing, and cancel during a save drops q
 text. `clients/web/src/ticket-draft-store.test.ts` covers the pure
 `planTicketDraftRestore` decision (none, restore, merge, conflict, native intent).
 
+HS2-VMZST8 sizes the Inspector Details editor to its text with a mouse. Before the fix, it opened 48 px tall for long text in both the mocked inspector and against the real server.
+
+- `clients/web/tests/ticket-editor-autosave-transitions.spec.ts # the Details editor opens at its text height on open, after reload, and after a merged restore (HS2-VMZST8)` opens long text through the shipped inspector with a fine pointer. It runs a first open, typing that grows the editor, a reload, and a reload whose recovery copy merges. Each open fits the text with nothing scrolling inside it, keeps the vertical grip, and sets no inline height. Short text stays at the 48 px minimum, and a stored dragged height still wins.
+- `clients/web/src/components/textarea-sizing.test.ts # sizes the inspector Details editor to its text on every pointer, keeping the grip (HS2-VMZST8)` pins the Inspector's `--markdown-editor-source-field-sizing: content` and MarkdownEditor's token fallback to the shared touch token. The resizable-textarea policy accepts that component token.
+
 HS2-JJ3R1G covers automatic conflict resolution, with the card kept only for overlapping edits.
 
 **Unit tests**

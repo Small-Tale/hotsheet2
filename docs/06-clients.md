@@ -3501,7 +3501,12 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   settings, and the not-working note) instead grows with its content from its
   minimum height and shrinks when cleared; its dialog or panel scrolls to keep the actions
   reachable, and stored desktop editor heights do not apply. Browsers without
-  `field-sizing` keep the grip (HS2-6PC150). On touch screens every native text field is also
+  `field-sizing` keep the grip (HS2-6PC150). The Inspector and reader Details editor, which
+  replaces its rendered preview in place, also sizes to its text with a mouse. It opens at
+  the height of its text, with a one-line (48 px) minimum, on a first open, after a reload, and
+  after a restored or merged recovery copy. It grows as the user types, so the Inspector stays the
+  one scroll owner. It keeps the vertical grip, and a height the user dragged still wins
+  (HS2-VMZST8). On touch screens every native text field is also
   set at 16 px or larger (`--hs-touch-field-min-font-size`), because iOS zooms the page into a
   focused field below that size: the Details textarea, the details editor source, the tag input,
   the attachment batch label editor, and the repository search

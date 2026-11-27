@@ -1566,7 +1566,9 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
   their textareas: `MarkdownEditor` reads `--markdown-editor-source-height` (embedded source),
   `TicketInfoPanel` reads `--ticket-info-panel-blocked-reason-height`, and `NoteCard` reads
   `--note-card-editor-height`. Each token defaults to `auto`, and a coarse pointer resets all three
-  to `auto` so touch editors grow with their content (HS2-DYAR0S). It reuses the same `ListHeader`/`ListItem`
+  to `auto` so touch editors grow with their content (HS2-DYAR0S). The body also sets
+  MarkdownEditor's `--markdown-editor-source-field-sizing: content`, so the Details editor opens at its
+  text height with a mouse too (HS2-VMZST8). It reuses the same `ListHeader`/`ListItem`
   primitives as the left project sidebar for Details, Tags, Notes, Block ticket,
   and Add note. Headers and content align by their text/icon inset while bordered
   surfaces remain flush below their headers without a second indentation level.
