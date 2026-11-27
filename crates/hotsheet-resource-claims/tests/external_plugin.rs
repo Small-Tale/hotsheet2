@@ -1,14 +1,15 @@
 //! HS2-322ZSZ: the external claim-backend plugin protocol against real subprocesses.
 //!
-//! The fake plugin is this test binary, re-run through `/bin/sh` with
-//! `HS_FAKE_PLUGIN=1` so it speaks the protocol on stdin and stdout (as an ordinary test,
-//! `fake_plugin_main` does nothing). Its state is a JSON file under a per-test directory,
-//! serialized by a file lock, so the plugin is a real backend: atomic acquire, a fencing
-//! counter that survives release and expiry, and its own clock. Nothing here touches a
-//! credential store, and every name is synthetic.
-#![cfg(unix)]
+//! The fake plugin is this test binary, run directly by the manifest's command as its
+//! ignored `fake_plugin_main` test, so it speaks the protocol on stdin and stdout with no
+//! shell in between (HS2-XQHTXC: the same command on Unix and Windows; run any other way it
+//! does nothing). Its state is a JSON file under a per-test directory, serialized by a file
+//! lock, so the plugin is a real backend: atomic acquire, a fencing counter that survives
+//! release and expiry, and its own clock. The children it starts for the process-tree
+//! cases are this binary again (`fake_sleeper`). Nothing here touches a credential store,
+//! and every name is synthetic.
 
-use std::io::Read;
+use std::io::{IsTerminal, Read};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -17,8 +18,7 @@ use serde_json::{Value, json};
 
 use hotsheet_resource_claims::conformance::{self, Fixture};
 use hotsheet_resource_claims::external::{
-    self, CommandRunner, ExternalBackend, LiveRunner, PluginManifest, SharedSecrets, approve,
-    load_all,
+    self, ExternalBackend, LiveRunner, PluginManifest, SharedSecrets, approve, load_all,
 };
 use hotsheet_resource_claims::{
     AcquireRequest, ClaimBackend, ClaimError, Namespace, OfflinePolicy, ResourceRef, WaitCancel,
@@ -28,7 +28,8 @@ use hotsheet_ticketing::FileLock;
 use hotsheet_ticketing::claim_backends::{BackendConfiguration, BackendKind};
 use hotsheet_ticketing::secrets::{SecretError, SecretStore};
 
-const ENTRY: &str = "HS_FAKE_PLUGIN";
+/// HS2-XQHTXC: set on a `fake_sleeper` child only, so `--run-ignored all` never sleeps.
+const SLEEPER: &str = "HS_FAKE_SLEEPER";
 
 /// A synthetic credential store: HS2-XTQHPK denies the native one in test processes.
 #[derive(Default)]
@@ -59,15 +60,22 @@ fn now_ms() -> u64 {
 
 // ---- the fake plugin ----------------------------------------------------------------
 
-/// The plugin entry point. As an ordinary test it does nothing.
+/// The plugin entry point, which the manifest's command runs. Run any other way (an
+/// interactive `--ignored`, or `--run-ignored all` with no stdin) it does nothing.
 #[test]
+#[ignore = "HS2-XQHTXC: launched only by the fake plugin's manifest command"]
 fn fake_plugin_main() {
-    if std::env::var_os(ENTRY).is_none() {
+    if std::io::stdin().is_terminal() {
         return;
     }
     let mut input = String::new();
     std::io::stdin().read_to_string(&mut input).unwrap();
-    let envelope: Value = serde_json::from_str(&input).unwrap();
+    let Ok(envelope) = serde_json::from_str::<Value>(&input) else {
+        return;
+    };
+    if envelope.get("protocol").is_none() {
+        return;
+    }
     let state_dir = PathBuf::from(envelope["settings"]["state_dir"].as_str().unwrap());
     // Record every run: its raw stdin, argv and environment, for what the plugin saw.
     let seen = json!({
@@ -94,8 +102,7 @@ fn fake_plugin_main() {
         // HS2-CYDK9Z: start a child of its own that shares the output pipes, record its
         // pid, then wait for it; a stop must end the child too.
         "forks" => {
-            let mut child = std::process::Command::new("sleep")
-                .arg("120")
+            let mut child = sleeper()
                 .stdin(std::process::Stdio::null())
                 .spawn()
                 .unwrap();
@@ -109,8 +116,8 @@ fn fake_plugin_main() {
         // and exit normally. `leaves_child` shares the output pipes with it;
         // `leaves_quiet_child` gives it none.
         "leaves_child" | "leaves_quiet_child" => {
-            let mut command = std::process::Command::new("sleep");
-            command.arg("120").stdin(std::process::Stdio::null());
+            let mut command = sleeper();
+            command.stdin(std::process::Stdio::null());
             if mode.trim() == "leaves_quiet_child" {
                 command
                     .stdout(std::process::Stdio::null())
@@ -130,6 +137,26 @@ fn fake_plugin_main() {
     }
     let reply = handle(&state_dir, &envelope, mode.trim());
     println!("\n{reply}");
+}
+
+/// HS2-XQHTXC: a child of the plugin that sleeps two minutes: this binary's ignored
+/// `fake_sleeper`, so it runs on every platform. It inherits the plugin's output handles
+/// unless the caller redirects them.
+fn sleeper() -> std::process::Command {
+    let mut command = std::process::Command::new(std::env::current_exe().unwrap());
+    command
+        .args(["--ignored", "--exact", "fake_sleeper", "--nocapture"])
+        .env(SLEEPER, "1");
+    command
+}
+
+/// The plugin's child for the process-tree cases. Run any other way it does nothing.
+#[test]
+#[ignore = "HS2-XQHTXC: launched only by the fake plugin as its own child"]
+fn fake_sleeper() {
+    if std::env::var_os(SLEEPER).is_some() {
+        std::thread::sleep(Duration::from_secs(120));
+    }
 }
 
 fn err(code: &str, message: &str) -> Value {
@@ -305,12 +332,19 @@ struct Plugin {
 }
 
 fn manifest_text(id: &str, wait: &str, timeout: u64, secret: bool) -> String {
-    let exe = std::env::current_exe().unwrap();
+    // HS2-XQHTXC: this binary itself, as a TOML string (a Windows path's backslashes
+    // escaped), running only its ignored plugin entry.
+    let exe = std::env::current_exe()
+        .unwrap()
+        .display()
+        .to_string()
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"");
     format!(
         r#"id = "{id}"
 display_name = "Fake"
 description = "A synthetic claim backend."
-command = ["/bin/sh", "-c", "{ENTRY}=1 exec \"$0\" --exact fake_plugin_main --nocapture", "{exe}"]
+command = ["{exe}", "--ignored", "--exact", "fake_plugin_main", "--nocapture"]
 timeout_seconds = {timeout}
 
 [capabilities]
@@ -337,7 +371,6 @@ default = "compact"
         } else {
             ""
         },
-        exe = exe.display()
     )
 }
 
@@ -587,6 +620,7 @@ impl Plugin {
     }
 }
 
+#[cfg(unix)]
 fn process_alive(pid: u32) -> bool {
     std::process::Command::new("kill")
         .args(["-0", &pid.to_string()])
@@ -594,6 +628,18 @@ fn process_alive(pid: u32) -> bool {
         .status()
         .unwrap()
         .success()
+}
+
+/// HS2-XQHTXC: whether `pid` is in the process list, through `tasklist` (a local read of
+/// the process table, as `kill -0` is on Unix).
+#[cfg(windows)]
+fn process_alive(pid: u32) -> bool {
+    let listed = std::process::Command::new("tasklist")
+        .args(["/FI", &format!("PID eq {pid}"), "/FO", "CSV", "/NH"])
+        .stderr(std::process::Stdio::null())
+        .output()
+        .unwrap();
+    String::from_utf8_lossy(&listed.stdout).contains(&format!("\"{pid}\""))
 }
 
 fn spawn_plugin_wait(
@@ -704,8 +750,16 @@ struct KillOnDrop(u32);
 
 impl Drop for KillOnDrop {
     fn drop(&mut self) {
-        let _ = std::process::Command::new("kill")
-            .args(["-9", &self.0.to_string()])
+        #[cfg(unix)]
+        let mut command = std::process::Command::new("kill");
+        #[cfg(unix)]
+        command.args(["-9", &self.0.to_string()]);
+        #[cfg(windows)]
+        let mut command = std::process::Command::new("taskkill");
+        #[cfg(windows)]
+        command.args(["/F", "/T", "/PID", &self.0.to_string()]);
+        let _ = command
+            .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .status();
     }
@@ -870,8 +924,12 @@ fn hs2_br14fm_a_quiet_leftover_is_ended_without_a_warning() {
     assert!(!log.contains(LEFT_RUNNING), "{log}");
 }
 
+// Unix only: the leftovers are started by `/bin/sh` scripts (`&`, `$!`, redirections). The
+// same behaviour runs on every platform through the leaves-child plugin tests above.
+#[cfg(unix)]
 #[test]
 fn hs2_br14fm_the_runner_reports_leftovers_only_when_they_hold_the_output() {
+    use hotsheet_resource_claims::external::CommandRunner;
     let run = |script: &str| {
         let began = Instant::now();
         let output = LiveRunner
