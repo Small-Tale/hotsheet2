@@ -29,6 +29,7 @@ import { glanceScenario } from '../src/ux-demo/live-state-fixtures';
 import { appRequests } from './app-requests';
 import { readClipboardText } from './clipboard-text';
 import { routeAllFeaturesOn } from './feature-areas-route';
+import { openGlobalDashboard } from './global-dashboards';
 import { openMockedProject, projectTab, ticketListLoaded } from './open-mocked-project';
 import { attachmentRevealLabel, ticketFileRevealLabel } from './platform-labels';
 import { holdReaderReturnFocus } from './reader-return-focus-delivery';
@@ -40341,7 +40342,8 @@ test('keeps terminal visibility anchored through close, resize, and repeated reo
   await mockProject(page);
   await page.goto('/');
   await openMockedProject(page);
-  await page.getByRole('button', { name: 'Workspace Grid', exact: true }).click();
+  // HS2-3VGYFG: at 1024px the lone tab overflows the strip, so the dashboards fold into one menu.
+  await openGlobalDashboard(page, 'terminals');
   // Kerf's Select (beta.106) is a native combobox trigger plus a top-layer listbox popover; a close
   // interrupted by a resize must still reopen anchored to the trigger and inside the viewport.
   const select = page.locator('kui-select[name="terminal-visibility-group"]'),
@@ -40451,7 +40453,8 @@ test('keeps Add project beside the last project tab and New ticket at the far ed
   expect(box.launcher.right).toBeLessThanOrEqual(box.bar.right);
   await expect(strip).toBeVisible();
   await page.locator('.project-tab-bar').screenshot({ path: 'test-results/hs2-ne8jbs-many-tabs-wide.png' });
-  await page.getByRole('button', { name: 'Workspace Grid' }).click();
+  // HS2-3VGYFG: the overflowing tabs fold the dashboard buttons into one menu (HS2-B0RJBY).
+  await openGlobalDashboard(page, 'terminals');
   await expect(page.locator('.project-tab-bar')).toHaveAttribute('data-mode', 'terminals');
   await expect(add).toBeVisible();
   const dashboardBar = (await page.locator('.project-tab-bar').boundingBox())!,

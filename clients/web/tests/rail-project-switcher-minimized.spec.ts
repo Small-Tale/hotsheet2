@@ -1,6 +1,7 @@
 import { expect, type Page, test } from '@playwright/test';
 
 import { appRequests } from './app-requests';
+import { openGlobalDashboard } from './global-dashboards';
 import { capabilities } from './mobile-project-fixture';
 
 // HS2-2609BW: the workspace grid ticket rail's project switcher lists open projects directly and
@@ -138,8 +139,9 @@ test('HS2-2609BW the rail switcher gathers minimized projects under a Minimized 
     group = menu.locator('[data-rail-minimized-projects="true"]'),
     railRow = (id: string) => menu.locator(`[data-project-id="${id}"]`);
 
-  // With nothing minimized, every open project is a top-level choice and the group is absent.
-  await page.getByRole('button', { name: 'Workspace Grid' }).click();
+  // With nothing minimized, every open project is a top-level choice and the group is absent. Four tabs
+  // overflow the strip at this width, so its dashboards fold into one menu (HS2-B0RJBY, HS2-3VGYFG).
+  await openGlobalDashboard(page, 'terminals');
   await expect(switcher).toBeVisible();
   await trigger.click();
   await expect(menu).toBeVisible();
@@ -254,7 +256,7 @@ test('HS2-2609BW the rail switcher gathers minimized projects under a Minimized 
     await page.locator('[data-minimized-projects="true"] [role="menu"]').getByRole('menuitem', { name }).click();
   }
   await expect(strip.locator('[data-tab-kind="project"]')).toHaveCount(4);
-  await page.getByRole('button', { name: 'Workspace Grid' }).click();
+  await openGlobalDashboard(page, 'terminals');
   await trigger.click();
   await expect(menu.locator(':scope > [role="menuitemcheckbox"]')).toHaveCount(4);
   await expect(group).toHaveCount(0);
