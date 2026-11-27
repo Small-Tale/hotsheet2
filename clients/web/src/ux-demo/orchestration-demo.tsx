@@ -674,6 +674,8 @@ export function OrchestrationInspectorDemo() {
             contention: demoContention(),
             summary: demoSummary(),
             roles: demoRoles(),
+            // HS2-X3FZJE: the Triggers row, with the next scheduled run.
+            triggers: demoTriggers(),
           }}
         />
       </CatalogExample>
@@ -854,8 +856,40 @@ function OrchestrationTriggerDialogDemo() {
     template: demoTemplates()[0].template_id,
     eventInputs: { feature: 'commit' as const },
   };
+  // HS2-SEEMXR: a schedule trigger offers every recurrence field the command-schedule dialog has.
+  const base = newTriggerForm({ tool: 'claude', target: 'api' });
+  const scheduled = {
+    ...base,
+    name: 'Dependency bump on weekdays',
+    placement: 'start' as const,
+    schedule: {
+      ...base.schedule,
+      repeats: 'weekly' as const,
+      startDate: '2026-11-02',
+      weekdays: [1, 3, 5],
+      time: '06:30',
+      timeZone: 'UTC',
+      endDate: '2027-03-01',
+      excludeDates: '2026-12-25, 2027-01-01',
+    },
+  };
   const examples: Array<[string, OrchestrationTriggerDialogState, boolean]> = [
-    ['Triggers…: New Trigger', triggerState({ mode: 'setup', form: setup, detailActive: true }), false],
+    // HS2-40GPZK: fixed values in Use Template…'s typed controls (a priority, projects and a checkbox).
+    [
+      'Triggers…: New Trigger',
+      triggerState({
+        mode: 'setup',
+        form: setup,
+        detailActive: true,
+        fixedInputs: { priority: 'low', web: 'api', contract: false },
+      }),
+      false,
+    ],
+    [
+      'Triggers…: New Schedule Trigger',
+      triggerState({ mode: 'setup', form: scheduled, detailActive: true, review: undefined }),
+      false,
+    ],
     ['Triggers…: On', triggerState({ selected: triggers[0].trigger_id }), false],
     ['Triggers…: Dry Run', triggerState(), false],
     [

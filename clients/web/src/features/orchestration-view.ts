@@ -14,6 +14,7 @@ import {
   isTransientRequestFailure,
   retryTransient,
 } from '../bounded-backoff';
+import { withScheduleField } from '../command-schedule-form';
 import type { OrchestrationDecisionsDialogState } from '../components/orchestration-decisions-dialog';
 import type { OrchestrationInspectorDetails } from '../components/orchestration-inspector';
 import type { OrchestrationTemplateDialogState } from '../components/orchestration-template-dialog';
@@ -60,6 +61,7 @@ import type { OrchestrationTimeline } from '../orchestration-timeline';
 import { findTimelineItem, startColumnId } from '../orchestration-timeline-board';
 import {
   type EventField,
+  fixedInputsToSend,
   formFromTrigger,
   formProblem,
   formToRequest,
@@ -69,6 +71,7 @@ import {
   parseTriggerReview,
   parseTriggerView,
   type TriggerForm,
+  type TriggerView,
 } from '../orchestration-triggers';
 import {
   parseValidationOperation,
@@ -383,34 +386,10 @@ export function editTriggerForm(form: TriggerForm, field: string, value: unknown
       return { ...form, start: text === 'paused' ? 'paused' : 'dry_run' };
     case 'form-overlap':
       return { ...form, overlap: text === 'queue_latest' ? 'queue_latest' : 'skip' };
-    case 'schedule-repeats':
-      return text === 'minutely' ||
-        text === 'hourly' ||
-        text === 'daily' ||
-        text === 'weekly' ||
-        text === 'monthly' ||
-        text === 'yearly'
-        ? {
-            ...form,
-            schedule: {
-              ...form.schedule,
-              scheduleType: 'repeating',
-              repeats: text,
-              every: text === 'minutely' ? '15' : '1',
-            },
-          }
-        : form;
-    case 'schedule-every':
-      return { ...form, schedule: { ...form.schedule, every: text } };
-    case 'schedule-weekday':
-      return { ...form, schedule: { ...form.schedule, weekdays: [Number(text) || 1] } };
-    case 'schedule-start':
-      return { ...form, schedule: { ...form.schedule, startDate: text } };
-    case 'schedule-time':
-      return { ...form, schedule: { ...form.schedule, time: text } };
-    case 'schedule-zone':
-      return { ...form, schedule: { ...form.schedule, timeZone: text } };
     default:
+      // HS2-SEEMXR: the shared recurrence fields, by their draft key.
+      if (field.startsWith('schedule-'))
+        return { ...form, schedule: withScheduleField(form.schedule, field.slice('schedule-'.length), value) };
       if (field.startsWith('event-input-')) {
         const key = field.slice('event-input-'.length);
         const eventInputs: Partial<Record<string, EventField>> = Object.fromEntries(
@@ -542,6 +521,8 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
         summary?: ProgressSummaryView;
         /** HS2-70MHXJ: the summary read failed and none was read before. */
         summaryUnreadable?: boolean;
+        /** HS2-X3FZJE: this machine's triggers, for the overview's Triggers row. */
+        triggers?: readonly TriggerView[];
         error?: string;
       }
     | undefined
@@ -1101,11 +1082,13 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     if (!current || selectedStep.value || dependencies.viewMode.value !== 'orchestration') return;
     const client = clientFor(current);
     // HS2-5GRXFN: the scheduler's own dry-run plan says which resources hold work back; it logs nothing.
-    const [page, plan, summary] = await Promise.allSettled([
+    const [page, plan, summary, triggers] = await Promise.allSettled([
       client.orchestrationDecisions(current.id, { limit: 30 }),
       client.orchestrationSchedulerPlan(current.id, dependencies.personId()),
       // HS2-XJEH08: progress and cost from this machine's records.
       client.orchestrationSummary(current.id),
+      // HS2-X3FZJE: this machine's triggers, for the Triggers row.
+      client.orchestrationTriggers(current.id, 'list', {}, dependencies.personId()),
     ]);
     if (request !== overviewRequest) return;
     overview.value = {
@@ -1115,11 +1098,33 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
       roles: plan.status === 'fulfilled' ? parseRoleStandings(plan.value) : overview.value?.roles,
       summary: summary.status === 'fulfilled' ? parseProgressSummary(summary.value) : overview.value?.summary,
       summaryUnreadable: summary.status === 'rejected' && overview.value?.summary === undefined,
+      triggers: triggers.status === 'fulfilled' ? parseTriggerList(triggers.value) : overview.value?.triggers,
       error:
-        page.status === 'rejected' || plan.status === 'rejected' || summary.status === 'rejected'
+        page.status === 'rejected' ||
+        plan.status === 'rejected' ||
+        summary.status === 'rejected' ||
+        triggers.status === 'rejected'
           ? 'Some of the scheduler’s records could not be read.'
           : undefined,
     };
+  }
+
+  const shownOverview = () => overview.value;
+  /** HS2-X3FZJE: a trigger fired or changed (`orchestration_changed`): the overview's Triggers row reads them again. */
+  async function refreshOverviewTriggers() {
+    const current = dependencies.project();
+    const request = overviewRequest;
+    if (!current || !overview.value || selectedStep.value || dependencies.viewMode.value !== 'orchestration') return;
+    try {
+      const triggers = parseTriggerList(
+        await clientFor(current).orchestrationTriggers(current.id, 'list', {}, dependencies.personId()),
+      );
+      // A newer full read (or a project switch) since then wins.
+      const shown = shownOverview();
+      if (request === overviewRequest && shown) overview.value = { ...shown, triggers };
+    } catch {
+      // The row keeps what it last read; the next overview read tries again.
+    }
   }
 
   const openDecisions = () => decisionsDialog.value;
@@ -1589,7 +1594,13 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     change: (state: OrchestrationTriggerDialogState) => Partial<OrchestrationTriggerDialogState>,
   ) {
     const state = triggerDialog.value;
-    if (state?.session === session) triggerDialog.value = { ...state, ...change(state) };
+    if (state?.session !== session) return;
+    const next = { ...state, ...change(state) };
+    triggerDialog.value = next;
+    // HS2-X3FZJE: the list the dialog just read is the overview's Triggers row too, with no read of its own.
+    const shown = shownOverview();
+    if (next.triggers !== state.triggers && !next.loading && shown)
+      overview.value = { ...shown, triggers: next.triggers };
   }
 
   /** HS2-KXKA7X: Triggers…: read this machine's triggers and the templates a setup offers. */
@@ -1670,6 +1681,12 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     void reviewTrigger();
   }
 
+  /** HS2-40GPZK: the setup's fixed values, typed by the chosen template's inputs. */
+  function triggerFixedInputs(state: OrchestrationTriggerDialogState) {
+    const template = state.templates.find((candidate) => candidate.template_id === state.form.template);
+    return fixedInputsToSend(template, state.fixedInputs);
+  }
+
   /** The review of the selected trigger, or of the setup as it is. Writes nothing. */
   async function reviewTrigger(again = false) {
     const current = dependencies.project(),
@@ -1677,7 +1694,7 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     if (!current || !state) return;
     const body =
       state.mode === 'setup'
-        ? { trigger: formToSpec(state.form, state.fixedInputs) }
+        ? { trigger: formToSpec(state.form, triggerFixedInputs(state)) }
         : state.selected
           ? { trigger_id: state.selected }
           : undefined;
@@ -1734,12 +1751,8 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
       editing: view.trigger_id,
       detailActive: true,
       form: formFromTrigger(view),
-      fixedInputs: Object.fromEntries(
-        Object.entries(view.action.template?.inputs ?? {}).map(([key, value]) => [
-          key,
-          typeof value === 'string' ? value : JSON.stringify(value),
-        ]),
-      ),
+      // HS2-40GPZK: saved fixed values keep their type, so a boolean or a number reads back into its control.
+      fixedInputs: { ...view.action.template?.inputs },
       review: undefined,
       failure: undefined,
     };
@@ -1757,7 +1770,10 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
       const key = field.slice('input-'.length);
       triggerDialog.value = {
         ...state,
-        fixedInputs: { ...state.fixedInputs, [key]: typeof value === 'string' ? value : '' },
+        fixedInputs: {
+          ...state.fixedInputs,
+          [key]: typeof value === 'string' || typeof value === 'boolean' ? value : '',
+        },
         failure: undefined,
       };
     } else {
@@ -1791,7 +1807,7 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
         await clientFor(current).orchestrationTriggers(
           current.id,
           'set',
-          formToRequest(state.form, state.editing, state.fixedInputs),
+          formToRequest(state.form, state.editing, triggerFixedInputs(state)),
           dependencies.personId(),
         ),
       );
@@ -2035,6 +2051,8 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     sessionsChanged: (projectId: string) => {
       const current = dependencies.project();
       if (current?.id === projectId && streamKey) void refreshPlanning(current, generation);
+      // HS2-X3FZJE: and the overview's Triggers row.
+      if (current?.id === projectId && streamKey) void refreshOverviewTriggers();
       // HS2-KXKA7X: a trigger fired or changed; the open Triggers… dialog reads them again.
       if (current?.id === projectId && triggerDialog.value && triggerDialog.value.mode === 'detail')
         void rereadTriggers();

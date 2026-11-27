@@ -1,4 +1,4 @@
-import { expect, type Page, test } from '@playwright/test';
+import { expect, type Locator, type Page, test } from '@playwright/test';
 
 import { openMockedProject } from './open-mocked-project';
 import { resizeTo, syntheticTool } from './orchestration-real-fixtures';
@@ -104,8 +104,20 @@ const capture = async (page: Page, name: string) => {
   await page.screenshot({ path: test.info().outputPath(`triggers-impl-${name}.png`), animations: 'disabled' });
 };
 
-/** Wide, medium, phone and wide again, light and dark. */
-async function captureSizes(page: Page, name: string, phone: () => Promise<void>) {
+/**
+ * Wide, medium, phone and wide again, light and dark. HS2-7PEADD: the return to 1440 after the phone width is
+ * captured too (`<name>-1440-again-*`), once `wide` confirms the wide layout came back.
+ */
+async function captureSizes(
+  page: Page,
+  name: string,
+  phone: () => Promise<void>,
+  wide: () => Promise<void> = async () => {
+    const dialog = dialogOf(page);
+    // Back at full width the dialog shows its list beside the detail again, not the phone's drill-down.
+    if (await dialog.isVisible()) await expect(dialog.getByRole('button', { name: 'New Trigger…' })).toBeVisible();
+  },
+) {
   for (const [width, height] of [
     [1440, 900],
     [1100, 800],
@@ -123,6 +135,11 @@ async function captureSizes(page: Page, name: string, phone: () => Promise<void>
   await capture(page, `${name}-390-dark`);
   await page.emulateMedia({ colorScheme: 'light' });
   await resizeTo(page, { width: 1440, height: 900 });
+  await wide();
+  await capture(page, `${name}-1440-again-light`);
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await capture(page, `${name}-1440-again-dark`);
+  await page.emulateMedia({ colorScheme: 'light' });
 }
 
 /** A toast over the footer would take a click meant for Pause or Resume: wait until each one is gone. */
@@ -276,6 +293,239 @@ test('HS2-KXKA7X Triggers… sets up a dry run, records a delivery, turns it on,
     // Open <goal> opens the goal ticket of the run the skip waits for, and closes the dialog.
     await goal.click();
     await expect(dialog).toBeHidden();
+  } finally {
+    await server.stop(page);
+  }
+});
+
+type Recurrence = Record<string, unknown>;
+async function savedSchedule(server: Server) {
+  const listed = await send(server, 'POST', `/checkouts/${server.checkoutId}/orchestration/triggers/list`, {
+    actor: person,
+  });
+  const [trigger] = listed.triggers as Array<{
+    trigger_id: string;
+    source: { kind: string; schedule: { local_time: string; time_zone: string; recurrence: Recurrence } };
+  }>;
+  return trigger.source.schedule;
+}
+
+/**
+ * Pick one option of a Kerf select (its listbox opens in the page's top layer) until the select shows it. The live
+ * review re-renders the setup when it answers, which closes a list opened just before (HS2-CJYD5A): open it again.
+ */
+async function pick(page: Page, select: Locator, option: string) {
+  const choice = page.getByRole('option', { name: option, exact: true });
+  await expect(async () => {
+    if (!(await choice.isVisible())) await select.click();
+    await choice.click({ timeout: 2_000 });
+    await expect(select).toContainText(option, { timeout: 2_000 });
+  }).toPass({ timeout: 30_000 });
+}
+
+async function choose(page: Page, scope: Locator, label: string, option: string) {
+  await pick(page, scope.getByRole('combobox', { name: label, exact: true }), option);
+}
+
+test('HS2-SEEMXR Triggers… schedules with every recurrence field the command schedule has, and Edit… reads them back', async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  const server = await realTicketServer({ seed: ({ env }) => syntheticTool(env.HOTSHEET_HOME!) });
+  try {
+    await orchestrateSelf(server);
+    await resizeTo(page, { width: 1440, height: 900 });
+    await openProject(page, server);
+    const toolbar = page.locator('[data-orchestration-toolbar="no_plan"]');
+    await toolbar.getByRole('button', { name: 'Triggers…' }).click();
+    const dialog = dialogOf(page);
+    await dialog.getByRole('button', { name: 'New Trigger…' }).click();
+    await dialog.getByLabel('Name', { exact: true }).fill('Weekday start');
+    await dialog.getByRole('radio', { name: 'Start orchestration' }).check();
+    // Weekly on Monday, Wednesday and Friday, ending in March, skipping Christmas, at 06:30 UTC.
+    await choose(page, dialog, 'Repeats', 'Weekly');
+    // Each pick re-renders the setup from the controller's form, which may close the list: `pick` opens it again.
+    const weekdays = dialog.getByRole('combobox', { name: 'Weekdays', exact: true });
+    for (const day of ['Wednesday', 'Friday']) await pick(page, weekdays, day);
+    if (await page.getByRole('listbox').isVisible()) await page.keyboard.press('Escape');
+    await expect(dialog).toBeVisible();
+    await dialog.getByLabel('Ends On', { exact: true }).fill('2027-03-01');
+    await dialog.getByLabel('Exclude Dates', { exact: true }).fill('2026-12-25');
+    await dialog.getByLabel('Time (24-hour)', { exact: true }).fill('06:30');
+    await choose(page, dialog, 'Time Zone', 'UTC');
+    await captureSizes(page, 'schedule-setup', async () => {
+      await expect(dialog.locator('[data-trigger-setup="new"]')).toBeVisible();
+    });
+    const save = dialog.getByRole('button', { name: 'Save as Dry Run' });
+    await expect(save).toBeEnabled();
+    await save.click();
+    await expect(dialog.getByRole('heading', { name: 'Weekday start' })).toBeVisible();
+    let schedule = await savedSchedule(server);
+    expect(schedule).toMatchObject({ local_time: '06:30', time_zone: 'UTC' });
+    expect(schedule.recurrence).toMatchObject({
+      kind: 'weekly',
+      every: 1,
+      weekdays: [1, 3, 5],
+      end_date: '2027-03-01',
+      exclude_dates: ['2026-12-25'],
+    });
+
+    // Edit… reads every field back into the shared controls.
+    await dialog.getByRole('button', { name: 'Edit…' }).click();
+    await expect(dialog.getByRole('combobox', { name: 'Repeats', exact: true })).toContainText('Weekly');
+    await expect(dialog.getByRole('combobox', { name: 'Weekdays', exact: true })).toContainText('Friday');
+    await expect(dialog.getByLabel('Ends On', { exact: true })).toHaveValue('2027-03-01');
+    await expect(dialog.getByLabel('Exclude Dates', { exact: true })).toHaveValue('2026-12-25');
+    // One time, then saved: nothing of the weekly rule is carried over.
+    await dialog.getByRole('radio', { name: 'One Time' }).check();
+    await dialog.getByLabel('Date', { exact: true }).fill('2027-01-15');
+    await dialog.getByRole('button', { name: 'Save Changes' }).click();
+    await expect(dialog.getByRole('button', { name: 'Edit…' })).toBeVisible();
+    schedule = await savedSchedule(server);
+    expect(schedule.recurrence).toEqual({ kind: 'once', date: '2027-01-15' });
+
+    // Edit again: monthly on the last day, which the command schedule offers too.
+    await dialog.getByRole('button', { name: 'Edit…' }).click();
+    await expect(dialog.getByRole('radio', { name: 'One Time' })).toBeChecked();
+    await expect(dialog.getByLabel('Date', { exact: true })).toHaveValue('2027-01-15');
+    await dialog.getByRole('radio', { name: 'Repeating' }).check();
+    await choose(page, dialog, 'Repeats', 'Monthly');
+    await choose(page, dialog, 'On', 'Last Day');
+    await dialog.getByRole('button', { name: 'Save Changes' }).click();
+    await expect(dialog.getByRole('button', { name: 'Edit…' })).toBeVisible();
+    schedule = await savedSchedule(server);
+    expect(schedule.recurrence).toMatchObject({ kind: 'monthly', on: { kind: 'last_day' } });
+    await dialog.getByRole('button', { name: 'Edit…' }).click();
+    await expect(dialog.getByRole('combobox', { name: 'On', exact: true })).toContainText('Last Day');
+  } finally {
+    await server.stop(page);
+  }
+});
+
+test('HS2-40GPZK Triggers… gives fixed template inputs Use Template…’s typed controls, and Edit… reads them back', async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  const server = await realTicketServer({ seed: ({ env }) => syntheticTool(env.HOTSHEET_HOME!) });
+  try {
+    await orchestrateSelf(server);
+    await send(server, 'POST', `/checkouts/${server.checkoutId}/orchestration/templates/set`, {
+      templates: [
+        {
+          name: 'Typed repair',
+          inputs: [
+            { key: 'feature', label: 'Feature', kind: 'text', required: true },
+            { key: 'project', label: 'Project', kind: 'target', default: TARGET },
+            { key: 'urgent', label: 'Urgent', kind: 'boolean' },
+            { key: 'size', label: 'Size', kind: 'choice', choices: ['small', 'large'] },
+            { key: 'attempts', label: 'Attempts', kind: 'number' },
+          ],
+          goal: { title: '{{feature}} in Self' },
+          steps: [{ key: 'fix', target: '{{project}}', title: 'Repair {{feature}}' }],
+        },
+      ],
+      actor: person,
+    });
+    await resizeTo(page, { width: 1440, height: 900 });
+    await openProject(page, server);
+    const toolbar = page.locator('[data-orchestration-toolbar="no_plan"]');
+    await toolbar.getByRole('button', { name: 'Triggers…' }).click();
+    const dialog = dialogOf(page);
+    await dialog.getByRole('button', { name: 'New Trigger…' }).click();
+    await dialog.getByLabel('Name', { exact: true }).fill('Typed repair');
+    await choose(page, dialog, 'Template', 'Typed repair');
+    const input = (key: string) => dialog.locator(`[data-trigger-input="${key}"]`);
+    await input('feature').getByLabel('Value').fill('Nightly');
+    // A project input offers the declared projects, after its template default.
+    await pick(page, input('project').getByRole('combobox', { name: 'Value' }), 'Self');
+    // A boolean is a checkbox, a choice its choices, a number a number field.
+    await input('urgent').getByRole('checkbox', { name: 'Value' }).check();
+    await pick(page, input('size').getByRole('combobox', { name: 'Value' }), 'large');
+    await input('attempts').getByLabel('Value').fill('3');
+    await expect(input('attempts').getByLabel('Value')).toHaveAttribute('type', 'number');
+    // Each capture shows the typed controls, wherever the setup scrolled to.
+    const typed = async () => {
+      await input('urgent').scrollIntoViewIfNeeded();
+      await expect(input('urgent')).toBeInViewport();
+    };
+    await typed();
+    await captureSizes(page, 'typed-inputs', typed, typed);
+    await dialog.getByRole('button', { name: 'Save as Dry Run' }).click();
+    await expect(dialog.getByRole('heading', { name: 'Typed repair' })).toBeVisible();
+    const inputs = async () => {
+      const listed = await send(server, 'POST', `/checkouts/${server.checkoutId}/orchestration/triggers/list`, {
+        actor: person,
+      });
+      const [trigger] = listed.triggers as Array<{ action: { template?: { inputs?: Record<string, unknown> } } }>;
+      return trigger.action.template?.inputs;
+    };
+    expect(await inputs()).toEqual({ feature: 'Nightly', project: TARGET, urgent: true, size: 'large', attempts: 3 });
+
+    // Edit… reads each typed value back into its control; back to the default and unchecked, then saved.
+    await dialog.getByRole('button', { name: 'Edit…' }).click();
+    await expect(input('urgent').getByRole('checkbox', { name: 'Value' })).toBeChecked();
+    await expect(input('size').getByRole('combobox', { name: 'Value' })).toContainText('large');
+    await expect(input('project').getByRole('combobox', { name: 'Value' })).toContainText('Self');
+    await expect(input('attempts').getByLabel('Value')).toHaveValue('3');
+    await pick(page, input('project').getByRole('combobox', { name: 'Value' }), 'Default: Self');
+    await input('urgent').getByRole('checkbox', { name: 'Value' }).uncheck();
+    await input('attempts').getByLabel('Value').fill('');
+    await dialog.getByRole('button', { name: 'Save Changes' }).click();
+    await expect(dialog.getByRole('button', { name: 'Edit…' })).toBeVisible();
+    expect(await inputs()).toEqual({ feature: 'Nightly', urgent: false, size: 'large' });
+  } finally {
+    await server.stop(page);
+  }
+});
+
+test('HS2-X3FZJE the overview inspector’s Triggers row counts triggers, names the next run and opens Triggers…', async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  const server = await realTicketServer({ seed: ({ env }) => syntheticTool(env.HOTSHEET_HOME!) });
+  try {
+    await orchestrateSelf(server);
+    await resizeTo(page, { width: 1440, height: 900 });
+    await openProject(page, server);
+    const overview = page.locator('[data-orchestration-overview]');
+    // The Scheduler section's Triggers row (a term and its value).
+    const row = overview.locator('[data-orchestration-section="Scheduler"]');
+    await expect(row.getByRole('term').filter({ hasText: /^Triggers$/ })).toBeVisible();
+    await expect(row).toContainText('None yet');
+    // The row's Triggers… opens the dialog; a schedule saved there shows in the row once the dialog closes.
+    await row.getByRole('button', { name: 'Triggers…' }).click();
+    const dialog = dialogOf(page);
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: 'New Trigger…' }).click();
+    await dialog.getByLabel('Name', { exact: true }).fill('Morning start');
+    await dialog.getByRole('radio', { name: 'Start orchestration' }).check();
+    await dialog.getByRole('button', { name: 'Save as Dry Run' }).click();
+    await expect(dialog.getByRole('heading', { name: 'Morning start' })).toBeVisible();
+    await dialog.locator('[data-dialog-close]').first().click();
+    await expect(dialog).toBeHidden();
+    await expect(row).toContainText(/1 dry run · next .+, Morning start/);
+    await dismissToasts(page);
+    await row.scrollIntoViewIfNeeded();
+    await captureSizes(
+      page,
+      'overview-row',
+      async () => {
+        // On a phone the inspector is not beside the view; the capture shows the view as a person sees it.
+        await expect(page.locator('body')).toBeVisible();
+      },
+      async () => {
+        await row.scrollIntoViewIfNeeded();
+        await expect(row).toBeInViewport();
+      },
+    );
+    // Paused: counted, with no next run.
+    await row.getByRole('button', { name: 'Triggers…' }).click();
+    await dismissToasts(page);
+    await dialog.getByRole('button', { name: 'Pause' }).click();
+    await expect(dialog.locator('[data-trigger-badge="paused"]')).toBeVisible();
+    await dialog.locator('[data-dialog-close]').first().click();
+    await expect(row).toContainText('1 paused');
+    await expect(row).not.toContainText(' · next ');
   } finally {
     await server.stop(page);
   }

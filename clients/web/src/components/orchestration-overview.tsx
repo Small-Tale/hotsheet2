@@ -4,7 +4,7 @@ import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Row } from '@kerfjs/ui/row';
 import { Text } from '@kerfjs/ui/text';
 import { ValueTable, ValueTableRow } from '@kerfjs/ui/value-table';
-import { History } from 'lucide';
+import { History, Zap } from 'lucide';
 
 import { ORCHESTRATION_ACTIONS } from '../interaction-attrs/orchestration';
 import { progressRows, type ProgressSummaryView, projectRows } from '../orchestration-progress';
@@ -19,6 +19,7 @@ import {
 } from '../orchestration-scheduler';
 import type { OrchestrationTimeline } from '../orchestration-timeline';
 import type { ClockFormat } from '../orchestration-timeline-board';
+import { triggerOverviewText, type TriggerView } from '../orchestration-triggers';
 import { OrchestrationInspectorSection } from './orchestration-inspector-section';
 
 /** What the overview read for the project; each part is absent until read. */
@@ -33,6 +34,8 @@ export interface OrchestrationOverviewData {
   contention?: ResourceContentionView[];
   /** HS2-65AD6J: `scheduler plan`'s integrator of each project and the role sessions it does not start. */
   roles?: RoleStandingView[];
+  /** HS2-X3FZJE: this machine's triggers of the project, for the Triggers row. */
+  triggers?: readonly TriggerView[];
   /** A read failed; the parts that were read still show. */
   error?: string;
 }
@@ -63,6 +66,7 @@ const placementText = (timeline: OrchestrationTimeline) =>
  * Decisions…, which opens the whole log in a dialog. HS2-5GRXFN: each contended resource and who waits.
  * HS2-XJEH08: progress and cost, overall and per project; unknown is never zero and partial is labelled.
  * HS2-65AD6J: each project's integrator and any coordination session the scheduler does not start, and why.
+ * HS2-X3FZJE: the Triggers row (count by state and the next scheduled run) with Triggers….
  */
 export function OrchestrationOverview({ timeline, overview, projectName, clock }: OrchestrationOverviewProps) {
   const decisions = overview?.decisions,
@@ -107,7 +111,19 @@ export function OrchestrationOverview({ timeline, overview, projectName, clock }
             label="Last pass"
             value={lastPass ?? (decisions ? 'No pass logged yet' : 'Reading the decision log…')}
           />
+          <ValueTableRow label="Triggers" value={triggerOverviewText(overview?.triggers)} />
         </ValueTable>
+        {/* HS2-X3FZJE: the Triggers row opens Triggers…, as the header's button does. */}
+        <Row gap="xs" wrap controlInsets="rl">
+          <Button
+            size="compact"
+            action={ORCHESTRATION_ACTIONS.openOrchestrationTriggers.value}
+            icon={<LucideIcon size="s" icon={Zap} name="zap" />}
+            rootAttributes={{ 'data-overview-triggers': 'true' }}
+          >
+            Triggers…
+          </Button>
+        </Row>
       </OrchestrationInspectorSection>
       <OrchestrationInspectorSection
         label="Coordination Sessions"

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  fixedInputsToSend,
   formFromTrigger,
   formProblem,
   formToRequest,
@@ -22,6 +23,7 @@ import {
   statusRows,
   type TriggerForm,
   type TriggerHistoryEntry,
+  triggerOverviewText,
   triggerProblemText,
   type TriggerView,
   warningText,
@@ -423,6 +425,111 @@ describe('HS2-KXKA7X the setup form', () => {
         recurrence: { kind: 'hourly', start_date: '2026-11-01', every: 4 },
       },
     });
+  });
+
+  it('HS2-SEEMXR round-trips every recurrence the command-schedule dialog offers through Edit…', () => {
+    const recurrences = [
+      { kind: 'once', date: '2026-12-24' },
+      { kind: 'selected_dates', dates: ['2026-12-01', '2026-12-15'] },
+      {
+        kind: 'weekly',
+        start_date: '2026-11-02',
+        every: 2,
+        weekdays: [1, 3, 5],
+        end_date: '2027-03-01',
+        count: 10,
+        include_dates: ['2026-11-28'],
+        exclude_dates: ['2026-12-25', '2027-01-01'],
+      },
+      {
+        kind: 'monthly',
+        start_date: '2026-11-01',
+        every: 1,
+        on: { kind: 'weekday_ordinal', ordinal: -1, weekday: 5 },
+      },
+      { kind: 'monthly', start_date: '2026-11-01', every: 3, on: { kind: 'last_day' } },
+      { kind: 'yearly', start_date: '2026-01-01', every: 1, month: 4, on: { kind: 'day_of_month', day: 15 } },
+    ] as const;
+    for (const recurrence of recurrences) {
+      const schedule = { time_zone: 'Europe/Paris', local_time: '07:30', recurrence };
+      const form = formFromTrigger(parseTriggerView(rawTrigger({ source: { kind: 'schedule', schedule } }))!);
+      expect(form.when).toBe('schedule');
+      expect(formToSpec(form).source, recurrence.kind).toEqual({ kind: 'schedule', schedule });
+    }
+  });
+
+  it('HS2-40GPZK sends fixed values typed as Use Template… sends them, and Edit… keeps their types', () => {
+    const template = {
+      template_id: 'T1',
+      name: 'Repair',
+      description: '',
+      state: 'active' as const,
+      version: 1,
+      goal_title: 'Repair',
+      steps: [],
+      inputs: [
+        { key: 'project', label: 'Project', kind: 'target' as const, required: true, default: 'api', choices: [] },
+        { key: 'urgent', label: 'Urgent', kind: 'boolean' as const, required: false, choices: [] },
+        { key: 'attempts', label: 'Attempts', kind: 'number' as const, required: false, choices: [] },
+        { key: 'size', label: 'Size', kind: 'choice' as const, required: false, choices: ['small', 'large'] },
+        { key: 'note', label: 'Note', kind: 'text' as const, required: false, choices: [] },
+      ],
+    };
+    const fixed = { project: 'web', urgent: false, attempts: '3', size: 'large', note: '  look  ', commit: '' };
+    expect(fixedInputsToSend(template, fixed)).toEqual({
+      project: 'web',
+      urgent: false,
+      attempts: 3,
+      size: 'large',
+      note: 'look',
+    });
+    // Left at the template default: nothing is sent for it.
+    expect(fixedInputsToSend(template, { project: '', urgent: undefined })).toEqual({});
+    // A number that does not read as one goes as typed, so the server names it.
+    expect(fixedInputsToSend(template, { attempts: 'many' })).toEqual({ attempts: 'many' });
+    // Without the template (not read yet), values go as entered.
+    expect(fixedInputsToSend(undefined, { urgent: true, note: '', size: 'small' })).toEqual({
+      urgent: true,
+      size: 'small',
+    });
+    const form = { ...newTriggerForm(), name: 'Repair', template: 'T1', tool: 'claude' };
+    const spec = formToSpec(form, fixedInputsToSend(template, fixed));
+    expect(spec.action.template?.inputs).toEqual({
+      project: 'web',
+      urgent: false,
+      attempts: 3,
+      size: 'large',
+      note: 'look',
+    });
+    const view = parseTriggerView({ ...rawTrigger(), ...spec })!;
+    expect(view.action.template?.inputs).toEqual(spec.action.template?.inputs);
+    expect(formToSpec(formFromTrigger(view), view.action.template?.inputs ?? {})).toEqual(spec);
+  });
+
+  it('HS2-X3FZJE words the overview Triggers row: counts by state and the earliest next run', () => {
+    const now = Date.UTC(2026, 10, 26, 12, 0);
+    const view = (overrides: Record<string, unknown>) => parseTriggerView(rawTrigger(overrides))!;
+    expect(triggerOverviewText(undefined, now, 'UTC')).toBe('Reading the triggers…');
+    expect(triggerOverviewText([], now, 'UTC')).toBe('None yet');
+    const triggers = [
+      view({ trigger_id: 'A', name: 'Nightly', state: 'on', next_runs_ms: [now + 3_600_000 * 14] }),
+      view({
+        trigger_id: 'B',
+        name: 'Hourly bump',
+        state: 'dry_run',
+        next_runs_ms: [now + 1_800_000, now + 5_400_000],
+      }),
+      view({ trigger_id: 'C', state: 'paused' }),
+      view({ trigger_id: 'D', state: 'needs_review' }),
+      view({ trigger_id: 'E', state: 'on' }),
+    ];
+    expect(triggerOverviewText(triggers, now, 'UTC')).toBe(
+      '2 on, 1 dry run, 1 paused, 1 need review · next Today 12:30, Hourly bump',
+    );
+    // Nothing scheduled: the counts alone; refilled after empty, the next run comes back.
+    expect(triggerOverviewText(triggers.slice(2), now, 'UTC')).toBe('1 on, 1 paused, 1 need review');
+    expect(triggerOverviewText([], now, 'UTC')).toBe('None yet');
+    expect(triggerOverviewText(triggers.slice(0, 1), now, 'UTC')).toBe('1 on · next Nov 27 02:00, Nightly');
   });
 
   it('names what keeps Save disabled', () => {

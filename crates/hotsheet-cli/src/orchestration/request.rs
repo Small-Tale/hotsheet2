@@ -765,7 +765,14 @@ impl OrchestrationRuntime {
             ("GET", ["checkouts", checkout, "target-branch-head"]) => {
                 let branch = query_text(path, "branch")?
                     .ok_or(OrchestrationError::Invalid("branch is required"))?;
-                value(self.hosted_branch_head(checkout, &branch)?)
+                // HS2-W8S3TV: with the head the caller knows, a long poll for a move.
+                let known = query_text(path, "known")?;
+                value(self.hosted_branch_head(
+                    checkout,
+                    &branch,
+                    known.as_deref(),
+                    query_number(path, "wait_ms", 0)?,
+                )?)
             }
             // HS2-YYNW9F: the profiles this checkout offers, checked.
             ("GET", ["checkouts", checkout, "target-validation-output", digest]) => {

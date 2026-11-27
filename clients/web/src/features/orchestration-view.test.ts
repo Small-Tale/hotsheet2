@@ -1245,12 +1245,17 @@ describe('Triggers… through the view (HS2-KXKA7X)', () => {
     running: false,
   };
 
-  function setup(options: { confirm?: boolean } = {}) {
+  function setup(options: { confirm?: boolean; overview?: boolean } = {}) {
     const project = { id: 'orch', name: 'Launch', root: '/synthetic/orch', apiPath: '/api/orch' } as Project;
     const calls: Array<[string, Record<string, unknown>]> = [],
       toasts: string[] = [];
     let triggers: Array<Record<string, unknown>> = [saved];
+    // HS2-X3FZJE: the overview's other reads answer (refused), so the overview settles with its Triggers row.
+    const refused = () => Promise.reject(new Error('refused'));
     const known: Record<string, unknown> = {
+      ...(options.overview
+        ? { orchestrationDecisions: refused, orchestrationSchedulerPlan: refused, orchestrationSummary: refused }
+        : {}),
       orchestrationPlanning: () => Promise.resolve({}),
       orchestrationTimeline: (_owner: string, after?: string) =>
         after ? new Promise<never>(() => undefined) : Promise.resolve(demoTimeline('proposed')),
@@ -1309,8 +1314,37 @@ describe('Triggers… through the view (HS2-KXKA7X)', () => {
       orchestrationProject: () => true,
     });
     const operations = () => calls.map(([operation]) => operation);
-    return { controller, calls, toasts, operations };
+    const replace = (next: Array<Record<string, unknown>>) => {
+      triggers = next;
+    };
+    return { controller, calls, toasts, operations, replace };
   }
+
+  it('HS2-X3FZJE reads the triggers with the overview and again on an orchestration change', async () => {
+    const t = setup({ overview: true });
+    await vi.waitFor(() => {
+      expect(t.controller.overview.value?.triggers?.map((trigger) => trigger.trigger_id)).toEqual(['TR1']);
+    });
+    expect(t.controller.overview.value?.error).toBe('Some of the scheduler’s records could not be read.');
+    // Emptied, then refilled: the row follows each change.
+    for (const next of [[], [saved, { ...saved, trigger_id: 'TR2', state: 'on' }]]) {
+      t.replace(next);
+      t.controller.sessionsChanged('orch');
+      await vi.waitFor(() => {
+        expect(t.controller.overview.value?.triggers).toHaveLength(next.length);
+      });
+    }
+    // The list Triggers… reads is the row's too.
+    t.replace([saved]);
+    await t.controller.openTriggers();
+    expect(t.controller.overview.value?.triggers?.map((trigger) => trigger.trigger_id)).toEqual(['TR1']);
+    t.controller.closeTriggers();
+    // Another project's change reads nothing.
+    const lists = t.operations().filter((operation) => operation === 'list').length;
+    t.controller.sessionsChanged('elsewhere');
+    expect(t.operations().filter((operation) => operation === 'list')).toHaveLength(lists);
+    t.controller.dispose();
+  });
 
   it('opens on the first trigger with its review, sets one up as a dry run, turns it on and pauses it', async () => {
     const t = setup();
@@ -1436,7 +1470,16 @@ describe('Triggers… through the view (HS2-KXKA7X)', () => {
       repeats: 'hourly',
       every: '1',
     });
-    expect(editTriggerForm(form, 'schedule-weekday', '5').schedule.weekdays).toEqual([5]);
+    // HS2-SEEMXR: every recurrence field the command-schedule dialog has, by its draft key.
+    expect(editTriggerForm(form, 'schedule-weekdays', ['5', '2']).schedule.weekdays).toEqual([2, 5]);
+    expect(editTriggerForm(form, 'schedule-scheduleType', 'once').schedule.scheduleType).toBe('once');
+    expect(editTriggerForm(form, 'schedule-repeats', 'selected_dates').schedule.repeats).toBe('selected_dates');
+    expect(editTriggerForm(form, 'schedule-on', 'weekday_ordinal').schedule.on).toBe('weekday_ordinal');
+    expect(editTriggerForm(form, 'schedule-endDate', '2027-01-31').schedule.endDate).toBe('2027-01-31');
+    expect(editTriggerForm(form, 'schedule-count', '12').schedule.count).toBe('12');
+    expect(editTriggerForm(form, 'schedule-excludeDates', '2026-12-25').schedule.excludeDates).toBe('2026-12-25');
+    expect(editTriggerForm(form, 'schedule-timeZone', 'Asia/Tokyo').schedule.timeZone).toBe('Asia/Tokyo');
+    expect(editTriggerForm(form, 'schedule-paused', true).schedule).toEqual(form.schedule);
     expect(editTriggerForm(form, 'form-placement', 'none').placement).toBe('');
     expect(editTriggerForm(form, 'form-overlap', 'queue_latest').overlap).toBe('queue_latest');
     expect(editTriggerForm(form, 'form-start', 'paused').start).toBe('paused');

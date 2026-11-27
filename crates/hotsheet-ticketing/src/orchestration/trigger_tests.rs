@@ -515,6 +515,7 @@ fn hs2_kxka7x_arming_restarts_every_cursor_so_nothing_is_backfilled() {
         schedule_after_ms: Some(1),
         run_events: Some(4),
         branch_commit: Some("abc".into()),
+        branch_head: Some("def".into()),
     };
     t.queued = Some(delivery("schedule:x"));
     t.warning = Some(TriggerWarning {
@@ -530,6 +531,7 @@ fn hs2_kxka7x_arming_restarts_every_cursor_so_nothing_is_backfilled() {
             schedule_after_ms: Some(500),
             run_events: Some(9),
             branch_commit: None,
+            branch_head: None,
         }
     );
     assert!(t.queued.is_none() && t.warning.is_none());

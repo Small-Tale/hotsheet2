@@ -30,11 +30,11 @@ import {
   stepText,
   type StepTicketChoice,
   type TemplateApply,
-  type TemplateInput,
   type TemplatePreview,
   unverifiedProfilesText,
 } from '../orchestration-templates';
 import { OrchestrationInspectorSection } from './orchestration-inspector-section';
+import { TemplateInputField } from './template-input-field';
 
 /** The open Use Template… dialog (HS2-A4RVYA). */
 export interface OrchestrationTemplateDialogState {
@@ -80,75 +80,6 @@ export interface OrchestrationTemplateDialogProps {
   embedded?: boolean;
 }
 
-const PRIORITY_CHOICES = ['highest', 'high', 'default', 'low', 'lowest'].map((value) => ({
-  value,
-  label: value.charAt(0).toUpperCase() + value.slice(1),
-}));
-
-function InputField({
-  input,
-  value,
-  projects,
-  session,
-}: {
-  input: TemplateInput;
-  value: unknown;
-  projects: OrchestrationTemplateDialogState['projects'];
-  session: number;
-}) {
-  const name = `template-input-${input.key}`,
-    label = input.label,
-    rootAttributes = { 'data-key': `${name}-${session}`, 'data-template-input': input.key };
-  switch (input.kind) {
-    case 'boolean':
-      return (
-        <Checkbox
-          name={name}
-          label={input.label}
-          checked={value === true}
-          hint={input.hint}
-          rootAttributes={rootAttributes}
-        />
-      );
-    case 'choice':
-    case 'priority':
-    case 'target': {
-      const choices =
-        input.kind === 'choice'
-          ? input.choices.map((choice) => ({ value: choice, label: choice }))
-          : input.kind === 'priority'
-            ? PRIORITY_CHOICES
-            : projects.map((project) => ({ value: project.target_id, label: project.label }));
-      return (
-        <Select
-          name={name}
-          label={label}
-          value={typeof value === 'string' ? value : ''}
-          choices={choices}
-          placeholderText={input.kind === 'target' ? 'Choose a project' : 'Choose'}
-          hint={input.hint}
-        />
-      );
-    }
-    case 'text':
-    case 'number':
-    case 'tool':
-      return (
-        <TextField
-          name={name}
-          label={label}
-          value={typeof value === 'string' || typeof value === 'number' ? String(value) : ''}
-          type={input.kind === 'number' ? 'number' : 'text'}
-          hint={input.hint}
-          required={input.required}
-          rootAttributes={rootAttributes}
-        />
-      );
-    default:
-      return input.kind satisfies never;
-  }
-}
-
 function TemplateDetail({ state, template }: { state: OrchestrationTemplateDialogState; template: PlanTemplate }) {
   const preview = state.preview?.template_id === template.template_id ? state.preview : undefined;
   const problems = applyProblems(template, state.inputs, preview, new Set(state.changed));
@@ -179,11 +110,15 @@ function TemplateDetail({ state, template }: { state: OrchestrationTemplateDialo
         <OrchestrationInspectorSection label="Inputs">
           <List gap="m" controlInsets="rl">
             {template.inputs.map((input) => (
-              <InputField
+              <TemplateInputField
                 input={input}
                 value={state.inputs[input.key]}
                 projects={state.projects}
-                session={state.session}
+                name={`template-input-${input.key}`}
+                rootAttributes={{
+                  'data-key': `template-input-${input.key}-${state.session}`,
+                  'data-template-input': input.key,
+                }}
               />
             ))}
           </List>

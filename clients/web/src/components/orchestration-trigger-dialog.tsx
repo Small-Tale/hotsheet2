@@ -17,9 +17,8 @@ import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ValueTable, ValueTableRow } from '@kerfjs/ui/value-table';
 import { CalendarClock, GitCommitHorizontal, Pause, Play, Plus, Zap } from 'lucide';
 
-import { everyBounds, isSubDay } from '../command-schedule-form';
 import { ORCHESTRATION_ACTIONS } from '../interaction-attrs/orchestration';
-import type { PlanTemplate } from '../orchestration-templates';
+import type { PlanTemplate, TemplateInput } from '../orchestration-templates';
 import {
   EVENT_FIELD_LABELS,
   EVENT_LABELS,
@@ -42,6 +41,8 @@ import {
   warningText,
 } from '../orchestration-triggers';
 import { OrchestrationInspectorSection } from './orchestration-inspector-section';
+import { ScheduleRecurrenceFields } from './schedule-recurrence-fields';
+import { TemplateInputField } from './template-input-field';
 
 /** The open Triggers… dialog (HS2-KXKA7X). */
 export interface OrchestrationTriggerDialogState {
@@ -60,7 +61,7 @@ export interface OrchestrationTriggerDialogState {
   detailActive: boolean;
   form: TriggerForm;
   /** The template inputs given a fixed value, by key. */
-  fixedInputs: Readonly<Partial<Record<string, string>>>;
+  fixedInputs: Readonly<Partial<Record<string, unknown>>>;
   /** The checked-in templates the setup offers. */
   templates: readonly PlanTemplate[];
   /** The declared projects, for names and the project choice. */
@@ -86,24 +87,7 @@ export interface OrchestrationTriggerDialogProps {
   embedded?: boolean;
 }
 
-const REPEATS = [
-  { value: 'minutely', label: 'Every Few Minutes' },
-  { value: 'hourly', label: 'Hourly' },
-  { value: 'daily', label: 'Daily' },
-  { value: 'weekly', label: 'Weekly' },
-  { value: 'monthly', label: 'Monthly' },
-  { value: 'yearly', label: 'Yearly' },
-];
-const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((label, index) => ({
-  value: String(index + 1),
-  label,
-}));
 const EVENTS = (Object.keys(EVENT_LABELS) as TriggerEvent[]).map((value) => ({ value, label: EVENT_LABELS[value] }));
-
-function timeZones(current: string) {
-  const zones = new Set(['UTC', current, ...Intl.supportedValuesOf('timeZone')]);
-  return [...zones].sort().map((value) => ({ value, label: value }));
-}
 
 function sourceIcon(view: Pick<TriggerView, 'source'>) {
   switch (view.source.kind) {
@@ -262,47 +246,14 @@ function TriggerDetail({ state, view }: { state: OrchestrationTriggerDialogState
   );
 }
 
+/** HS2-SEEMXR: the command-schedule dialog's own recurrence fields, named `trigger-schedule-<draft key>`. */
 function ScheduleFields({ state }: { state: OrchestrationTriggerDialogState }) {
-  const draft = state.form.schedule,
-    bounds = everyBounds(draft.repeats),
-    key = (name: string) => ({ 'data-key': `trigger-schedule-${name}-${state.session}` });
   return (
     <List gap="m">
-      <Grid minColumnWidth={px(144)} gap="m">
-        <Select name="trigger-schedule-repeats" label="Repeats" value={draft.repeats} choices={REPEATS} />
-        <TextField
-          name="trigger-schedule-every"
-          label={bounds.label}
-          type="number"
-          value={draft.every}
-          hint={bounds.hint}
-          rootAttributes={key('every')}
-        />
-      </Grid>
-      {draft.repeats === 'weekly' ? (
-        <Select name="trigger-schedule-weekday" label="On" value={String(draft.weekdays[0] ?? 1)} choices={WEEKDAYS} />
-      ) : undefined}
-      <Grid minColumnWidth={px(144)} gap="m">
-        <TextField
-          name="trigger-schedule-start"
-          label="Starting"
-          type="date"
-          value={draft.startDate}
-          rootAttributes={key('start')}
-        />
-        <TextField
-          name="trigger-schedule-time"
-          label={isSubDay(draft.repeats) ? 'First Run' : 'Time (24-Hour)'}
-          value={draft.time}
-          hint="HH:mm"
-          rootAttributes={key('time')}
-        />
-      </Grid>
-      <Select
-        name="trigger-schedule-zone"
-        label="Time Zone"
-        value={draft.timeZone}
-        choices={timeZones(draft.timeZone)}
+      <ScheduleRecurrenceFields
+        draft={state.form.schedule}
+        namePrefix="trigger-schedule-"
+        fieldAttributes={(field) => ({ 'data-key': `trigger-schedule-${field}-${state.session}` })}
       />
     </List>
   );
@@ -368,6 +319,18 @@ function EventFields({ state }: { state: OrchestrationTriggerDialogState }) {
   );
 }
 
+/** The template's default for an input, in words ("Default: Self"), or nothing when it has none. */
+function defaultText(state: OrchestrationTriggerDialogState, input: TemplateInput): string | undefined {
+  if (input.default === undefined) return undefined;
+  const value =
+    typeof input.default === 'string'
+      ? input.kind === 'target'
+        ? (labelsOf(state)[input.default] ?? input.default)
+        : input.default
+      : JSON.stringify(input.default);
+  return `Default: ${value}`;
+}
+
 function WhatRuns({ state }: { state: OrchestrationTriggerDialogState }) {
   const form = state.form,
     template = state.templates.find((candidate) => candidate.template_id === form.template),
@@ -399,21 +362,19 @@ function WhatRuns({ state }: { state: OrchestrationTriggerDialogState }) {
                 ]}
               />
               {form.eventInputs[input.key] ? undefined : (
-                <TextField
+                // HS2-40GPZK: Use Template…'s typed control, so a fixed value cannot be mistyped.
+                <TemplateInputField
+                  input={input}
+                  value={
+                    input.kind === 'boolean'
+                      ? (state.fixedInputs[input.key] ?? input.default)
+                      : state.fixedInputs[input.key]
+                  }
+                  projects={state.projects}
                   name={`trigger-input-${input.key}`}
                   label="Value"
-                  value={state.fixedInputs[input.key] ?? ''}
-                  placeholder={
-                    input.default === undefined
-                      ? undefined
-                      : `Default: ${
-                          typeof input.default === 'string'
-                            ? input.kind === 'target'
-                              ? (labelsOf(state)[input.default] ?? input.default)
-                              : input.default
-                            : JSON.stringify(input.default)
-                        }`
-                  }
+                  emptyChoice={defaultText(state, input) ?? 'Template Default'}
+                  {...(defaultText(state, input) === undefined ? {} : { placeholder: defaultText(state, input) })}
                   rootAttributes={{ 'data-key': `trigger-input-${input.key}-${state.session}` }}
                 />
               )}
