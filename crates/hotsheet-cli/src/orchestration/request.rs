@@ -730,13 +730,17 @@ impl OrchestrationRuntime {
             // HS2-J8PRTV hosted half: this machine's capacity and its own admission answer.
             ("GET", ["checkouts", checkout, "target-capacity"]) => {
                 // HS2-P5GTSW: with `after` and `wait_ms` the read is a long poll.
-                value(self.hosted_capacity_wait(
+                // HS2-P2TCQS: `sign_in_recheck` asks this machine to re-check sign-in.
+                value(self.hosted_capacity_wait_rechecking(
                     checkout,
                     &super::capacity::claim_namespaces(
                         query_text(path, "claim_namespaces")?.as_deref(),
                     )?,
                     query_text(path, "after")?.as_deref(),
                     query_number(path, "wait_ms", 0)?,
+                    super::capacity::SignInRecheck::parse(
+                        query_text(path, "sign_in_recheck")?.as_deref(),
+                    )?,
                 )?)
             }
             ("POST", ["checkouts", checkout, "target-admission"]) => {

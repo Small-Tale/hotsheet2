@@ -319,6 +319,47 @@ struct Timing {
     home_notify_after: Option<Duration>,
     /// HS2-1CC1TQ: the first wait before a home on record as out is read again.
     home_recheck_after: Option<Duration>,
+    /// HS2-P2TCQS: the first step of the held sign-in re-check; `None` detects sign-in
+    /// at every reading instead (HS2-ZRPZJJ) when the machine reports it.
+    sign_in_recheck: Option<Duration>,
+}
+
+/// HS2-ZRPZJJ, HS2-P2TCQS: whether a machine of the fleet reports its tools' sign-in.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(super) enum SignIn {
+    /// Neither machine reports sign-in: it is unknown, and every tool is tried.
+    Unreported,
+    /// The controller detects its tools' sign-in at every capacity reading.
+    EveryReading,
+    /// One machine keeps the ten-minute capability detection and re-checks sign-in
+    /// as a server does: on the held backoff from this first step, and on demand.
+    Rechecked(Side, Duration),
+}
+
+impl SignIn {
+    fn reported_by(self, side: Side) -> bool {
+        match self {
+            Self::Unreported => false,
+            Self::EveryReading => side == Side::Controller,
+            Self::Rechecked(on, _) => on == side,
+        }
+    }
+
+    fn recheck_on(self, side: Side) -> Option<Duration> {
+        match self {
+            Self::Rechecked(on, first) if on == side => Some(first),
+            _ => None,
+        }
+    }
+}
+
+/// HS2-P2TCQS: a machine that keeps its ten-minute capability detection and re-checks
+/// sign-in on the held backoff from `first` (at most four times that), and on demand
+/// at once.
+fn rechecking(state: AppState, first: Duration) -> AppState {
+    state
+        .with_capabilities_ttl(Duration::from_secs(600))
+        .with_sign_in_recheck(first, first * 4, Duration::ZERO)
 }
 
 /// Which server hosts a target's checkout and its sessions.
@@ -371,9 +412,11 @@ pub(super) struct Fleet {
     /// HS2-EQ7K35: the peer's target B is the project's home and the controller's
     /// target A a site of it, so the orchestrator runs away from the home.
     peer_is_home: bool,
-    /// HS2-ZRPZJJ: the controller's sign-in status program, when its tools report
+    /// HS2-ZRPZJJ: the sign-in status program of the machine whose tools report
     /// sign-in: it exits 1 (signed out) while a `signed-out` file is beside it.
     auth_status: Option<PathBuf>,
+    /// HS2-P2TCQS: which machine reports sign-in, and how it re-checks it.
+    sign_in: SignIn,
     /// HS2-EX594V: the controller's delay before a home outage is announced; `None`
     /// keeps the runtime's default.
     home_notify_after: Option<Duration>,
@@ -386,32 +429,79 @@ impl Fleet {
     /// Two servers, both targets declared, bound, with remembered rules and allowed by a policy
     /// whose placement is not automatic yet.
     pub(super) async fn new() -> Self {
-        Self::build(Layout::Separate, false, None, None, false, false).await
+        Self::build(
+            Layout::Separate,
+            false,
+            None,
+            None,
+            false,
+            SignIn::Unreported,
+        )
+        .await
     }
 
     /// HS2-ZRPZJJ: [`Fleet::new`] whose controller reports its tool's sign-in from a
     /// sign-in status program, signed out until [`Fleet::sign_in`].
     pub(super) async fn signed_out() -> Self {
-        Self::build(Layout::Separate, false, None, None, false, true).await
+        Self::build(
+            Layout::Separate,
+            false,
+            None,
+            None,
+            false,
+            SignIn::EveryReading,
+        )
+        .await
+    }
+
+    /// HS2-P2TCQS: [`Fleet::signed_out`] whose `side` machine reports its tools'
+    /// sign-in, signed out until [`Fleet::sign_in`], keeping the ten-minute capability
+    /// detection and re-checking sign-in from `first` while work is held there.
+    pub(super) async fn signed_out_rechecked(side: Side, first: Duration) -> Self {
+        Self::build(
+            Layout::Separate,
+            false,
+            None,
+            None,
+            false,
+            SignIn::Rechecked(side, first),
+        )
+        .await
     }
 
     /// HS2-QV00AP: [`Fleet::new`] whose peer also starts a real Job monitor process
     /// for its hosted watches and pipeline reads, pointed at the loopback provider as
     /// the controller's is.
     pub(super) async fn with_peer_monitor() -> Self {
-        Self::build(Layout::Separate, false, None, None, true, false).await
+        Self::build(
+            Layout::Separate,
+            false,
+            None,
+            None,
+            true,
+            SignIn::Unreported,
+        )
+        .await
     }
 
     /// HS2-RCR4A6: the same two servers holding one project as two sites ([`Layout::Sites`]).
     pub(super) async fn sites() -> Self {
-        Self::build(Layout::Sites, false, None, None, false, false).await
+        Self::build(Layout::Sites, false, None, None, false, SignIn::Unreported).await
     }
 
     /// HS2-EQ7K35: the same two sites with the peer's target B as the project's home and
     /// the controller's target A a site of it. The controller announces a home outage
     /// after `notify_after`.
     pub(super) async fn sites_peer_home(notify_after: Duration) -> Self {
-        Self::build(Layout::Sites, true, Some(notify_after), None, false, false).await
+        Self::build(
+            Layout::Sites,
+            true,
+            Some(notify_after),
+            None,
+            false,
+            SignIn::Unreported,
+        )
+        .await
     }
 
     /// HS2-1CC1TQ: [`Self::sites_peer_home`] whose controller reads a home on record as
@@ -427,7 +517,7 @@ impl Fleet {
             Some(notify_after),
             Some(recheck_after),
             false,
-            false,
+            SignIn::Unreported,
         )
         .await
     }
@@ -438,14 +528,15 @@ impl Fleet {
         home_notify_after: Option<Duration>,
         home_recheck_after: Option<Duration>,
         peer_monitor: bool,
-        signed_out: bool,
+        sign_in: SignIn,
     ) -> Self {
         assert!(hotsheet_aitools::test_permission_vault_available());
         hotsheet_aitools::enable_test_permission_vault();
         let root = tempfile::tempdir().unwrap();
         let reports = root.path().join("reports");
         // HS2-ZRPZJJ: written before anything starts a process, so no child holds it open.
-        let auth_status = signed_out.then(|| sign_in_status(root.path()));
+        let auth_status = (sign_in != SignIn::Unreported).then(|| sign_in_status(root.path()));
+        let auth_on = |side: Side| auth_status.clone().filter(|_| sign_in.reported_by(side));
         let provider = Provider::default();
         let provider_url = provider.start();
 
@@ -483,12 +574,16 @@ impl Fleet {
         // Both fake tools are installed on the peer; the policy lets target B run only
         // its own until a scenario says otherwise.
         let peer_state = state(&b_store, &peer_home)
-            .with_capacity_source(Box::new(Roomy(peer_tools, peer_os, None)))
+            .with_capacity_source(Box::new(Roomy(peer_tools, peer_os, auth_on(Side::Peer))))
             .with_capacity_cache(Duration::ZERO)
             .with_plugin_dirs(vec![
                 plugin(root.path(), TOOL_B, &reports),
                 plugin(root.path(), TOOL_A, &reports),
             ]);
+        let peer_state = match sign_in.recheck_on(Side::Peer) {
+            Some(first) => rechecking(peer_state, first),
+            None => peer_state,
+        };
         let peer_state = if peer_monitor {
             peer_state.with_orchestration_runtime(
                 shared_runtime(&b_store, &peer_home, &Arc::new(Memory::default()))
@@ -537,11 +632,12 @@ impl Fleet {
             &a_plugins,
             &memory,
             &provider_url,
-            Roomy(controller_tools, controller_os, auth_status.clone()),
+            Roomy(controller_tools, controller_os, auth_on(Side::Controller)),
             Timing {
                 relink_retry: None,
                 home_notify_after,
                 home_recheck_after,
+                sign_in_recheck: sign_in.recheck_on(Side::Controller),
             },
         );
         let a_checkout = registry
@@ -588,6 +684,7 @@ impl Fleet {
             relink_retry: None,
             peer_is_home,
             auth_status,
+            sign_in,
             home_notify_after,
             home_recheck_after,
         };
@@ -613,6 +710,7 @@ impl Fleet {
             relink_retry,
             home_notify_after,
             home_recheck_after,
+            sign_in_recheck,
         } = timing;
         // The runtime a server composes with `OrchestrationRuntime::live`, over the
         // in-memory credentials of the synthetic remote registration.
@@ -637,12 +735,17 @@ impl Fleet {
         } else {
             Duration::from_secs(600)
         };
-        state(a_store, home)
+        let controller = state(a_store, home)
             .with_capacity_source(Box::new(capacity))
             .with_capacity_cache(Duration::ZERO)
             .with_capabilities_ttl(capabilities_ttl)
             .with_plugin_dirs(plugins.to_vec())
-            .with_orchestration_runtime(runtime)
+            .with_orchestration_runtime(runtime);
+        // HS2-P2TCQS: or, as a server does, on the held backoff and on demand.
+        match sign_in_recheck {
+            Some(first) => rechecking(controller, first),
+            None => controller,
+        }
     }
 
     /// A controller route of the owning checkout's orchestration surface.
@@ -1107,8 +1210,9 @@ impl Fleet {
         (session, terminal, worker)
     }
 
-    /// HS2-ZRPZJJ: the controller's tool signs in (or out again), as a person does in
-    /// a terminal there. Only a [`Fleet::signed_out`] fleet reports sign-in.
+    /// HS2-ZRPZJJ: the reporting machine's tools sign in (or out again), as a person
+    /// does in a terminal there. Only a [`Fleet::signed_out`] or
+    /// [`Fleet::signed_out_rechecked`] fleet reports sign-in.
     pub(super) fn sign_in(&self, signed_in: bool) {
         let status = self
             .auth_status
@@ -1173,11 +1277,18 @@ impl Fleet {
             &self.a_plugins,
             &self.memory,
             &self.provider_url,
-            Roomy(tools, os, self.auth_status.clone()),
+            Roomy(
+                tools,
+                os,
+                self.auth_status
+                    .clone()
+                    .filter(|_| self.sign_in.reported_by(Side::Controller)),
+            ),
             Timing {
                 relink_retry: self.relink_retry,
                 home_notify_after: self.home_notify_after,
                 home_recheck_after: self.home_recheck_after,
+                sign_in_recheck: self.sign_in.recheck_on(Side::Controller),
             },
         );
         next.spawn_run_recovery();

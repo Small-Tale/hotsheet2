@@ -3476,12 +3476,16 @@ export class Api {
    * HS2-DR0ZSQ: the machine that serves this project, as the Systems screen shows it: the hosted
    * capacity snapshot (HS2-J8PRTV). With `after` it is a long poll (HS2-P5GTSW) that answers when the
    * snapshot's version differs, or after {@link MACHINE_CAPACITY_WAIT_MS}. Not a busy-indicator read.
+   * HS2-P2TCQS: the first read of a stream (Systems opening) asks the machine to re-check AI tool sign-in
+   * now; the machine does only while some tool reads signed out there, and not again within moments.
    */
   machineCapacity = (checkout: string, after: string | undefined, signal?: AbortSignal) =>
     this.parsed(
       parseOrchestrationCapacity,
       `/checkouts/${encodeURIComponent(checkout)}/target-capacity${
-        after === undefined ? '' : `?after=${encodeURIComponent(after)}&wait_ms=${String(MACHINE_CAPACITY_WAIT_MS)}`
+        after === undefined
+          ? '?sign_in_recheck=now'
+          : `?after=${encodeURIComponent(after)}&wait_ms=${String(MACHINE_CAPACITY_WAIT_MS)}`
       }`,
       signal ? { signal } : {},
       false,

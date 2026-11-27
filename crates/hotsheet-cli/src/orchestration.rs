@@ -71,7 +71,7 @@ pub use backoff::{BACKOFF_FAST_STEP, BACKOFF_FIRST, BACKOFF_MAX, Backoff, is_fas
 pub use cancel_hold::CANCELLED_BY_PERSON;
 pub use capacity::{
     CAPACITY_RESAMPLE_MS, CapacityProbe, LocalServerCapacity, MAX_CAPACITY_WAIT_MS, ReadCapacity,
-    TargetAdmission, UnknownCapacity,
+    SignInRecheck, TargetAdmission, UnknownCapacity,
 };
 pub use capacity_watch::{CapacityFollow, MAX_CAPACITY_WATCHES};
 pub use gates::{
@@ -264,6 +264,10 @@ pub struct OrchestrationRuntime {
     home_notify_after_ms: u64,
     /// HS2-1CC1TQ: the first wait before a home on record as out is read again.
     home_recheck_base_ms: u64,
+    /// HS2-P2TCQS: the sign-in re-check this runtime's capacity reads ask of each
+    /// target's machine: `held` for the watch of work a signed-out tool holds, `now`
+    /// for an explain a person asked for; `None` for every other read.
+    sign_in_recheck: Option<SignInRecheck>,
 }
 
 impl OrchestrationRuntime {
@@ -317,6 +321,7 @@ impl OrchestrationRuntime {
             tasks: Arc::default(),
             detached_validation: false,
             requester: None,
+            sign_in_recheck: None,
             home_notices: None,
             home_notify_after_ms: home_outages::DEFAULT_NOTIFY_AFTER_MS,
             home_recheck_base_ms: home_outages::DEFAULT_RECHECK_BASE_MS,

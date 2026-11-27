@@ -19,6 +19,7 @@ pub(crate) mod capabilities;
 pub(crate) mod capacity;
 pub(crate) mod live_cpu;
 pub(crate) mod routes;
+pub(crate) mod sign_in_recheck;
 pub(crate) mod source;
 #[cfg(test)]
 mod tests;

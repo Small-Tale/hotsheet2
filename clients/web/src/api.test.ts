@@ -1204,3 +1204,35 @@ describe('command launch records (HS2-PWNPM2)', () => {
     }
   });
 });
+
+describe('HS2-P2TCQS Systems asks a machine to re-check sign-in when it opens', () => {
+  it('sends sign_in_recheck=now on a stream’s first read and never on its long polls', async () => {
+    const capacity = {
+      sampled_at_ms: null,
+      memory: { free_mb: null, total_mb: null },
+      cpu: { load_percent: null, logical_cpus: null },
+      disk: { free_mb: null, total_mb: null },
+      tools: null,
+      sessions: null,
+      claims: null,
+      claim_namespaces: [],
+      version: 'v1',
+    };
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async () => new Response(JSON.stringify(capacity)));
+    try {
+      const api = new Api('/api');
+      await api.machineCapacity('project 1', undefined);
+      await api.machineCapacity('project 1', 'v1');
+      await api.machineCapacity('project 1', undefined);
+      expect(fetchMock.mock.calls.map(([url]) => urlOf(url))).toEqual([
+        '/api/checkouts/project%201/target-capacity?sign_in_recheck=now',
+        '/api/checkouts/project%201/target-capacity?after=v1&wait_ms=8000',
+        '/api/checkouts/project%201/target-capacity?sign_in_recheck=now',
+      ]);
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+});

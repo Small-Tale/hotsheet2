@@ -147,6 +147,8 @@ function recordReads(page: Page, paths: { apiPath: string; remotePath: string })
     kind: 'capacity' | 'cpu' | 'tools' | 'admission' | 'health';
     machine: 'local' | 'remote' | 'tabless' | 'unreachable';
     after: string | null;
+    /** HS2-P2TCQS: the sign-in re-check a capacity read asks for. */
+    recheck: string | null;
   }[] = [];
   page.on('request', (request: Request) => {
     const url = new URL(request.url());
@@ -171,7 +173,13 @@ function recordReads(page: Page, paths: { apiPath: string; remotePath: string })
             : url.pathname.endsWith('/admission')
               ? 'admission'
               : undefined;
-    if (kind) reads.push({ kind, machine, after: url.searchParams.get('after') });
+    if (kind)
+      reads.push({
+        kind,
+        machine,
+        after: url.searchParams.get('after'),
+        recheck: url.searchParams.get('sign_in_recheck'),
+      });
   });
   return reads;
 }
@@ -424,6 +432,13 @@ test('HS2-DR0ZSQ an idle Systems screen reads only through long polls, at a boun
         { timeout: 30_000 },
       )
       .toBe(true);
+    // HS2-P2TCQS: opening Systems asks each machine to re-check AI tool sign-in once, with the first
+    // read of its stream; the long polls that follow never ask.
+    for (const machine of ['local', 'remote', 'tabless']) {
+      const capacity = reads.filter((read) => read.kind === 'capacity' && read.machine === machine);
+      expect(capacity[0]).toMatchObject({ after: null, recheck: 'now' });
+      expect(capacity.filter((read) => read.after !== null && read.recheck !== null)).toEqual([]);
+    }
     const start = reads.length;
     const windowMs = 16_000;
     // An idle window: nothing on the page changes, only the streams run.
@@ -438,6 +453,9 @@ test('HS2-DR0ZSQ an idle Systems screen reads only through long polls, at a boun
     // an unreachable remote's stream backs off (1 s doubling to 30 s) rather than retrying each second.
     expect(count('health', 'tabless')).toBeLessThanOrEqual(count('capacity', 'tabless'));
     expect(count('capacity', 'unreachable')).toBeLessThanOrEqual(5);
+    // HS2-P2TCQS: no re-check asked while idle (an unreachable remote's backed-off retries are first
+    // reads again; the machine debounces them).
+    expect(idle.filter((read) => read.recheck !== null && read.machine !== 'unreachable')).toEqual([]);
     // Every capacity read in the window waits on the version it saw.
     // (An unreachable remote never had a version: its retries back off instead.)
     expect(

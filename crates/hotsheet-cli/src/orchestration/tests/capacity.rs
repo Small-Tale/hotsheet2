@@ -1014,10 +1014,94 @@ fn hs2_p5gtsw_the_capacity_routes_wait_by_version_locally_and_over_the_transport
     );
     // The query a remote host receives carries the wait.
     assert_eq!(
-        super::super::capacity::capacity_query(&["vm".into()], Some("ab12"), 60_000),
+        super::super::capacity::capacity_query(&["vm".into()], Some("ab12"), 60_000, None),
         format!("?claim_namespaces=vm&after=ab12&wait_ms={MAX_CAPACITY_WAIT_MS}")
     );
-    assert_eq!(super::super::capacity::capacity_query(&[], None, 5), "");
+    assert_eq!(
+        super::super::capacity::capacity_query(&[], None, 5, None),
+        ""
+    );
+}
+
+/// HS2-P2TCQS: a read that asks for a sign-in re-check says so in the hosted query, so
+/// a remote site's machine re-checks too; the hosted route reads it back, and refuses
+/// any other value.
+#[test]
+fn hs2_p2tcqs_the_sign_in_recheck_travels_in_the_hosted_query() {
+    use super::super::capacity::{SignInRecheck, capacity_query};
+    assert_eq!(
+        capacity_query(&[], Some("ab12"), 8_000, Some(SignInRecheck::Held)),
+        "?after=ab12&wait_ms=8000&sign_in_recheck=held"
+    );
+    assert_eq!(
+        capacity_query(&["vm".into()], None, 0, Some(SignInRecheck::Now)),
+        "?claim_namespaces=vm&sign_in_recheck=now"
+    );
+    for recheck in [SignInRecheck::Held, SignInRecheck::Now] {
+        assert_eq!(
+            SignInRecheck::parse(Some(recheck.code())).unwrap(),
+            Some(recheck)
+        );
+    }
+    assert_eq!(SignInRecheck::parse(None).unwrap(), None);
+    for bad in ["", "later", "HELD"] {
+        assert!(SignInRecheck::parse(Some(bad)).is_err(), "{bad}");
+    }
+
+    // The hosted route passes it to the machine's probe; other reads ask nothing.
+    let probe = Arc::new(Rechecks::default());
+    let mut m = machine(10, false, unsupported);
+    m.runtime = m.runtime.clone().with_capacity_probe(probe.clone());
+    let checkout = m.target.id.clone();
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    for (query, expected) in [
+        ("", None),
+        ("?sign_in_recheck=held", Some(SignInRecheck::Held)),
+        ("?sign_in_recheck=now", Some(SignInRecheck::Now)),
+    ] {
+        m.runtime
+            .request(
+                "GET",
+                &format!("/checkouts/{checkout}/target-capacity{query}"),
+                &Value::Null,
+                &mut tx,
+            )
+            .unwrap();
+        assert_eq!(probe.last(), Some(expected), "{query}");
+    }
+    let refused = m.runtime.request(
+        "GET",
+        &format!("/checkouts/{checkout}/target-capacity?sign_in_recheck=later"),
+        &Value::Null,
+        &mut tx,
+    );
+    assert!(refused.is_err());
+}
+
+/// A probe that remembers the sign-in re-check each read asked for.
+#[derive(Default)]
+struct Rechecks(std::sync::Mutex<Vec<Option<super::super::capacity::SignInRecheck>>>);
+impl Rechecks {
+    fn last(&self) -> Option<Option<super::super::capacity::SignInRecheck>> {
+        self.0.lock().unwrap().last().copied()
+    }
+}
+impl CapacityProbe for Rechecks {
+    fn observe(&self, checkout: &Checkout) -> HostObservation {
+        self.observe_with(checkout, None)
+    }
+    fn observe_with(
+        &self,
+        _: &Checkout,
+        recheck: Option<super::super::capacity::SignInRecheck>,
+    ) -> HostObservation {
+        self.0.lock().unwrap().push(recheck);
+        HostObservation::default()
+    }
 }
 
 /// HS2-YDZAFH: a capacity read that names no namespace enumerates them. A claim source

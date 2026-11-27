@@ -18,7 +18,8 @@ export const REMOTE_MACHINE_CHECKOUT = 'machine';
 const QUERY: Readonly<Record<string, readonly string[]>> = {
   '/host-health': [],
   '/host-health/cpu': ['after', 'timeout_ms'],
-  '/target-capacity': ['after', 'wait_ms', 'claim_namespaces'],
+  // HS2-P2TCQS: Systems asks the machine to re-check AI tool sign-in when it opens.
+  '/target-capacity': ['after', 'wait_ms', 'claim_namespaces', 'sign_in_recheck'],
 };
 
 export type RemoteMachineRoute =

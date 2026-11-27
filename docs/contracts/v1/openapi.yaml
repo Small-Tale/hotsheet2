@@ -2504,6 +2504,16 @@ paths:
             type: integer
             minimum: 0
             maximum: 8000
+        - name: sign_in_recheck
+          in: query
+          description:
+            HS2-P2TCQS. Also re-check AI tool sign-in on this machine, sooner than its ten-minute capability detection,
+            and only while some tool reads signed out. `held` (the capacity watch of work a signed-out tool holds)
+            re-checks on a backoff from one minute growing to ten; `now` (Systems, the held card) re-checks at once
+            unless the machine checked a moment ago. Without it nothing is re-checked.
+          schema:
+            type: string
+            enum: [held, now]
       responses:
         '200':
           description: The capacity snapshot; an unmeasured value is null, never a guess.

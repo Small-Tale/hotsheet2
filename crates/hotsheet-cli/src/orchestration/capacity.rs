@@ -24,6 +24,50 @@ use super::*;
 pub trait CapacityProbe: Send + Sync {
     /// What the host measured for one checkout it hosts. Unmeasured values are `None`.
     fn observe(&self, checkout: &Checkout) -> HostObservation;
+
+    /// HS2-P2TCQS: [`Self::observe`] for a read that also asks the host to re-check AI
+    /// tool sign-in. A probe that cannot re-check answers as `observe` does.
+    fn observe_with(&self, checkout: &Checkout, recheck: Option<SignInRecheck>) -> HostObservation {
+        let _ = recheck;
+        self.observe(checkout)
+    }
+}
+
+/// HS2-P2TCQS (`docs/26-orchestration-projects.md` §26.10): a capacity read that also
+/// asks the host to re-check whether its AI tools are signed in, sooner than its
+/// ten-minute capability detection. The host only re-checks while some tool reads
+/// signed out there, and never on a timer: each re-check is part of a read someone
+/// made.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SignInRecheck {
+    /// Work is held because a tool is signed out there (the capacity watch's long
+    /// poll): re-check on the host's bounded backoff, one minute growing to ten.
+    Held,
+    /// A person is looking (Systems, the held card's inspector): re-check now, unless
+    /// the host checked a moment ago.
+    Now,
+}
+
+impl SignInRecheck {
+    /// The query value: `held` or `now`.
+    pub fn code(self) -> &'static str {
+        match self {
+            Self::Held => "held",
+            Self::Now => "now",
+        }
+    }
+
+    /// The `sign_in_recheck` query value; absent is no re-check.
+    pub fn parse(text: Option<&str>) -> Result<Option<Self>, OrchestrationError> {
+        match text {
+            None => Ok(None),
+            Some("held") => Ok(Some(Self::Held)),
+            Some("now") => Ok(Some(Self::Now)),
+            Some(_) => Err(OrchestrationError::Invalid(
+                "sign_in_recheck is held or now",
+            )),
+        }
+    }
 }
 
 /// No session host is reachable from this process: every value is unknown.
@@ -47,13 +91,22 @@ impl LocalServerCapacity {
 }
 impl CapacityProbe for LocalServerCapacity {
     fn observe(&self, checkout: &Checkout) -> HostObservation {
+        self.observe_with(checkout, None)
+    }
+
+    /// HS2-P2TCQS: the re-check travels to the server, which owns the detection.
+    fn observe_with(&self, checkout: &Checkout, recheck: Option<SignInRecheck>) -> HostObservation {
         crate::external_launch::running_servers(&self.home)
             .iter()
             .find_map(|server| {
                 let url = format!(
-                    "{}/checkouts/{}/target-capacity",
+                    "{}/checkouts/{}/target-capacity{}",
                     server.url.trim_end_matches('/'),
-                    checkout.id
+                    checkout.id,
+                    recheck.map_or_else(String::new, |recheck| format!(
+                        "?sign_in_recheck={}",
+                        recheck.code()
+                    ))
                 );
                 let response = hotsheet_http::agent()
                     .get(&url)
@@ -184,6 +237,15 @@ impl OrchestrationRuntime {
         self
     }
 
+    /// HS2-P2TCQS: this runtime with its capacity reads asking each target's machine
+    /// for a sign-in re-check (the held watch, an explain a person asked for).
+    #[must_use]
+    pub fn rechecking_sign_in(&self, recheck: SignInRecheck) -> Self {
+        let mut runtime = self.clone();
+        runtime.sign_in_recheck = Some(recheck);
+        runtime
+    }
+
     // ---- Hosted half ----
 
     /// Live claims in the named namespaces, without paths, holders or metadata. An
@@ -249,6 +311,17 @@ impl OrchestrationRuntime {
         checkout_id: &str,
         namespaces: &[String],
     ) -> Result<CapacitySnapshot, OrchestrationError> {
+        self.hosted_capacity_rechecking(checkout_id, namespaces, None)
+    }
+
+    /// [`Self::hosted_capacity`] for a read that also asks this machine to re-check AI
+    /// tool sign-in (HS2-P2TCQS).
+    pub fn hosted_capacity_rechecking(
+        &self,
+        checkout_id: &str,
+        namespaces: &[String],
+        recheck: Option<SignInRecheck>,
+    ) -> Result<CapacitySnapshot, OrchestrationError> {
         let checkout = self.owner(checkout_id)?;
         // HS2-YDZAFH: with no namespace named, every held claim of this machine.
         let (scope, read) = match self.claim_scope(namespaces) {
@@ -269,7 +342,7 @@ impl OrchestrationRuntime {
         Ok(CapacitySnapshot::new(
             self.server_id.clone(),
             checkout.id.clone(),
-            self.capacity.observe(&checkout),
+            self.capacity.observe_with(&checkout, recheck),
             scope,
             read.claims,
         )
@@ -305,11 +378,25 @@ impl OrchestrationRuntime {
         after: Option<&str>,
         wait_ms: u64,
     ) -> Result<CapacitySnapshot, OrchestrationError> {
+        self.hosted_capacity_wait_rechecking(checkout_id, namespaces, after, wait_ms, None)
+    }
+
+    /// [`Self::hosted_capacity_wait`] whose every sample also asks this machine to
+    /// re-check AI tool sign-in (HS2-P2TCQS). The capacity watch of work held by a
+    /// signed-out tool asks `held`, so the backoff runs only while that watch does.
+    pub fn hosted_capacity_wait_rechecking(
+        &self,
+        checkout_id: &str,
+        namespaces: &[String],
+        after: Option<&str>,
+        wait_ms: u64,
+        recheck: Option<SignInRecheck>,
+    ) -> Result<CapacitySnapshot, OrchestrationError> {
         let after = capacity_after(after)?;
         let deadline = std::time::Instant::now()
             + std::time::Duration::from_millis(wait_ms.min(MAX_CAPACITY_WAIT_MS));
         loop {
-            let snapshot = self.hosted_capacity(checkout_id, namespaces)?;
+            let snapshot = self.hosted_capacity_rechecking(checkout_id, namespaces, recheck)?;
             let remaining = deadline.saturating_duration_since(std::time::Instant::now());
             if after.is_none() || snapshot.version.as_deref() != after || remaining.is_zero() {
                 return Ok(snapshot);
@@ -410,7 +497,7 @@ impl OrchestrationRuntime {
             tx,
         )?;
         let outcome = (|| {
-            let query = capacity_query(namespaces, after, wait_ms);
+            let query = capacity_query(namespaces, after, wait_ms, self.sign_in_recheck);
             serde_json::from_value(self.hosted_call_at(
                 Self::destination(&authorized)?,
                 "/target-capacity",
@@ -492,8 +579,13 @@ impl OrchestrationRuntime {
 }
 
 /// The hosted capacity route's query: claim namespaces and, for a wait, the version
-/// already seen and how long to wait.
-pub(super) fn capacity_query(namespaces: &[String], after: Option<&str>, wait_ms: u64) -> String {
+/// already seen and how long to wait. HS2-P2TCQS: and a sign-in re-check, when asked.
+pub(super) fn capacity_query(
+    namespaces: &[String],
+    after: Option<&str>,
+    wait_ms: u64,
+    recheck: Option<SignInRecheck>,
+) -> String {
     let mut parts = Vec::new();
     if !namespaces.is_empty() {
         parts.push(format!(
@@ -507,6 +599,9 @@ pub(super) fn capacity_query(namespaces: &[String], after: Option<&str>, wait_ms
             encode(after),
             wait_ms.min(MAX_CAPACITY_WAIT_MS)
         ));
+    }
+    if let Some(recheck) = recheck {
+        parts.push(format!("sign_in_recheck={}", recheck.code()));
     }
     if parts.is_empty() {
         String::new()

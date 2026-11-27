@@ -206,6 +206,18 @@ pub struct Explanation {
     pub mode: DecisionMode,
 }
 
+/// HS2-P2TCQS: whether an explanation holds the work because a tool is signed out on
+/// some site's machine.
+fn explains_signed_out(answer: &Explanation) -> bool {
+    use hotsheet_ticketing::orchestration::is_signed_out_detail;
+    answer.standing == "not_placed"
+        && (answer.detail.as_deref().is_some_and(is_signed_out_detail)
+            || answer
+                .sites
+                .iter()
+                .any(|site| site.detail.as_deref().is_some_and(is_signed_out_detail)))
+}
+
 /// HS2-4JQ41V: a project's integrator as one pass decides it, on its home site.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct IntegratorStanding {
@@ -1099,7 +1111,26 @@ impl OrchestrationRuntime {
     }
 
     /// Why one piece of work is not running, from the plan and a fresh schedule.
+    ///
+    /// HS2-P2TCQS: a person looking at work held because a tool is signed out asks its
+    /// machines to re-check sign-in now (debounced there), and the answer is computed
+    /// once more from what they say, so a tool signed in a moment ago is seen at once.
     pub fn scheduler_explain(
+        &self,
+        owner_id: &str,
+        request: &ExplainRequest,
+        actor: Option<&MutationActor>,
+        tx: &mut Transaction<'_>,
+    ) -> Result<Explanation, OrchestrationError> {
+        let answer = self.scheduler_explain_once(owner_id, request, actor, tx)?;
+        if self.sign_in_recheck.is_some() || !explains_signed_out(&answer) {
+            return Ok(answer);
+        }
+        self.rechecking_sign_in(super::capacity::SignInRecheck::Now)
+            .scheduler_explain_once(owner_id, request, actor, tx)
+    }
+
+    fn scheduler_explain_once(
         &self,
         owner_id: &str,
         request: &ExplainRequest,

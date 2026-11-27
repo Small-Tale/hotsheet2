@@ -528,6 +528,10 @@ mod e2e_roles;
 #[cfg(unix)]
 #[path = "remote_servers/e2e_signed_out.rs"]
 mod e2e_signed_out;
+// HS2-P2TCQS: held work re-checks sign-in sooner than the capability detection.
+#[cfg(unix)]
+#[path = "remote_servers/e2e_sign_in_recheck.rs"]
+mod e2e_sign_in_recheck;
 // HS2-36XDDX: a template's Wait for Accept holds its steps until a person accepts.
 #[cfg(unix)]
 #[path = "remote_servers/e2e_templates.rs"]

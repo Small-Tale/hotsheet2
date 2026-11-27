@@ -65,6 +65,11 @@ describe('HS2-CMXKK2 remote machine routes', () => {
     expect(
       remoteMachineRoute('GET', '/checkouts/machine/target-capacity?after=ab&wait_ms=8000&claim_namespaces=vm&x=1'),
     ).toEqual({ route: '/target-capacity', search: 'after=ab&wait_ms=8000&claim_namespaces=vm' });
+    // HS2-P2TCQS: Systems' first read asks the machine to re-check sign-in.
+    expect(remoteMachineRoute('GET', '/checkouts/machine/target-capacity?sign_in_recheck=now')).toEqual({
+      route: '/target-capacity',
+      search: 'sign_in_recheck=now',
+    });
     for (const path of [
       '/checkouts/c1/target-capacity',
       '/checkouts/machine/target-admission',

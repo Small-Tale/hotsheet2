@@ -6349,7 +6349,11 @@ toolbar.
     tell whether it is signed in (an older host, probing off, no declared status command, or a
     check that did not finish) shows **Installed**. Tools that are not installed are listed last.
     A Signed Out tool is not placed on this machine (HS2-ZRPZJJ); an Installed one (unknown)
-    still is.
+    still is. Opening Systems asks each machine to re-check a Signed Out tool at once (its first
+    capacity read sends `sign_in_recheck=now`; the machine skips it when it checked within fifteen
+    seconds), and while work waits on a signed-out tool the machine re-checks on its own backoff, so
+    a person who signs in sees the badge change and the work start within a minute or two
+    (HS2-P2TCQS, docs/26 §26.10).
   - **Capabilities:** System, Processor (with core count), GPU, and Memory (free of total).
   - **Toolchains:** each installed toolchain and its version.
 

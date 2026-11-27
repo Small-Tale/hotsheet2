@@ -19,7 +19,7 @@ use hotsheet_ticketing::orchestration::{
     is_signed_out_detail,
 };
 
-use super::capacity::{MAX_CAPACITY_WAIT_MS, capacity_query};
+use super::capacity::{MAX_CAPACITY_WAIT_MS, SignInRecheck, capacity_query};
 use super::*;
 
 /// Targets one process follows at a time, per machine home.
@@ -47,6 +47,10 @@ struct Followed {
     /// The host offers no wait, or the last wait could not be made.
     failed: bool,
     watching: bool,
+    /// HS2-P2TCQS: the last pass held work here because a tool is signed out, so the
+    /// watch asks the machine to re-check sign-in. Cleared by the first pass that
+    /// holds nothing there, so a released hold stops the re-checks.
+    sign_in_held: bool,
 }
 
 type Key = (PathBuf, String, String);
@@ -121,6 +125,14 @@ impl OrchestrationRuntime {
             })
             .map(|item| item.target_id.as_str())
             .collect();
+        // HS2-P2TCQS: where work is held because a tool is signed out, the watch also
+        // asks that machine to re-check sign-in on its bounded backoff.
+        let signed_out = signed_out_targets(schedule);
+        for ((home, owner, target), entry) in followed().iter_mut() {
+            if home == &self.home && owner == owner_id {
+                entry.sign_in_held = signed_out.contains(target.as_str());
+            }
+        }
         for target_id in roomless {
             let key = self.followed_key(owner_id, target_id);
             let (after, namespaces) = {
@@ -212,7 +224,7 @@ impl OrchestrationRuntime {
         deadline: Instant,
         tx: &mut Transaction<'_>,
     ) -> CapacityFollow {
-        let query = capacity_query(namespaces, Some(after), MAX_CAPACITY_WAIT_MS);
+        let key = self.followed_key(&target.owner_checkout_id, &target.target_id);
         let mut authorized: Option<(Authorized, u64)> = None;
         loop {
             if Instant::now() >= deadline {
@@ -240,6 +252,13 @@ impl OrchestrationRuntime {
             let Some((current, _)) = &authorized else {
                 return CapacityFollow::Ended("gate_refused".into());
             };
+            // HS2-P2TCQS: asked only while the last pass held work there signed out,
+            // so the re-check follows the hold, not the watch.
+            let recheck = followed()
+                .get(&key)
+                .is_some_and(|entry| entry.sign_in_held)
+                .then_some(SignInRecheck::Held);
+            let query = capacity_query(namespaces, Some(after), MAX_CAPACITY_WAIT_MS, recheck);
             let asked = Instant::now();
             let reply = match Self::destination(current) {
                 Ok(destination) => {
@@ -277,4 +296,19 @@ impl OrchestrationRuntime {
             }
         }
     }
+}
+
+/// HS2-P2TCQS: the targets where this schedule holds work because a tool is signed out
+/// on their machine. Only these ask for a sign-in re-check, so no machine re-checks
+/// while nothing is held there.
+pub(super) fn signed_out_targets(schedule: &Schedule) -> std::collections::BTreeSet<&str> {
+    schedule
+        .unplaced
+        .iter()
+        .filter(|item| {
+            item.reason == Blocker::NoTool
+                && item.detail.as_deref().is_some_and(is_signed_out_detail)
+        })
+        .map(|item| item.target_id.as_str())
+        .collect()
 }

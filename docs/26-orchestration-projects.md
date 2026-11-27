@@ -1455,9 +1455,28 @@ Total memory and logical CPUs stay where they are (`memory.total_mb`,
   name or credential leaves the machine. Without a declaration, with probing off, or when
   the check times out or is killed, `signed_in` is absent (unknown, never signed out). A
   change of it changes the capacity `version`, through the capabilities term. A sign-in
-  or sign-out shows at the next detection, within ten minutes. Admission refuses a tool
+  or sign-out shows at the next detection, within ten minutes, except while work is held
+  by a signed-out tool or a person is looking (HS2-P2TCQS, below). Admission refuses a tool
   reported `signed_in: false` as `tool_signed_out`, and placement skips it there; an
   absent state is still tried (HS2-ZRPZJJ, below). The platform readers are in [host-health](host-health.md).
+- **Re-checking sign-in while held** (HS2-P2TCQS). The hosted capacity read takes
+  `sign_in_recheck=held|now`. Only while some tool reads `signed_in: false` there, a
+  read that asks it detects the capabilities again before their ten minutes are up:
+  - `held` is asked only by the capacity watch (§26.17, "A machine that gains room") of
+    a target where the last pass held work (a worker step or a role session) because a
+    tool is signed out on its machine, local or a remote site. The watch's long poll
+    samples while it waits, so the machine re-checks once the reading is as old as the
+    current step: one minute, then two, four, eight, then every ten minutes. A re-check
+    that still reads signed out grows the step; a sign-in ends it. The first pass that
+    holds nothing there stops asking, and a hold that comes back after a gap longer than
+    its step starts at one minute again.
+  - `now` is asked by Systems' first read of each machine when it opens, and by
+    `scheduler explain` of work held by a signed-out tool (the held card's inspector,
+    the CLI and MCP explain); explain then computes its answer once more from what the
+    machines say. A reading younger than fifteen seconds is not detected again.
+  - Without it, or with every tool signed in or unknown, nothing is re-checked, and
+    nothing runs on a timer: each re-check is part of a read someone made. A changed
+    sign-in changes the capacity `version`, so the watch places the held work.
 - **Compatibility** (§26.5). The member is additive and optional: an older peer's
   snapshot has none and still reads, and an older reader ignores it. The capacity
   `version` digests it only when it is reported, so a snapshot without it keeps the
@@ -1570,7 +1589,8 @@ check that could not finish) is admitted as before, so nothing that worked befor
 field existed stops. A missing or opted-out tool keeps its own reason first; a signed-out
 tool is refused whatever the room, and even when a measurement is unknown. Signing in
 changes the capacity `version` (through the capabilities term), so a follower of the
-version sees it at the next detection.
+version sees it at the next detection, which the held re-check brings forward to the
+next step of its backoff (HS2-P2TCQS).
 
 A limit that a known measurement breaks always refuses with its own reason. Unknown
 measurements are listed in `unknown` and refuse as `capacity_unknown` unless the owner
@@ -4250,7 +4270,9 @@ unplaced because a target's machine had no room (`machine_refused`, or a
 admission reason such as `below_ram_floor` or `tool_signed_out`, or a
 `no_tool_available` whose detail is `tool_signed_out:<tool>`, HS2-ZRPZJJ), the loop follows that target's capacity
 with the wait of §26.10 (HS2-P5GTSW), from the version the pass read and with the same
-claim namespaces. It passes the gate as `gates_observe` (it never asks; again after 10
+claim namespaces. For a target where work is held by a signed-out tool, its reads also
+ask `sign_in_recheck=held` (HS2-P2TCQS, §26.10), so the machine re-checks sign-in on its
+backoff while the hold lasts. It passes the gate as `gates_observe` (it never asks; again after 10
 minutes) on a thread of its own, at most 16 targets at a time and once per target. A
 changed version lifts the target's capacity refusal (`SchedulerStore::lift_capacity_refusal`)
 and wakes the loop, which asks the machine again at once. While a target is followed a

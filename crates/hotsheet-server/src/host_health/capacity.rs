@@ -13,7 +13,7 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
-use hotsheet_cli::orchestration::CapacityProbe;
+use hotsheet_cli::orchestration::{CapacityProbe, SignInRecheck};
 use hotsheet_sync::LockExt;
 use hotsheet_ticketing::checkouts::Checkout;
 use hotsheet_ticketing::orchestration::{
@@ -21,6 +21,7 @@ use hotsheet_ticketing::orchestration::{
     ToolAvailability,
 };
 
+use super::sign_in_recheck::SignInBackoff;
 use super::source;
 use crate::AppState;
 
@@ -230,6 +231,8 @@ struct Inner {
     capabilities: Option<CapabilityReading>,
     /// HS2-0VTQFF: the last model-catalog reading, by tool.
     models: Option<ModelsReading>,
+    /// HS2-P2TCQS: when a capacity read that asks re-checks sign-in sooner.
+    sign_in: SignInBackoff,
 }
 
 struct ModelsReading {
@@ -275,6 +278,20 @@ struct CapabilityReading {
     report: Option<HostCapabilities>,
 }
 
+impl CapabilityReading {
+    /// HS2-P2TCQS: some AI tool reads signed out here.
+    fn signed_out(&self) -> bool {
+        signed_out(self.report.as_ref())
+    }
+}
+
+/// HS2-P2TCQS: whether `report` has some AI tool signed out (not unknown).
+fn signed_out(report: Option<&HostCapabilities>) -> bool {
+    report
+        .and_then(|report| report.ai_tools.as_ref())
+        .is_some_and(|tools| tools.iter().any(|tool| tool.signed_in == Some(false)))
+}
+
 /// The server's capacity state: its source and the reading currently being shared.
 pub(crate) struct Capacity {
     inner: Mutex<Inner>,
@@ -311,6 +328,7 @@ impl Capacity {
                 reading: None,
                 capabilities: None,
                 models: None,
+                sign_in: SignInBackoff::default(),
             }),
             cache_ms: AtomicU64::new(CAPACITY_CACHE.as_millis() as u64),
             capabilities_ttl_ms: AtomicU64::new(
@@ -332,6 +350,12 @@ impl Capacity {
             .store(ttl.as_millis() as u64, Ordering::SeqCst);
     }
 
+    /// HS2-P2TCQS: the held sign-in re-check's first and longest step and the
+    /// on-demand debounce.
+    pub(crate) fn set_sign_in_recheck(&self, first: Duration, max: Duration, debounce: Duration) {
+        self.inner.lock_or_recover().sign_in = SignInBackoff::new(first, max, debounce);
+    }
+
     /// How many readings were taken since the server started.
     pub(crate) fn samples(&self) -> u64 {
         self.samples.load(Ordering::SeqCst)
@@ -345,19 +369,41 @@ impl Capacity {
     /// HS2-ZY4Z4G: what this machine is. Detected when first asked, then shared for
     /// [`CAPABILITIES_TTL`](super::capabilities::CAPABILITIES_TTL), or until the owner
     /// declares other toolchains. Blocking: call it off the async runtime.
+    #[cfg(test)]
     pub(crate) fn capabilities(
         &self,
         plugin_dirs: &[PathBuf],
         toolchains: &[String],
     ) -> Option<HostCapabilities> {
+        self.capabilities_rechecking(plugin_dirs, toolchains, None)
+    }
+
+    /// [`Self::capabilities`] for a read that asks to re-check sign-in (HS2-P2TCQS):
+    /// while some tool reads signed out, the reading is detected again on the held
+    /// backoff or, on demand, unless it is a moment old ([`SignInBackoff`]).
+    pub(crate) fn capabilities_rechecking(
+        &self,
+        plugin_dirs: &[PathBuf],
+        toolchains: &[String],
+        recheck: Option<SignInRecheck>,
+    ) -> Option<HostCapabilities> {
         let ttl = Duration::from_millis(self.capabilities_ttl_ms.load(Ordering::SeqCst));
         let mut inner = self.inner.lock_or_recover();
-        let fresh = inner.capabilities.as_ref().is_some_and(|reading| {
-            reading.toolchains == toolchains && reading.taken.elapsed() < ttl
+        let now = Instant::now();
+        let Inner {
+            capabilities,
+            sign_in,
+            ..
+        } = &mut *inner;
+        let fresh = capabilities.as_ref().is_some_and(|reading| {
+            reading.toolchains == toolchains
+                && now.saturating_duration_since(reading.taken) < ttl
+                && !sign_in.due(now, reading.taken, reading.signed_out(), recheck)
         });
         if !fresh {
             self.detections.fetch_add(1, Ordering::SeqCst);
             let report = inner.source.capabilities(plugin_dirs, toolchains);
+            inner.sign_in.checked(signed_out(report.as_ref()), recheck);
             inner.capabilities = Some(CapabilityReading {
                 taken: Instant::now(),
                 toolchains: toolchains.to_vec(),
@@ -573,6 +619,10 @@ pub(crate) struct ServerCapacity {
 
 impl CapacityProbe for ServerCapacity {
     fn observe(&self, checkout: &Checkout) -> HostObservation {
+        self.observe_with(checkout, None)
+    }
+
+    fn observe_with(&self, checkout: &Checkout, recheck: Option<SignInRecheck>) -> HostObservation {
         let root = Path::new(&checkout.root);
         let enabled = enabled_tools(root);
         // HS2-ZY4Z4G: the toolchains the machine owner declared, else the default list.
@@ -584,10 +634,11 @@ impl CapacityProbe for ServerCapacity {
                     hotsheet_ticketing::orchestration::AdmissionConfig::default()
                         .declared_toolchains()
                 });
-        let capabilities = self
-            .state
-            .capacity
-            .capabilities(&self.state.plugin_dirs, &toolchains);
+        let capabilities = self.state.capacity.capabilities_rechecking(
+            &self.state.plugin_dirs,
+            &toolchains,
+            recheck,
+        );
         let mut observation = self.state.capacity.observe(
             root,
             &self.state.plugin_dirs,
@@ -642,6 +693,16 @@ impl AppState {
     #[must_use]
     pub fn with_capabilities_ttl(self, ttl: Duration) -> Self {
         self.capacity.set_capabilities_ttl(ttl);
+        self
+    }
+
+    /// HS2-P2TCQS: while work is held because a tool reads signed out here, re-check its
+    /// sign-in after `first`, doubling to `max`; a person looking re-checks unless the
+    /// reading is younger than `debounce` (tests, embedders). One minute, ten minutes
+    /// and fifteen seconds otherwise.
+    #[must_use]
+    pub fn with_sign_in_recheck(self, first: Duration, max: Duration, debounce: Duration) -> Self {
+        self.capacity.set_sign_in_recheck(first, max, debounce);
         self
     }
 

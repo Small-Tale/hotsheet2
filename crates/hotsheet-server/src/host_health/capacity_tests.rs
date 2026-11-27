@@ -834,6 +834,99 @@ fn hs2_zy4z4g_capabilities_are_detected_once_and_again_after_the_ttl_or_new_tool
     assert_eq!(capacity.detections(), 2);
 }
 
+// ---- HS2-P2TCQS: re-checking sign-in while held ----------------------------------------
+
+#[test]
+fn hs2_p2tcqs_sign_in_is_rechecked_only_for_reads_that_ask_while_a_tool_is_signed_out() {
+    use hotsheet_cli::orchestration::SignInRecheck;
+    use hotsheet_ticketing::orchestration::{OsFamily, ToolVersion};
+    let report = |signed_in: Option<bool>| {
+        let mut caps = HostCapabilities::bare(OsFamily::Linux, "x86_64");
+        caps.ai_tools = Some(vec![ToolVersion {
+            tool: "claude".into(),
+            version: None,
+            signed_in,
+        }]);
+        caps
+    };
+    let signed_in = |caps: Option<HostCapabilities>| {
+        caps.and_then(|caps| caps.ai_tools)
+            .and_then(|tools| tools.first().and_then(|tool| tool.signed_in))
+    };
+    let scripted = Scripted::roomy();
+    scripted.set(|script| script.capabilities = Some(report(Some(true))));
+    let capacity = Capacity::with_source(Box::new(scripted.clone()));
+    // Every step is due at once, so only the asking decides.
+    capacity.set_sign_in_recheck(Duration::ZERO, Duration::ZERO, Duration::ZERO);
+    let toolchains: Vec<String> = Vec::new();
+    let read = |recheck| capacity.capabilities_rechecking(&[], &toolchains, recheck);
+
+    // Signed in: a read that asks re-checks nothing.
+    assert_eq!(signed_in(read(None)), Some(true));
+    for recheck in [Some(SignInRecheck::Held), Some(SignInRecheck::Now), None] {
+        assert_eq!(signed_in(read(recheck)), Some(true));
+    }
+    assert_eq!(capacity.detections(), 1);
+
+    // Signed out, seen at the next detection (a toolchain change here).
+    scripted.set(|script| script.capabilities = Some(report(Some(false))));
+    assert_eq!(
+        signed_in(capacity.capabilities_rechecking(&[], &["go".into()], None)),
+        Some(false)
+    );
+    assert_eq!(capacity.detections(), 2);
+    let toolchains = vec!["go".to_owned()];
+    let read = |recheck| capacity.capabilities_rechecking(&[], &toolchains, recheck);
+    // Nothing held: no read re-checks, however often.
+    for _ in 0..3 {
+        assert_eq!(signed_in(read(None)), Some(false));
+    }
+    assert_eq!(capacity.detections(), 2);
+    // Held: each due read detects again; a person looking does too.
+    assert_eq!(signed_in(read(Some(SignInRecheck::Held))), Some(false));
+    assert_eq!(signed_in(read(Some(SignInRecheck::Now))), Some(false));
+    assert_eq!(capacity.detections(), 4);
+    // The tool signs in: the next held read sees it, and later reads ask no more.
+    scripted.set(|script| script.capabilities = Some(report(Some(true))));
+    assert_eq!(signed_in(read(Some(SignInRecheck::Held))), Some(true));
+    assert_eq!(capacity.detections(), 5);
+    for recheck in [Some(SignInRecheck::Held), Some(SignInRecheck::Now)] {
+        assert_eq!(signed_in(read(recheck)), Some(true));
+    }
+    assert_eq!(capacity.detections(), 5);
+    // Unknown is not signed out: nothing to re-check.
+    scripted.set(|script| script.capabilities = Some(report(None)));
+    capacity.set_capabilities_ttl(Duration::ZERO);
+    assert_eq!(signed_in(read(None)), None);
+    capacity.set_capabilities_ttl(Duration::from_secs(600));
+    let before = capacity.detections();
+    for recheck in [Some(SignInRecheck::Held), Some(SignInRecheck::Now)] {
+        assert_eq!(signed_in(read(recheck)), None);
+    }
+    assert_eq!(capacity.detections(), before);
+}
+
+#[test]
+fn hs2_p2tcqs_default_steps_keep_a_fresh_signed_out_reading() {
+    use hotsheet_cli::orchestration::SignInRecheck;
+    use hotsheet_ticketing::orchestration::{OsFamily, ToolVersion};
+    let mut caps = HostCapabilities::bare(OsFamily::Linux, "x86_64");
+    caps.ai_tools = Some(vec![ToolVersion {
+        tool: "claude".into(),
+        version: None,
+        signed_in: Some(false),
+    }]);
+    let scripted = Scripted::roomy();
+    scripted.set(|script| script.capabilities = Some(caps));
+    let capacity = Capacity::with_source(Box::new(scripted));
+    // A minute's first step and a fifteen-second debounce: a reading taken just now
+    // answers held and on-demand reads alike.
+    for recheck in [None, Some(SignInRecheck::Held), Some(SignInRecheck::Now)] {
+        capacity.capabilities_rechecking(&[], &[], recheck);
+    }
+    assert_eq!(capacity.detections(), 1);
+}
+
 // ---- HS2-0VTQFF: catalog models ----------------------------------------------------------
 
 fn descriptor(

@@ -644,6 +644,14 @@ Admission by Project line reads "Codex: Refused · signed out there", and no
 session starts. Sign Codex back in: after the next detection the card starts a
 session without any other action.
 
+Re-checking sign-in while held (HS2-P2TCQS): repeat the placement check above,
+but sign Codex back in while its step is held and touch nothing: the card starts
+a session within about two minutes (the held re-check's step), not ten. Sign it
+out again until another step is held, sign in, and open Systems (or the held
+card's inspector): Codex reads Signed In and the step starts at once. With no
+step held, signing in or out changes Systems only when it opens or after the
+next detection.
+
 Admission by Project and Placement Limits (HS2-5H8R0N): with an orchestration
 project open whose sites run on this computer and on the paired remote, select
 each machine: its Admission by Project lists only the sites placed there, with
