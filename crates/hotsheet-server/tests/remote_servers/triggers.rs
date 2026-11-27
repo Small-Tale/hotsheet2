@@ -68,13 +68,15 @@ fn history(shown: &Value) -> Vec<(String, String, u64)> {
 async fn hs2_kxka7x_a_schedule_fires_once_per_slot_and_dry_run_writes_nothing() {
     let world = World::new(&["tickets_read"], PUSH_AGENT, PUSH_PLUGIN).await;
     world.host.spawn_orchestration_automation();
+    // The schedule starts in 2030, so the server's own passes (real time) never reach a
+    // slot while this test runs; only the passes asked at a slot's instant do.
     let (status, set) = world
         .call(
             "POST",
             "/triggers/set",
             json!({"name":"Start placement every five minutes",
                 "source":{"kind":"schedule","schedule":{"time_zone":"UTC","local_time":"00:00",
-                    "recurrence":{"kind":"minutely","start_date":"2026-11-01","every":5}}},
+                    "recurrence":{"kind":"minutely","start_date":"2030-01-01","every":5}}},
                 "action":{"placement":"start"},"actor":person()}),
         )
         .await;
