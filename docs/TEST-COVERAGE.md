@@ -912,6 +912,7 @@ HS2-7D3MPP walks the ticket-editor autosave transitions through the shipped
 inspector in `clients/web/tests/ticket-editor-autosave-transitions.spec.ts`:
 
 - A reload whose recovery copy conflicts with a newer server value shows the field-conflict card instead of discarding the text; the copy survives another reload; Apply saves once on the server token and clears it; Use Theirs clears it without a write; reopening is clean.
+- A double-click into Details on a reload conflict lands in the editor: the clicked control does not move, the card sits beneath Details in the Info body, and switching to Timeline keeps it visible in the header (HS2-3TSEAX). `clients/web/src/ticket-field-conflict-placement.test.ts` pins the per-field placement, and `clients/web/tests/ux-demo.spec.ts # resets the TicketInspector ... settings (HS2-X1SM48)` drives the demo's Details and Title conflict choices through reset and back.
 - Page hide saves an open Details edit and keeps the editor open; typing after returning saves once more on the committed token without a conflict.
 - A held blur save with an edit typed before it answers and after it answers: the answer never closes the focused editor or sends the newer typing, and the next blur saves it without a prompt.
 - Selecting another ticket inside the 150 ms typing pause, with the caret at the start and at the end: one PATCH to the edited ticket, the neighbour untouched, no leftover copy, and no stale restore.

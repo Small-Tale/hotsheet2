@@ -720,4 +720,58 @@ describe('TicketInspector', () => {
     expect(reader).not.toContain('toggle-ticket-inspector');
     expect(reader).toContain('data-action="close-ticket-reader"');
   });
+
+  it('shows a field conflict beneath its field in Info and in the header otherwise (HS2-3TSEAX)', () => {
+    const conflict = (key: string, field = key) => ({
+      key,
+      field,
+      label: field,
+      base: 'Base',
+      mine: 'Mine',
+      theirs: 'Theirs',
+    });
+    const card = (html: string) => html.indexOf('data-component="ticket-field-conflict"');
+    const tabs = (html: string) => html.indexOf('ticket-inspector__tabs-frame');
+    const notes = [
+      { id: 'one', kind: 'regular' as const, author: 'Codex', time: 'Now', body: 'First' },
+      { id: 'two', kind: 'regular' as const, author: 'Codex', time: 'Now', body: 'Second' },
+    ];
+
+    const details = String(TicketInspector({ ...base, fieldConflict: conflict('details') }));
+    expect(card(details)).toBeGreaterThan(details.indexOf('ticket-info-panel__details-section'));
+    expect(card(details)).toBeLessThan(details.indexOf('data-component="ticket-tag-editor"'));
+    expect(card(details)).toBeGreaterThan(tabs(details));
+
+    const tags = String(TicketInspector({ ...base, fieldConflict: conflict('tags') }));
+    expect(card(tags)).toBeGreaterThan(tags.indexOf('data-component="ticket-tag-editor"'));
+    expect(card(tags)).toBeLessThan(tags.indexOf('data-component="ticket-notes"'));
+
+    const status = String(TicketInspector({ ...base, fieldConflict: conflict('status') }));
+    expect(card(status)).toBeGreaterThan(status.indexOf('data-status-line'));
+    expect(card(status)).toBeLessThan(status.indexOf('ticket-info-panel__blocked-section'));
+
+    const blocked = String(
+      TicketInspector({ ...base, blockedReason: 'Waiting', fieldConflict: conflict('blocked_reason') }),
+    );
+    expect(card(blocked)).toBeGreaterThan(blocked.indexOf('ticket-info-panel__blocked-section'));
+    expect(card(blocked)).toBeLessThan(blocked.indexOf('ticket-info-panel__details-section'));
+
+    const note = String(TicketInspector({ ...base, notes, fieldConflict: conflict('note:one', 'note') }));
+    expect(card(note)).toBeGreaterThan(note.indexOf('First'));
+    expect(card(note)).toBeLessThan(note.indexOf('Second'));
+    const unlisted = String(TicketInspector({ ...base, notes, fieldConflict: conflict('note:gone', 'note') }));
+    expect(card(unlisted)).toBeGreaterThan(unlisted.indexOf('Second'));
+
+    for (const html of [
+      String(TicketInspector({ ...base, fieldConflict: conflict('title') })),
+      String(TicketInspector({ ...base, fieldConflict: conflict('up_next') })),
+      String(TicketInspector({ ...base, activeTab: 'timeline', fieldConflict: conflict('details') })),
+      String(TicketInspector({ ...base, contentLoading: true, fieldConflict: conflict('details') })),
+    ]) {
+      expect(card(html)).toBeGreaterThan(-1);
+      expect(card(html)).toBeLessThan(tabs(html));
+    }
+    for (const html of [details, tags, status, blocked, note, unlisted])
+      expect(html.split('data-component="ticket-field-conflict"')).toHaveLength(2);
+  });
 });

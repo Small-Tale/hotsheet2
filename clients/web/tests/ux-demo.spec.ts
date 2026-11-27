@@ -2605,6 +2605,27 @@ test('resets the TicketInspector, AIConversation, QuickTicketComposer, and Conte
     await expect(target.locator('[data-action="open-duplicate-target"]')).toHaveCSS('cursor', 'pointer');
     await setDemoSettingsOpen(page, true);
     await settings.getByRole('button', { name: 'Reset' }).click();
+    // Field conflict (HS2-3TSEAX): details sits beneath Details in the Info body; title stays in the
+    // header beneath the title; reset removes it; choosing again shows it again.
+    const fieldConflict = settings.locator('kui-select[name="inspector-field-conflict"]'),
+      conflictCard = page.locator('[data-component="ticket-inspector"] [data-component="ticket-field-conflict"]'),
+      bodyCard = page.locator(
+        '[data-component="ticket-inspector"] .ticket-info-panel [data-component="ticket-field-conflict"]',
+      );
+    await setValue(fieldConflict, 'details');
+    await expect(conflictCard).toHaveAttribute('data-conflict-field', 'details');
+    await expect(bodyCard).toHaveCount(1);
+    await setValue(fieldConflict, 'title');
+    await expect(conflictCard).toHaveAttribute('data-conflict-field', 'title');
+    await expect(bodyCard).toHaveCount(0);
+    await setDemoSettingsOpen(page, true);
+    await settings.getByRole('button', { name: 'Reset' }).click();
+    await expect(fieldConflict).toHaveJSProperty('value', 'none');
+    await expect(conflictCard).toHaveCount(0);
+    await setValue(fieldConflict, 'details');
+    await expect(bodyCard).toHaveCount(1);
+    await setDemoSettingsOpen(page, true);
+    await settings.getByRole('button', { name: 'Reset' }).click();
 
     // AIConversation: embedded + failed → reset to the dialog streaming state → edit again.
     settings = await openSettings('ai-conversation', 'AIConversation');

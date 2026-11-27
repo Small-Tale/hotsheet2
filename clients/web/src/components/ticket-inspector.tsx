@@ -39,6 +39,7 @@ import type { InlineFeedbackReply } from '../feedback-replies';
 import { INSPECTOR_AND_EDITOR_ACTIONS } from '../interaction-attrs/inspector-and-editor';
 import { ticketCloseReasonLabel } from '../ticket-close';
 import { ticketDisplayNumber } from '../ticket-display-number';
+import { ticketFieldConflictPlacement } from '../ticket-field-conflict-placement';
 import type { TicketFieldConflict as TicketFieldConflictState } from '../ticket-field-reconciliation';
 import type { FollowUpLinkAvailability } from '../ticket-follow-up-link';
 import { isTicketTitleExpanded } from '../ticket-title-disclosure';
@@ -263,6 +264,13 @@ export function ticketInspectorPanel({
   contentLoading = false,
 }: TicketInspectorProps): SidebarPanelParts {
   const activeTab = shownInspectorTab(requestedTab);
+  // HS2-3TSEAX: the card sits beneath the field it resolves so it never shifts the clicked control.
+  const conflictPlacement = fieldConflict
+    ? ticketFieldConflictPlacement(fieldConflict.key, { infoShown: activeTab === 'info' && !contentLoading })
+    : undefined;
+  const conflictCard = fieldConflict && (
+    <TicketFieldConflict conflict={fieldConflict} resolution={fieldConflictResolution} />
+  );
   // While the detail loads nothing is actionable: the row-backed chrome is shown for continuity only.
   const loadingAttributes = contentLoading ? { inert: true, 'aria-busy': 'true', 'data-content-loading': 'true' } : {};
   const star = (
@@ -473,7 +481,7 @@ export function ticketInspectorPanel({
         backlinks={duplicateBacklinks}
         inaccessibleProjects={duplicateBacklinkInaccessibleProjects}
       />
-      {fieldConflict && <TicketFieldConflict conflict={fieldConflict} resolution={fieldConflictResolution} />}
+      {conflictPlacement === 'header' && conflictCard}
       {/* The app owns the strip's outer inset; Kerf's TabBar is a full-width block, so an inset must
           come from this frame's padding rather than a margin that would overflow (HS2-7DJPSG). */}
       <div class="ticket-inspector__tabs-frame">
@@ -615,6 +623,11 @@ export function ticketInspectorPanel({
           updatedLabel={updatedLabel}
           attachmentContext={attachmentContext}
           contentLoading={contentLoading}
+          fieldConflict={
+            fieldConflict && conflictCard && conflictPlacement && conflictPlacement !== 'header'
+              ? { placement: conflictPlacement, key: fieldConflict.key, card: conflictCard }
+              : undefined
+          }
         />
       )}
       {contentLoading && activeTab !== 'info' && (

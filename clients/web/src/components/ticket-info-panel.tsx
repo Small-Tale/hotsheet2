@@ -13,6 +13,7 @@ import { Row } from '@kerfjs/ui/row';
 import { Skeleton } from '@kerfjs/ui/skeleton';
 import { SunkenPanel } from '@kerfjs/ui/sunken-panel';
 import { Text } from '@kerfjs/ui/text';
+import type { SafeHtml } from 'kerfjs';
 import { CircleAlert, Plus } from 'lucide';
 
 import type { PhaseEstimatePresentation } from '../active-ticket-work';
@@ -20,6 +21,7 @@ import type { StartedPhase } from '../api';
 import type { AttachmentReferenceContext } from '../attachment-references';
 import { DETAILS_FEEDBACK_ID, detailsRequestFeedback } from '../feedback-needed';
 import type { InlineFeedbackReply } from '../feedback-replies';
+import { ticketFieldConflictNoteId, type TicketFieldConflictPlacement } from '../ticket-field-conflict-placement';
 import { MarkdownEditor, type MarkdownEditorMode } from './markdown-editor';
 import { MarkdownPreview } from './markdown-preview';
 import { FeedbackPrompt, type NoteCardProps, NoteEditor, RespondToFeedbackButton } from './note-card';
@@ -75,6 +77,14 @@ export interface TicketInfoPanelProps {
   attachmentContext?: AttachmentReferenceContext;
   /** The row-backed partial variant (HS2-15833W): details and notes are placeholders until they load. */
   contentLoading?: boolean;
+  /** A field's conflict card, shown beneath that field so it never shifts the clicked control (HS2-3TSEAX). */
+  fieldConflict?: TicketInfoFieldConflict;
+}
+
+export interface TicketInfoFieldConflict {
+  placement: Exclude<TicketFieldConflictPlacement, 'header'>;
+  key: string;
+  card: SafeHtml;
 }
 /**
  * The info panel, or its value-free loading state (HS2-XBHADT). The `placeholder` variant keeps the
@@ -185,7 +195,10 @@ function LoadedTicketInfoPanel({
   updatedLabel = 'Updated now',
   attachmentContext,
   contentLoading = false,
+  fieldConflict,
 }: TicketInfoPanelProps) {
+  const conflictAt = (placement: TicketInfoFieldConflict['placement']) =>
+    fieldConflict?.placement === placement ? fieldConflict.card : undefined;
   // The details card asks only while no note exchange exists (HS2-NVD36W).
   const detailsFeedback = detailsRequestFeedback(
     feedbackNeeded,
@@ -233,6 +246,7 @@ function LoadedTicketInfoPanel({
           </div>
         </List>
       </section>
+      {conflictAt('metadata')}
       <List gap="xs" className="ticket-info-panel__section ticket-info-panel__blocked-section">
         {blockedReasonEditing ? (
           <>
@@ -264,6 +278,7 @@ function LoadedTicketInfoPanel({
           <ListItem action="edit-blocked-reason" icon={<LucideIcon icon={Plus} name="plus" />} label="Block ticket" />
         ) : undefined}
       </List>
+      {conflictAt('blocked')}
       {blockers && <TicketBlockers {...blockers} />}
       <section class="ticket-info-panel__section ticket-info-panel__details-section">
         <ListHeader label="Details" />
@@ -318,6 +333,7 @@ function LoadedTicketInfoPanel({
           )}
         </ContentItem>
       </section>
+      {conflictAt('details')}
       <List gap="xs" className="ticket-info-panel__section">
         {canUpdate ? (
           <ListHeader
@@ -340,6 +356,7 @@ function LoadedTicketInfoPanel({
           popoverId={resolvedTagPopoverId}
         />
       </List>
+      {conflictAt('tags')}
       {contentLoading ? (
         <TicketNotes placeholder />
       ) : (
@@ -356,6 +373,11 @@ function LoadedTicketInfoPanel({
           inlineFeedbackReplies={inlineFeedbackReplies}
           feedbackChoiceSelections={feedbackChoiceSelections}
           attachmentContext={attachmentContext}
+          noteConflict={
+            fieldConflict?.placement === 'note'
+              ? { noteId: ticketFieldConflictNoteId(fieldConflict.key) ?? '', card: fieldConflict.card }
+              : undefined
+          }
         />
       )}
       <Row hAlign="full" gap="2xs" textInsets="rl" rootAttributes={{ 'data-provenance': 'true' }}>

@@ -10,6 +10,7 @@ import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Row } from '@kerfjs/ui/row';
 import { Skeleton } from '@kerfjs/ui/skeleton';
 import { Text } from '@kerfjs/ui/text';
+import type { SafeHtml } from 'kerfjs';
 import { Activity, MessageSquareText, Plus } from 'lucide';
 
 import type { AttachmentReferenceContext } from '../attachment-references';
@@ -87,6 +88,11 @@ interface TicketNotesProps {
   inlineFeedbackReplies?: Readonly<Record<string, readonly InlineFeedbackReply[]>>;
   feedbackChoiceSelections?: Readonly<Record<string, readonly string[]>>;
   attachmentContext?: AttachmentReferenceContext;
+  /**
+   * A note's conflict card, shown right after that note's card so it never shifts the note being
+   * clicked (HS2-3TSEAX). A note no longer listed shows it after the list.
+   */
+  noteConflict?: { noteId: string; card: SafeHtml };
 }
 
 /** Legacy and current thumbs notes keep their source id in the first line. Only a
@@ -144,10 +150,12 @@ function LoadedTicketNotes({
   inlineFeedbackReplies = {},
   feedbackChoiceSelections = {},
   attachmentContext,
+  noteConflict,
 }: TicketNotesProps) {
   const visibleNotes = nestAiFeedback(
     notes.filter((note) => !(note.kind === 'activity' && note.body.startsWith('Started phase changed from '))),
   );
+  const conflictListed = noteConflict !== undefined && visibleNotes.some((note) => note.id === noteConflict.noteId);
   return (
     // A Kerf List stacks the header, cards or empty line, composer, and add row (HS2-ZA1EAG).
     <section class="ticket-notes" data-component="ticket-notes">
@@ -171,20 +179,23 @@ function LoadedTicketNotes({
         {visibleNotes.length > 0 ? (
           <List className="ticket-notes__list" gap={rem(0.55)}>
             {visibleNotes.map((note) => (
-              <NoteCard
-                {...note}
-                density="compact"
-                editable={canEdit}
-                deletable={canDelete}
-                editing={note.id === editingNoteId}
-                editingPrompt={note.id === editingNoteId && isFeedbackPromptEdit(note.id)}
-                draft={note.id === editingNoteId ? noteDraft : undefined}
-                readerMode={readerMode}
-                respondToFeedback={!readerMode && note.kind === 'feedback_needed'}
-                inlineReplies={inlineFeedbackReplies[note.id]}
-                selectedChoices={feedbackChoiceSelections[note.id]}
-                attachmentContext={attachmentContext}
-              />
+              <>
+                <NoteCard
+                  {...note}
+                  density="compact"
+                  editable={canEdit}
+                  deletable={canDelete}
+                  editing={note.id === editingNoteId}
+                  editingPrompt={note.id === editingNoteId && isFeedbackPromptEdit(note.id)}
+                  draft={note.id === editingNoteId ? noteDraft : undefined}
+                  readerMode={readerMode}
+                  respondToFeedback={!readerMode && note.kind === 'feedback_needed'}
+                  inlineReplies={inlineFeedbackReplies[note.id]}
+                  selectedChoices={feedbackChoiceSelections[note.id]}
+                  attachmentContext={attachmentContext}
+                />
+                {noteConflict?.noteId === note.id && noteConflict.card}
+              </>
             ))}
           </List>
         ) : (
@@ -198,6 +209,7 @@ function LoadedTicketNotes({
             </div>
           )
         )}
+        {noteConflict && !conflictListed && noteConflict.card}
         {composing && <NoteComposer value={composerDraft} />}
         {canAdd && !composing && (
           <ListItem

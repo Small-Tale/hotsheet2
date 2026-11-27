@@ -483,8 +483,8 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   (`toggle-ticket-inspector`, "Hide/Show ticket inspector", "… notification inspector", or
   "… ticket rail"). The panel toolbar carries the ticket number and actions (the ticket rail: its
   project selector), the panel's fixed `header` keeps the inspector's title, live-claim notice,
-  needs-review and confidence notices, close outcome, duplicates, field conflict, and section
-  tabs pinned while the one Pane content scrolls, and the Workbench relocates the toggle to the
+  needs-review and confidence notices, close outcome, duplicates, a title (or other header-only)
+  field conflict, and section tabs pinned while the one Pane content scrolls, and the Workbench relocates the toggle to the
   trailing edge of the workspace toolbar while the rail is collapsed; Kerf's Pane pads the
   header and content slots for the device safe areas. The workspace grid's ticket rail is a
   Workbench navigation panel (HS2-FY06N4, Kerf `KF-WW33YJ`): a controlled NavStack whose root view
@@ -1022,7 +1022,11 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   the edits are disjoint. When the same text changed, the copy is never discarded: the
   editor opens on the current value and the field-conflict card shows both versions; the
   copy survives reloads and selection changes until the card is resolved (Use Theirs, or
-  a successful Apply of the merged value) (HS2-7D3MPP).
+  a successful Apply of the merged value) (HS2-7D3MPP). The card sits beneath the field it
+  resolves in the Info section (Details, Blocked Reason, Tags, the metadata selects, or the
+  edited note), so it never moves the control being clicked and a double-click into Details
+  lands in the editor; a title or Up Next conflict, and any conflict while another section or
+  the loading placeholder is shown, stays in the inspector header (HS2-3TSEAX).
   Conflicts are resolved automatically whenever both edits can be kept (HS2-JJ3R1G).
   The card appears only for edits that overlap. Every path runs the same three-way merge
   with the edit-start value as its base: a restored copy, a save rebased before sending,

@@ -666,9 +666,23 @@ function demoDuplicateProps(): Partial<TicketInspectorProps> {
   }
 }
 
-/** Whether the TicketInspector demo shows a concurrent-edit field conflict (HS2-4GBYYZ). */
-export const inspectorFieldConflict = signal<'none' | 'details'>('none');
+/**
+ * Whether the TicketInspector demo shows a concurrent-edit field conflict (HS2-4GBYYZ). A details
+ * conflict sits beneath Details; a title conflict stays in the header under the title (HS2-3TSEAX).
+ */
+export const inspectorFieldConflict = signal<'none' | 'details' | 'title'>('none');
 function demoFieldConflictProps(): Partial<TicketInspectorProps> {
+  if (inspectorFieldConflict.value === 'title')
+    return {
+      fieldConflict: {
+        key: 'title',
+        field: 'title',
+        label: 'Title',
+        base: 'Plan keyboard movement',
+        mine: 'Plan keyboard movement between columns',
+        theirs: 'Plan keyboard and pointer movement',
+      },
+    };
   return inspectorFieldConflict.value === 'details'
     ? {
         fieldConflict: {
@@ -729,6 +743,7 @@ export function TicketInspectorSettings() {
         choices={[
           { value: 'none', label: 'None' },
           { value: 'details', label: 'Details Changed Elsewhere' },
+          { value: 'title', label: 'Title Changed Elsewhere' },
         ]}
       />
       <Button type="button" action={'reset-settings'}>
@@ -1102,7 +1117,8 @@ function wireWorkspaceComponentsDemo(root: HTMLElement): () => void {
       'change',
       '[data-settings="ticket-inspector"] [name="inspector-field-conflict"]',
       (_event, target) => {
-        inspectorFieldConflict.value = (target as FormControl).value === 'details' ? 'details' : 'none';
+        const value = (target as FormControl).value;
+        inspectorFieldConflict.value = value === 'details' || value === 'title' ? value : 'none';
       },
     ),
   );

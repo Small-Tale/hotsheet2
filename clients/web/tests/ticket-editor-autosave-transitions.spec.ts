@@ -304,6 +304,60 @@ test('Use Theirs on a reload conflict clears the recovery copy so reopening is c
   await expect(card).toHaveCount(0);
 });
 
+// HS2-3TSEAX: the reload-conflict card appears on the first click into Details. It sits beneath the
+// field, so the clicked control does not move and a habitual double-click lands in the editor instead
+// of on a control the card pushed down (the section tabs).
+test('a double-click into Details on a reload conflict lands in the editor, which the card does not move (HS2-3TSEAX)', async ({
+  page,
+}) => {
+  const server = await mockProject(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  await openMockedProject(page);
+  await ticketRow(page, 'HS2-EDIT').click();
+  let editor = await editDetails(page);
+  await editor.fill('Intro rewritten here');
+  await expect.poll(() => storedDrafts(page)).toHaveLength(1);
+  server.details['01'] = 'Intro replaced elsewhere';
+  server.tokens['01'] = 'T-remote';
+  await page.reload();
+  await ticketRow(page, 'HS2-EDIT').click();
+
+  const inspector = page.locator('#app-right-rail');
+  const control = inspector.getByRole('button', { name: 'Edit Ticket details' });
+  await expect(control).toBeVisible();
+  const before = await control.boundingBox();
+  if (!before) throw new Error('Edit Ticket details has no box');
+  const x = before.x + before.width / 2,
+    y = before.y + Math.min(before.height / 2, 12);
+  await page.mouse.dblclick(x, y);
+
+  const card = inspector.locator('[data-component="ticket-field-conflict"]');
+  await expect(card).toBeVisible();
+  editor = inspector.getByRole('textbox', { name: 'Ticket details' });
+  await expect(editor).toBeFocused();
+  await expect(editor).toHaveValue('Intro replaced elsewhere');
+  await expect(inspector.locator('[data-inspector-tab="info"]')).toHaveAttribute('data-selected', 'true');
+  // The editor opened where the clicked control was, and the card follows it.
+  const after = await editor.boundingBox(),
+    cardBox = await card.boundingBox();
+  if (!after || !cardBox) throw new Error('The editor or the card has no box');
+  expect(Math.abs(after.y - before.y)).toBeLessThan(24);
+  expect(y).toBeGreaterThanOrEqual(after.y);
+  expect(y).toBeLessThanOrEqual(after.y + after.height);
+  expect(cardBox.y).toBeGreaterThanOrEqual(after.y + after.height);
+  // The card is in the Info body, not the inspector header above the section tabs.
+  await expect(inspector.locator('.ticket-info-panel [data-component="ticket-field-conflict"]')).toHaveCount(1);
+
+  // Moving to another section keeps the card visible in the header until it is resolved.
+  await inspector.locator('[data-inspector-tab="timeline"]').click();
+  await expect(card).toBeVisible();
+  await expect(inspector.locator('.ticket-info-panel [data-component="ticket-field-conflict"]')).toHaveCount(0);
+  await card.getByRole('button', { name: 'Use Theirs' }).click();
+  await expect(card).toHaveCount(0);
+  expect(server.patches).toEqual([]);
+});
+
 test('page hide saves an open details edit; typing on after returning saves once more without a conflict (HS2-7D3MPP)', async ({
   page,
 }) => {
