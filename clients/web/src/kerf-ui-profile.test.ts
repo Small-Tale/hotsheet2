@@ -13,12 +13,12 @@ interface KerfProfile {
  * a stale entry deletes its id here, and adding one needs a reviewed ticket that names its owner. On
  * 2026-11-26 an analyzer run without exceptions matched only these 17 of the former 48 entries. With
  * Kerf beta.139 (KF-A9H745, KF-R55A9X) the doctor reports 13 of them as suppressing nothing (KUI-P032),
- * so only these 4 remain (HS2-23GC8C).
+ * so only these 4 remained (HS2-23GC8C). HS2-5FFT4J retired the ticket inspector panel's KUI-L008 entry
+ * with a literal-union root class, leaving 3.
  */
 const PROFILE_EXCEPTION_IDS = [
   'web-awesome-quick-ticket-parts',
   'intentional-nested-inset-terminal-dashboard',
-  'state-modifier-classes-ticket-inspector-panel',
   'state-modifier-classes-sidebar-panel',
 ];
 
@@ -26,9 +26,14 @@ const PROFILE_EXCEPTION_IDS = [
  * HS2-AF1Q16: open Kerf tickets (kerf.hs2) whose capability retires an exception. Tests cannot
  * read the Kerf store, so this list is checked in. When a ticket ships or is archived, remove it
  * here; the exceptions that still name it then fail until they are removed or re-owned. KF-A9H745 and
- * KF-R55A9X shipped in beta.139; their remaining exceptions moved to HS2-5FFT4J (HS2-23GC8C).
+ * KF-R55A9X shipped in beta.139; their remaining exceptions moved to HS2-5FFT4J (HS2-23GC8C), which
+ * retired one and re-owned the other two to Kerf: the absolutely positioned chat preview false positive
+ * and the typed bare className forward.
  */
-const OPEN_KERF_OWNERS: Record<string, string> = {};
+const OPEN_KERF_OWNERS: Record<string, string> = {
+  'KF-F24ZM8': 'Analyzer KUI-L004 false positive: absolutely positioned child of a padded parent',
+  'KF-7MBEBY': 'Analyzer KUI-L008: classify a bare forwarded className typed as a literal union',
+};
 
 /**
  * HS2-AF1Q16: Hot Sheet adoption tickets for exceptions where Kerf already ships the capability, so
@@ -37,7 +42,6 @@ const OPEN_KERF_OWNERS: Record<string, string> = {};
  */
 const ADOPTION_OWNERS: Record<string, string> = {
   'HS2-CR912H': 'Move the quick ticket composer shell to Kerf DialogSurface',
-  'HS2-5FFT4J': 'Retire the last three Kerf profile exceptions with KF-A9H745 and KF-R55A9X',
 };
 
 interface KerfDoctorConfig {

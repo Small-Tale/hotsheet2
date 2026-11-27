@@ -110,6 +110,15 @@ export function workbenchSidebarPanel(
 }
 
 /**
+ * The app-owned root classes a standalone side panel forwards to its Kerf `Pane` (HS2-5FFT4J). The
+ * Kerf analyzer type-checks only template substitutions (KF-R55A9X), and a template-only forward is
+ * rejected by `no-unnecessary-template-expression`, so the bare forward keeps its KUI-L008 profile
+ * exception until Kerf classifies typed bare forwards (KF-7MBEBY).
+ */
+export type SidebarPaneRootClass =
+  'project-sidebar' | 'settings-navigation' | 'terminal-operations-sidebar' | 'notification-navigation';
+
+/**
  * Renders a side panel standalone as a Kerf `Pane`: the toolbar zones and the fixed `header` as its
  * header (plus the collapse toggle for the panel's `side` when `collapseControl` is set, mirroring
  * the Workbench's standard toggle while the panel is open), the content, and the footer.
@@ -122,7 +131,8 @@ export function SidebarPane({
   element = 'aside',
 }: {
   parts: SidebarPanelParts;
-  className?: string;
+  /** The composing panel's own root class, forwarded to the Kerf `Pane` root. */
+  className?: SidebarPaneRootClass;
   collapseControl?: boolean;
   /** The rail the panel docks to, which picks the collapse toggle's glyph. */
   side?: 'left' | 'right';

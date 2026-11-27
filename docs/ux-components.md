@@ -2940,9 +2940,16 @@ budget (HS2-AF1Q16): an analyzer run without them showed only 17 of the former 4
 suppressed a finding, so the 31 stale entries were removed. One `KUI-L011` entry remains for
 the quick ticket composer's raw `wa-dialog` parts, owned by its DialogSurface adoption
 (`HS2-CR912H`). Kerf beta.139 shipped `KF-A9H745` (independent inset surfaces) and
-`KF-R55A9X` (literal-union class modifiers), which retired 13 more entries (HS2-23GC8C). One
-`KUI-L004` chat preview surface and two `KUI-L008` forwarded class expressions remain, owned by
-their adoption ticket `HS2-5FFT4J`. `src/kerf-ui-profile.test.ts`
+`KF-R55A9X` (literal-union class modifiers), which retired 13 more entries (HS2-23GC8C).
+HS2-5FFT4J retired the `TicketInspectorPanel` `KUI-L008` entry. Its root class is now one
+finite template, and the forwarded panel class is a literal union. `SidebarPane` types its
+forwarded class as a literal union too. A bare `className={className}` is never type-checked,
+though, and a template-only forward fails `no-unnecessary-template-expression`. Its exception is
+therefore owned by `KF-7MBEBY`, which asks Kerf to classify typed bare forwards. The `KUI-L004`
+entry covers the chat preview card. That card is absolutely positioned at the frame inset, so the
+two insets cannot compound, but the analyzer ignores `position`. It is owned by the Kerf
+false-positive ticket `KF-F24ZM8`.
+`src/kerf-ui-profile.test.ts`
 pins the exact ids. It requires every target to exist and still contain the flagged
 construct (`::part(`, the named classes, the quoted expressions), and requires every
 rationale to name an owner from its checked-in open-Kerf or adoption list, so an archived

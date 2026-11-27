@@ -4,13 +4,17 @@ import { List, type ListProps } from '@kerfjs/ui/list';
 
 export type TicketInspectorPanelPresentation = 'sidebar' | 'reader';
 
+/** The composing tab panels' own root classes; a literal union so the Kerf analyzer can classify the root (HS2-5FFT4J). */
+export type TicketInspectorPanelRootClass =
+  'ticket-info-panel' | 'ticket-timeline' | 'ticket-code-review ticket-code-review--panel' | 'ticket-attachments';
+
 export interface TicketInspectorPanelProps {
   /** The composing tab panel's `data-component` identity (for example `ticket-info-panel`). */
   component: string;
   /** `reader` gives the reader modal's generous content inset instead of the sidebar's 8px column. */
   presentation?: TicketInspectorPanelPresentation;
   /** The composing panel's own root class, merged onto this root. */
-  className?: string;
+  className?: TicketInspectorPanelRootClass;
   /** Extra root attributes the composing panel owns (drop-target flags, ARIA). */
   attributes?: Record<string, string | undefined>;
   children?: ListProps['children'];
@@ -29,11 +33,13 @@ export function TicketInspectorPanel({
   attributes,
   children,
 }: TicketInspectorPanelProps) {
-  const classes = ['ticket-inspector-panel'];
-  if (presentation === 'reader') classes.push('ticket-inspector-panel--reader');
-  if (className) classes.push(className);
+  // HS2-5FFT4J: one finite template (KF-R55A9X) so the Kerf analyzer proves every root class is app-owned.
   return (
-    <div class={classes.join(' ')} data-component={component} {...attributes}>
+    <div
+      class={`ticket-inspector-panel${presentation === 'reader' ? ' ticket-inspector-panel--reader' : ''}${className ? ` ${className}` : ''}`}
+      data-component={component}
+      {...attributes}
+    >
       <List gap="l">{children}</List>
     </div>
   );

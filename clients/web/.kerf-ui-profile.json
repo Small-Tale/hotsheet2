@@ -46,19 +46,13 @@
       "id": "intentional-nested-inset-terminal-dashboard",
       "rules": ["KUI-L004"],
       "target": "src/components/terminal-dashboard.tsx",
-      "rationale": "Reviewed HS2-M6B8AD: design: workspace-chat-tile__preview, workspace-chat-tile__preview-surface are the chat tile's padded preview frame and its scaled summary card, which is absolutely positioned at the frame inset and carries its own card padding, so the two insets do not compound. Pending adoption HS2-5FFT4J: Kerf ships independent-surface recognition since beta.139; the exception goes when the card declares an accepted surface boundary or a Kerf ticket owns the absolute-child case."
-    },
-    {
-      "id": "state-modifier-classes-ticket-inspector-panel",
-      "rules": ["KUI-L008"],
-      "target": "src/components/ticket-inspector-panel.tsx",
-      "rationale": "Reviewed HS2-M6B8AD: (extended for HS2-MGVE50) the dynamic class expression only composes this component's own app-owned base class with its `--reader` presentation modifier and forwards the composing tab panel's own root class (ticket-info-panel, ticket-timeline, ticket-code-review, ticket-attachments); no Kerf public class is chosen dynamically. Pending adoption HS2-5FFT4J: Kerf classifies literal-union class modifiers since beta.139; the exception goes when the consumer class becomes a literal union. Expressions: class={classes.join(' ')}"
+      "rationale": "Reviewed HS2-M6B8AD: design: workspace-chat-tile__preview, workspace-chat-tile__preview-surface are the chat tile's padded preview frame and its scaled summary card, which is absolutely positioned at the frame inset and carries its own card padding, so the two insets do not compound. The card has no background, border, or outline and is not a cataloged component, so neither CSS surface recognition nor layout.geometry.role \"surface\" (beta.139) describes it truthfully; the analyzer ignores position, so this is a false positive owned by KF-F24ZM8 (HS2-5FFT4J). The exception goes when Kerf breaks the inset chain at out-of-flow children."
     },
     {
       "id": "state-modifier-classes-sidebar-panel",
       "rules": ["KUI-L008"],
       "target": "src/components/sidebar-panel.tsx",
-      "rationale": "Reviewed HS2-M6B8AD: the dynamic class expression only composes this component's own app-owned base class with its state or variant modifier (BEM `--state`) or forwards a consumer-supplied app class; no Kerf public class is chosen dynamically. Pending adoption HS2-5FFT4J: Kerf classifies literal-union class modifiers since beta.139; the exception goes when the forwarded class becomes a literal union. Expressions: className={className}"
+      "rationale": "Reviewed HS2-M6B8AD: SidebarPane forwards its consumer's own root class to the Kerf Pane, typed since HS2-5FFT4J as the SidebarPaneRootClass literal union (project-sidebar, settings-navigation, terminal-operations-sidebar, notification-navigation); no Kerf public class is chosen dynamically. The analyzer type-checks only template substitutions, and a template-only forward fails no-unnecessary-template-expression, so this waits on KF-7MBEBY (classify a typed bare forward). Expressions: className={className}"
     }
   ]
 }
