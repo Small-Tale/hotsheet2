@@ -621,8 +621,11 @@ Confirm This Computer and the remote each show their own host name, cards,
 capabilities and toolchains, that the remote's CPU card follows its own live
 feed after selecting it, and that starting and stopping an AI session on each
 machine changes its session count and AI Sessions Here without a reload. Close
-the remote's last tab: its row reads Not connected. Revoke this computer on the
-remote host: its row reads Revoked. Repeat in the Tauri desktop host and on a
+the remote's last tab: its row keeps its live readings, now read through the
+bridge's machine path (HS2-CMXKK2), with its CPU card still following its live
+feed. Stop the remote host's server: within the backoff its row reads Not
+reachable with why, and restarting it brings the readings back without a
+reload. Revoke this computer on the remote host: its row reads Revoked. Repeat in the Tauri desktop host and on a
 phone-width browser, where both rails open as overlays from the toolbar.
 
 AI tool sign-in (HS2-S1FEYY): on a disposable machine with Claude and Codex

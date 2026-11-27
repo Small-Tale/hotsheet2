@@ -13,11 +13,14 @@ import {
   aiToolRows,
   capabilityRows,
   LOCAL_MACHINE_ID,
+  machineConnected,
   machineCpuPercent,
   machineKindLabel,
+  machineReadKey,
   machineRowDescription,
   machineUnavailableMessage,
   placementLimitRows,
+  reachableMachine,
   remoteMachineId,
   selectedSystemsMachine,
   sessionRows,
@@ -48,9 +51,52 @@ describe('HS2-DR0ZSQ systemsMachines', () => {
     });
     expect(machines).toEqual([
       { id: LOCAL_MACHINE_ID, kind: 'local', name: 'Studio', projectId: 'local-1' },
-      { id: remoteMachineId(A), kind: 'remote', name: 'Build Host', projectId: `remote:${A}:x` },
-      { id: remoteMachineId(B), kind: 'remote', name: 'laptop.example.test', unavailable: 'not-connected' },
+      { id: remoteMachineId(A), kind: 'remote', name: 'Build Host', bindingId: A, projectId: `remote:${A}:x` },
+      {
+        id: remoteMachineId(B),
+        kind: 'remote',
+        name: 'laptop.example.test',
+        bindingId: B,
+        unavailable: 'not-connected',
+      },
     ]);
+  });
+
+  it('HS2-CMXKK2 reads a paired remote without an open tab through its binding where the bridge allows', () => {
+    const machines = systemsMachines({
+      projects: [{ id: 'local-1' }, remoteTab(A, 'x')],
+      remoteServers: [
+        server(A, 'https://build.example.test'),
+        server(B, 'https://laptop.example.test'),
+        server(C, 'https://lab.example.test', true),
+      ],
+      direct: true,
+    });
+    expect(
+      machines.slice(1).map((machine) => [machine.id, machine.projectId, machine.direct, machine.unavailable]),
+    ).toEqual([
+      [remoteMachineId(A), `remote:${A}:x`, undefined, undefined],
+      [remoteMachineId(B), undefined, true, undefined],
+      // A revoked remote is never read, tab or not.
+      [remoteMachineId(C), undefined, undefined, 'revoked'],
+    ]);
+    // An open tab wins; without one the binding's machine path is the read key.
+    expect(machines.map(machineReadKey)).toEqual(['local-1', `remote:${A}:x`, `machine:${B}`, undefined]);
+    expect(machines.map(machineConnected)).toEqual([true, true, true, false]);
+    // Opening and then closing a tab moves the read to the tab and back.
+    const opened = systemsMachines({
+      projects: [{ id: 'local-1' }, remoteTab(B, 'y')],
+      remoteServers: [server(B, 'https://laptop.example.test')],
+      direct: true,
+    });
+    expect(machineReadKey(opened[1])).toBe(`remote:${B}:y`);
+    const closed = systemsMachines({
+      projects: [{ id: 'local-1' }],
+      remoteServers: [server(B, 'https://laptop.example.test')],
+      direct: true,
+    });
+    expect(machineReadKey(closed[1])).toBe(`machine:${B}`);
+    expect(machineRowDescription(closed[1], {})).toBe('Paired Remote');
   });
 
   it('marks a revoked remote even while a tab is open, and adds remotes the list does not name', () => {
@@ -429,5 +475,29 @@ describe('HS2-5H8R0N Admission by Project and Placement Limits', () => {
       { label: 'CPU Ceiling', value: 'Set by each project' },
       { label: 'Free Disk Floor', value: '512 MB' },
     ]);
+  });
+});
+
+describe('HS2-CMXKK2 a remote read without a tab', () => {
+  const direct = { id: 'remote:b', kind: 'remote' as const, name: 'Build', bindingId: 'b', direct: true };
+
+  it('is Not reachable, with why, only until it answers anything', () => {
+    const failed = reachableMachine(direct, {}, 'Remote server is unavailable or its approval changed.');
+    expect(failed).toMatchObject({ unavailable: 'unreachable' });
+    expect(machineRowDescription(failed, {})).toBe('Not reachable');
+    expect(machineUnavailableMessage(failed)).toEqual({
+      title: 'Build Is Not Reachable',
+      detail:
+        'Remote server is unavailable or its approval changed. Check that it is running and that this computer’s approval is current; it is tried again on its own.',
+    });
+    // Any reading, or no failure, keeps it connected; a machine with a tab is never marked.
+    expect(reachableMachine(direct, { health: hostHealthFixture('normal') }, 'x')).toBe(direct);
+    expect(reachableMachine(direct, { capacity: systemsDemoCapacity('build') }, 'x')).toBe(direct);
+    expect(reachableMachine(direct, {}, undefined)).toBe(direct);
+    const tab = { ...direct, direct: undefined, projectId: 'remote:b:c' };
+    expect(reachableMachine(tab, {}, 'x')).toBe(tab);
+    expect(machineUnavailableMessage({ ...direct, unavailable: 'unreachable' })?.detail).toMatch(
+      /^It did not answer\./u,
+    );
   });
 });

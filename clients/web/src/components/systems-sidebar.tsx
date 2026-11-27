@@ -47,7 +47,7 @@ function machineStatus({ machine, cpu }: SystemsSidebarMachine) {
         Revoked
       </Badge>
     );
-  if (machine.unavailable === 'not-connected')
+  if (machine.unavailable === 'not-connected' || machine.unavailable === 'unreachable')
     return (
       <Badge tone="neutral" appearance="quiet" size="compact">
         Offline

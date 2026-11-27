@@ -66,6 +66,10 @@ describe('HS2-DR0ZSQ SystemsView', () => {
     expect(offline).toContain('Travel Laptop Is Not Connected');
     expect(offline).not.toContain('data-component="stats-this-mac"');
     expect(html(SystemsView(systemsDemoView('revoked', 'ready')))).toContain('Lab Box Revoked This Computer');
+    // HS2-CMXKK2: a remote read through its binding that did not answer says why.
+    const unreachable = html(SystemsView(systemsDemoView('unreachable', 'ready')));
+    expect(unreachable).toContain('Render Box Is Not Reachable');
+    expect(unreachable).toContain('Remote server is unavailable or its approval changed.');
   });
 
   it('shows loading, a failed first read, and stale readings after a failure', () => {

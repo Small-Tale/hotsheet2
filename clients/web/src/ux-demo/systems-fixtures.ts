@@ -16,7 +16,7 @@ import {
 import { hostHealthFixture, type HostHealthScenario } from './host-health-fixtures';
 
 /** Synthetic machines for the Systems demos (HS2-DR0ZSQ); no real host or customer data. */
-export type SystemsDemoMachine = 'local' | 'build' | 'offline' | 'revoked';
+export type SystemsDemoMachine = 'local' | 'build' | 'offline' | 'unreachable' | 'revoked';
 export type SystemsDemoScenario = 'ready' | 'loading' | 'failed' | 'stale';
 
 const BINDING = '01JSYNTHREMTE0000000000001';
@@ -28,6 +28,16 @@ export const SYSTEMS_DEMO_MACHINES: Readonly<Record<SystemsDemoMachine, SystemsM
     kind: 'remote',
     name: 'Travel Laptop',
     unavailable: 'not-connected',
+  },
+  // HS2-CMXKK2: a paired remote read without a tab whose machine path did not answer.
+  unreachable: {
+    id: 'remote:01JSYNTHREMTE0000000000004',
+    kind: 'remote',
+    name: 'Render Box',
+    bindingId: '01JSYNTHREMTE0000000000004',
+    direct: true,
+    unavailable: 'unreachable',
+    failure: 'Remote server is unavailable or its approval changed.',
   },
   revoked: { id: 'remote:01JSYNTHREMTE0000000000003', kind: 'remote', name: 'Lab Box', unavailable: 'revoked' },
 };

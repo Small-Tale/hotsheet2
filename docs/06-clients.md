@@ -6313,17 +6313,20 @@ The machine list is, in order:
 
 1. **This Computer.** It is read through the first open local project tab.
 2. **Each paired remote server**, in the order of the desktop's remote list. Each one is read
-   through its first open remote tab.
+   through its first open remote tab. A paired remote without an open tab is read through the
+   bridge's machine path for its binding (HS2-CMXKK2, docs/08). Opening one of its tabs moves the
+   reads to that tab; closing it moves them back.
 3. **Any other remote that an open remote tab reaches.** This covers a browser without the
    desktop's remote list.
 
 A machine shows no readings, and says why, in three cases:
 
-| Case                                      | What the screen says                                                                                                                                                           |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| A remote with no open tab                 | **Not connected**, with "Open one of its projects in a tab". The bridge reaches a remote's API only through an opened remote project; reading one without a tab is HS2-CMXKK2. |
-| A remote whose host revoked this computer | **Revoked**                                                                                                                                                                    |
-| This computer with no local project open  | **No project open**                                                                                                                                                            |
+| Case                                                                               | What the screen says                                                                                                 |
+| ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| A remote with no open tab, where the host offers no machine path (a plain browser) | **Not connected**, with "Open one of its projects in a tab"                                                          |
+| A remote read without a tab that answered nothing (HS2-CMXKK2)                     | **Not reachable**, with the bridge's reason. Its streams keep retrying with backoff, and its first reading clears it |
+| A remote whose host revoked this computer                                          | **Revoked**                                                                                                          |
+| This computer with no local project open                                           | **No project open**                                                                                                  |
 
 A selected machine that disappears falls back to This Computer.
 
@@ -6373,20 +6376,21 @@ toolbar.
 | Reading                                                   | Source                                                                                                                                                           | How it stays current                                                                                                                                                                                           |
 | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Host health (the cards)                                   | The pushed host-health resource: this server's, or the remote tab's (HS2-DTAVQA, HS2-K4DY5G)                                                                     | Re-read on each `host_health` change event and on stream resync                                                                                                                                                |
+| Host health of a remote without a tab (HS2-CMXKK2)        | `GET /__hotsheet/remotes/{binding}/machine/host-health`                                                                                                          | It has no change stream, so it is read when its capacity stream starts and again each time that stream answers with a new version                                                                              |
 | Live CPU (selected machine only)                          | `GET /host-health/cpu?after=<seq>` through that machine's tab (HS2-CPFBWP)                                                                                       | Genuine long poll. Selecting another machine starts a fresh feed, because a sequence belongs to one server. A host without a per-core reader answers `unsupported` once and the feed stops.                    |
 | Capabilities, AI tools, AI sessions, free memory and disk | The hosted capacity snapshot `GET /checkouts/{checkout}/target-capacity?after=<version>&wait_ms=8000` (HS2-J8PRTV, HS2-P5GTSW): one stream per connected machine | Genuine long poll with version replay. It answers when the machine's room changes, or after eight seconds. Failures keep the last snapshot with an out-of-date banner and back off from 1 s, doubling to 30 s. |
 | AI Tool Capacity                                          | `GET /checkouts/{owner}/orchestration/tool-capacity`                                                                                                             | Read once each time the screen opens                                                                                                                                                                           |
 | Placement Limits (HS2-5H8R0N)                             | The capacity snapshot's `owner_limits`                                                                                                                           | The same capacity long poll: the owner's admission limits are part of its version                                                                                                                              |
 | Admission by Project (HS2-5H8R0N)                         | Each open orchestration project's `GET .../orchestration/sites` and `GET .../orchestration/policy`, then `POST .../targets/{target}/admission` per usable tool   | Sites and policy: read on opening and when the open orchestration projects change. Admission: asked for the selected machine on selection and again only when its capacity `version` changes                   |
 
+A remote without a tab reads its live CPU and capacity through the bridge's machine path
+(`/__hotsheet/remotes/{binding}/machine/host-health/cpu` and
+`.../machine/checkouts/machine/target-capacity`), with the same long polls (HS2-CMXKK2).
+
 These streams run only while Systems shows on a visible page. Leaving the screen or hiding the
 page aborts them.
 
 The headless equivalent of the capacity read is `hotsheet-cli orchestration capacity show
 --checkout <id> [--after <version> --wait-seconds <n>]`. Host health has its own HTTP routes
-(docs/host-health.md). Systems adds no server route.
-
-### Known gaps (follow-ups)
-
-- **Remotes without an open tab (HS2-CMXKK2):** reading a paired remote that has no open tab needs
-  a machine-level remote read in the bridge.
+(docs/host-health.md). Systems adds no server route; the bridge's machine path (HS2-CMXKK2) only
+forwards those existing reads.

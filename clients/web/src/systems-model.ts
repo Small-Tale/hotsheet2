@@ -25,7 +25,7 @@ export const LOCAL_MACHINE_ID = 'local';
 export type SystemsMachineKind = 'local' | 'remote';
 
 /** Why a machine has no live readings. */
-export type SystemsMachineUnavailable = 'no-project' | 'not-connected' | 'revoked';
+export type SystemsMachineUnavailable = 'no-project' | 'not-connected' | 'revoked' | 'unreachable';
 
 export interface SystemsMachine {
   id: string;
@@ -33,8 +33,35 @@ export interface SystemsMachine {
   name: string;
   /** The open project tab whose path reaches this machine; its reads go through that path. */
   projectId?: string;
+  /** A remote's binding id (the desktop's remote list). */
+  bindingId?: string;
+  /**
+   * HS2-CMXKK2: a paired remote with no open tab, read through the bridge's machine path for its
+   * binding (`/__hotsheet/remotes/{binding}/machine`) instead of a tab.
+   */
+  direct?: boolean;
   unavailable?: SystemsMachineUnavailable;
+  /** HS2-CMXKK2: why a remote read through its binding could not be reached. */
+  failure?: string;
 }
+
+/**
+ * HS2-CMXKK2: a remote read without a tab whose first capacity read and host health both failed is
+ * Not reachable, with why; its streams keep retrying with backoff, and the first reading clears it.
+ */
+export function reachableMachine(machine: SystemsMachine, readings: SystemsMachineReadings, error?: string) {
+  if (!machine.direct || !error || readings.capacity || readings.health) return machine;
+  return { ...machine, unavailable: 'unreachable' as const, failure: error };
+}
+
+/** The key one machine's reads go through: its tab, else its binding's machine path. */
+export function machineReadKey(machine: SystemsMachine): string | undefined {
+  if (machine.projectId) return machine.projectId;
+  return machine.direct && machine.bindingId ? `machine:${machine.bindingId}` : undefined;
+}
+
+/** Whether a machine has live readings to show. */
+export const machineConnected = (machine: SystemsMachine) => machineReadKey(machine) !== undefined;
 
 /** An open project tab, as the machine list needs it. */
 export interface SystemsOpenProject {
@@ -56,17 +83,21 @@ export const remoteMachineId = (bindingId: string) => `remote:${bindingId}`;
 /**
  * This computer first, then each paired remote server in its listed order, then any remote an open
  * tab reaches that the list does not name (a browser without the desktop's remote list). A machine
- * is read through its first open tab; one without an open tab has no live readings.
+ * is read through its first open tab. HS2-CMXKK2: a paired remote without an open tab is read
+ * through the bridge's machine path when this host offers one (`direct`), else it is not connected.
  */
 export function systemsMachines({
   projects,
   remoteServers,
   localName,
+  direct = false,
 }: {
   projects: readonly SystemsOpenProject[];
   remoteServers: readonly SystemsRemoteServer[];
   /** The local server's host name, once host health has been read. */
   localName?: string;
+  /** Whether the bridge reads a paired remote's machine without an open tab (HS2-CMXKK2). */
+  direct?: boolean;
 }): SystemsMachine[] {
   const local = projects.find((project) => !parseRemoteProjectId(project.id));
   const tabsByBinding = new Map<string, SystemsOpenProject>();
@@ -91,11 +122,14 @@ export function systemsMachines({
       id: remoteMachineId(server.id),
       kind: 'remote',
       name: tab?.remoteHost?.trim() || remoteHostLabel(null, server.origin) || server.label,
+      bindingId: server.id,
       ...(server.revoked
         ? { unavailable: 'revoked' as const }
         : tab
           ? { projectId: tab.id }
-          : { unavailable: 'not-connected' as const }),
+          : direct
+            ? { direct: true }
+            : { unavailable: 'not-connected' as const }),
     });
   }
   for (const [bindingId, tab] of tabsByBinding) {
@@ -104,6 +138,7 @@ export function systemsMachines({
       id: remoteMachineId(bindingId),
       kind: 'remote',
       name: tab.remoteHost?.trim() || 'Remote Server',
+      bindingId,
       projectId: tab.id,
     });
   }
@@ -155,6 +190,7 @@ export function machineKindLabel(machine: SystemsMachine): string {
 export function machineRowDescription(machine: SystemsMachine, readings: SystemsMachineReadings): string {
   if (machine.unavailable === 'revoked') return 'Approval revoked';
   if (machine.unavailable === 'not-connected') return 'Not connected';
+  if (machine.unavailable === 'unreachable') return 'Not reachable';
   if (machine.unavailable === 'no-project') return `${machineKindLabel(machine)} · no project open`;
   const sessions = aiSessionCount(readings.capacity);
   return [machineKindLabel(machine), sessions === undefined ? undefined : plural(sessions, 'AI session')]
@@ -179,7 +215,13 @@ export function machineUnavailableMessage(machine: SystemsMachine): { title: str
   if (machine.unavailable === 'not-connected')
     return {
       title: `${machine.name} Is Not Connected`,
-      detail: 'Open one of its projects in a tab to see its live readings here.',
+      detail:
+        'This app cannot reach it without an open project. Open one of its projects in a tab to see its live readings here.',
+    };
+  if (machine.unavailable === 'unreachable')
+    return {
+      title: `${machine.name} Is Not Reachable`,
+      detail: `${machine.failure ?? 'It did not answer.'} Check that it is running and that this computer’s approval is current; it is tried again on its own.`,
     };
   if (machine.unavailable === 'no-project')
     return {

@@ -6239,6 +6239,9 @@ export async function startHotSheetWebClient() {
       const target = projects.peek().find((item) => item.id === projectId);
       return target ? new Api(target.apiPath, '', { trackBusy: false }) : undefined;
     },
+    // HS2-CMXKK2: a paired remote with no open tab is read through the bridge's machine path.
+    machineApi: (bindingId) =>
+      new Api(`/__hotsheet/remotes/${encodeURIComponent(bindingId)}/machine`, '', { trackBusy: false }),
     orchestrationProject: (projectId) => orchestrationView.isOrchestrationProject(projectId),
     terminals: () =>
       terminalGroups.value.flatMap((group) =>

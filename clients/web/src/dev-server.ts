@@ -45,14 +45,18 @@ import {
   discoverRemoteProjects,
   finishRemotePairing,
   listRemoteServers,
+  privateRemoteConnection,
   remotePeerSession,
   removeRemoteServer,
   requestRemoteRenewal,
+  requireCurrentRemoteBinding,
   selectedRemoteProjects,
   selectRemoteProject,
   unselectRemoteProject,
 } from './remote-projects/host';
 import { isRemoteProjectId } from './remote-projects/identity';
+import { createRemoteMachineBridge, type RemoteMachineBridge } from './remote-projects/machine';
+import { remoteRequest } from './remote-projects/transport';
 
 /** A remote session's polls ride the browser's own session cookie, as its project-api requests
  * do; the proxy adds the CSRF header from it and never forwards a loopback secret (HS2-ZVSMTZ). */
@@ -121,6 +125,14 @@ export function remoteSessionGrants(device: unknown): { origin?: string; admin: 
   };
 }
 
+/** HS2-CMXKK2: the paired remotes' machine reads, through their private connections. */
+const remoteMachines = createRemoteMachineBridge({
+  discover: discoverRemoteProjects,
+  connection: privateRemoteConnection,
+  requireCurrent: requireCurrentRemoteBinding,
+  request: remoteRequest,
+});
+
 export function createDevApp(
   dev = true,
   reveal = revealCorruptTicket,
@@ -152,6 +164,7 @@ export function createDevApp(
     list: () => Promise<RegisteredProject[]>;
     remove: (id: string) => Promise<void>;
   } = { list: listRegisteredProjects, remove: removeRegisteredProject },
+  machines: Pick<RemoteMachineBridge, 'proxy' | 'forget'> = remoteMachines,
 ): Hono {
   const app = new Hono();
   app.use('/__hotsheet/*', async (context, next) => {
@@ -316,7 +329,10 @@ export function createDevApp(
   app.post('/__hotsheet/remotes/pair/:handle/redeem', async (context) => {
     try {
       const { discovery, revisedId } = await finishRemotePairing(context.req.param('handle'));
-      if (revisedId) closeRemoteServerSessions(revisedId);
+      if (revisedId) {
+        closeRemoteServerSessions(revisedId);
+        machines.forget(revisedId);
+      }
       return context.json(discovery);
     } catch (error) {
       return context.json({ error: error instanceof Error ? error.message : 'Could not finish pairing.' }, 409);
@@ -328,6 +344,15 @@ export function createDevApp(
     } catch {
       return context.json({ error: 'Could not reach or authenticate the approved remote server.' }, 503);
     }
+  });
+  // HS2-CMXKK2: a paired remote's machine reads (host health, live CPU, hosted capacity) for Systems
+  // without an open project tab. Like a remote tab, this needs the local grant (route kind `host`);
+  // the bridge allows only those three reads and keeps the session in this host.
+  app.get('/__hotsheet/remotes/:id/machine/*', async (context) => {
+    const id = context.req.param('id');
+    const prefix = `/__hotsheet/remotes/${encodeURIComponent(id)}/machine`;
+    const path = `${context.req.path.slice(prefix.length) || '/'}${new URL(context.req.url).search}`;
+    return machines.proxy(id, context.req.method, path, context.req.raw.signal);
   });
   // HS2-4B0KSD: this machine's paired session on one remote server (lifetime, reminder day, or why it
   // stopped working) and a request that the remote host renew it in place. Both run the headless
@@ -370,6 +395,7 @@ export function createDevApp(
       if (!Number.isSafeInteger(revision) || revision <= 0) return context.json({ error: 'Revision required.' }, 400);
       const removed = await removeRemoteServer(context.req.param('id'), revision);
       closeRemoteServerSessions(removed.id);
+      machines.forget(removed.id);
       return context.json(removed);
     } catch {
       return context.json({ error: 'Could not remove approved remote server.' }, 409);

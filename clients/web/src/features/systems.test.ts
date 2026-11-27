@@ -12,14 +12,14 @@ import type { HostCpuFrame } from '../host-cpu-feed';
 import type { HostHealthResourceState } from '../host-health-resource';
 import { hostHealthFixture } from '../ux-demo/host-health-fixtures';
 import { systemsDemoCapacity, systemsDemoCpu } from '../ux-demo/systems-fixtures';
-import { createSystemsController, type SystemsApi } from './systems';
+import { createSystemsController, type SystemsApi, type SystemsMachineApi } from './systems';
 
 const BINDING = '01JSYNTHREMTE0000000000001';
 const REMOTE_TAB = `remote:${BINDING}:c1`;
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 /** Every read the controller makes, held open until the test answers. */
-function harness({ orchestration = ['local-1'] }: { orchestration?: string[] } = {}) {
+function harness({ orchestration = ['local-1'], direct = false }: { orchestration?: string[]; direct?: boolean } = {}) {
   const capacityReads: {
     projectId: string;
     after?: string;
@@ -75,6 +75,26 @@ function harness({ orchestration = ['local-1'] }: { orchestration?: string[] } =
     revision: 'p1',
     policy: { tools: [{ tool: 'codex' }, { tool: 'claude' }] },
   };
+  // HS2-CMXKK2: machine reads of a paired remote without a tab, by binding.
+  const machineReads: { binding: string; kind: string; checkout?: string; after?: string | number }[] = [];
+  const healthAnswers: ((snapshot: ReturnType<typeof hostHealthFixture>) => void)[] = [];
+  const machineApi = (binding: string): SystemsMachineApi => ({
+    machineCapacity: (checkout: string, after: string | undefined, abort?: AbortSignal) =>
+      new Promise<OrchestrationCapacity>((resolve) => {
+        machineReads.push({ binding, kind: 'capacity', checkout, after });
+        capacityReads.push({ projectId: `machine:${binding}`, after, signal: abort!, resolve });
+      }),
+    hostCpu: (after: number | undefined, abort: AbortSignal) =>
+      new Promise<HostCpuFrame>((resolve) => {
+        machineReads.push({ binding, kind: 'cpu', after });
+        cpuReads.push({ projectId: `machine:${binding}`, after, signal: abort, resolve });
+      }),
+    hostHealth: () =>
+      new Promise((resolve) => {
+        machineReads.push({ binding, kind: 'health' });
+        healthAnswers.push(resolve);
+      }),
+  });
   const admissionReads: {
     target: string;
     tool: string;
@@ -131,8 +151,11 @@ function harness({ orchestration = ['local-1'] }: { orchestration?: string[] } =
     cpuOptions: { wait: () => Promise.resolve() },
     capacityOptions: { delay: () => Promise.resolve(), now: () => 0 },
     knownTools: () => ['claude', 'codex'],
+    ...(direct ? { machineApi } : {}),
   });
   return {
+    machineReads,
+    healthAnswers,
     placementReads,
     admissionReads,
     controller,
@@ -376,6 +399,86 @@ describe('HS2-DR0ZSQ Systems controller', () => {
     await settle();
     expect(h.admissionReads).toHaveLength(asked);
     expect(h.controller.view().inspector.admission).toEqual([]);
+    h.controller.dispose();
+  });
+
+  it('HS2-CMXKK2 reads a paired remote without a tab through its binding, health on each new version', async () => {
+    const OFF = '01JSYNTHREMTE0000000000002';
+    const h = harness({ direct: true });
+    h.remoteServers.value = [
+      ...h.remoteServers.value,
+      { id: OFF, label: 'Off', origin: 'https://off.example.test', revoked: false },
+    ];
+    await settle();
+    expect(h.machineReads).toEqual([]);
+    h.showing.value = true;
+    await settle();
+    // The tabless remote has its own capacity stream and a host-health read; it is connected.
+    expect(h.capacityReads.map((read) => read.projectId)).toEqual(['local-1', REMOTE_TAB, `machine:${OFF}`]);
+    expect(h.machineReads).toEqual([
+      { binding: OFF, kind: 'capacity', checkout: 'machine', after: undefined },
+      { binding: OFF, kind: 'health' },
+    ]);
+    const row = () => h.controller.view().sidebar.machines.find((entry) => entry.machine.id === `remote:${OFF}`)!;
+    expect(row().machine).toMatchObject({ direct: true, bindingId: OFF });
+    expect(row().description).toBe('Paired Remote');
+    h.healthAnswers[0]({
+      ...hostHealthFixture('crossed'),
+      host: { ...hostHealthFixture('crossed').host, name: 'Off Host' },
+    });
+    h.controller.select(`remote:${OFF}`);
+    await settle();
+    expect(h.controller.view().workspace.health.snapshot?.host.name).toBe('Off Host');
+    // Selecting it starts its live CPU feed through the binding.
+    expect(h.machineReads.filter((read) => read.kind === 'cpu')).toEqual([
+      { binding: OFF, kind: 'cpu', after: undefined },
+    ]);
+    // A capacity answer with a version reads host health again; the same version does not.
+    const first = h.capacityReads.find((read) => read.projectId === `machine:${OFF}`)!;
+    first.resolve({ ...systemsDemoCapacity('build'), version: 'v1' });
+    await settle();
+    await settle();
+    expect(h.machineReads.filter((read) => read.kind === 'health')).toHaveLength(2);
+    expect(h.machineReads).toContainEqual({ binding: OFF, kind: 'capacity', checkout: 'machine', after: 'v1' });
+    h.capacityReads
+      .find((read) => read.projectId === `machine:${OFF}` && read.after === 'v1')!
+      .resolve({
+        ...systemsDemoCapacity('build'),
+        version: 'v1',
+      });
+    await settle();
+    await settle();
+    expect(h.machineReads.filter((read) => read.kind === 'health')).toHaveLength(2);
+    expect(h.controller.view().inspector.sessions).toHaveLength(2);
+    // Opening one of its projects moves its reads to the tab; closing it moves them back.
+    h.projects.value = [...h.projects.value, { id: `remote:${OFF}:c9` }];
+    await settle();
+    expect(
+      h.capacityReads.filter((read) => read.projectId === `machine:${OFF}`).every((read) => read.signal.aborted),
+    ).toBe(true);
+    expect(h.capacityReads.at(-1)?.projectId).toBe(`remote:${OFF}:c9`);
+    h.projects.value = h.projects.value.filter((project) => project.id !== `remote:${OFF}:c9`);
+    await settle();
+    expect(h.capacityReads.at(-1)?.projectId).toBe(`machine:${OFF}`);
+    // Leaving stops every machine read; nothing is read while hidden.
+    h.showing.value = false;
+    const count = h.machineReads.length;
+    expect(h.capacityReads.every((read) => read.signal.aborted)).toBe(true);
+    await settle();
+    expect(h.machineReads).toHaveLength(count);
+    h.controller.dispose();
+  });
+
+  it('HS2-CMXKK2 leaves a tabless remote Not connected where the bridge has no machine path', async () => {
+    const h = harness();
+    h.projects.value = [{ id: 'local-1' }];
+    h.showing.value = true;
+    await settle();
+    expect(h.controller.view().sidebar.machines[1]).toMatchObject({
+      machine: { unavailable: 'not-connected' },
+      description: 'Not connected',
+    });
+    expect(h.capacityReads.map((read) => read.projectId)).toEqual(['local-1']);
     h.controller.dispose();
   });
 });

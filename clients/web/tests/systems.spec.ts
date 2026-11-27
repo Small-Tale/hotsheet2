@@ -8,13 +8,16 @@ import { proxyFetch, realTicketServer } from './real-ticket-server';
 /**
  * HS2-DR0ZSQ: the Systems screen in the shipped app against a real server. One real server plays this
  * computer (a local project tab) and a paired remote (a remote tab restored from the desktop's remote
- * list, its checkout-scoped paths rewritten to the native checkout as the bridge does). A second paired
- * remote has no open tab. Every reading is a push or a long poll; leaving the screen stops them.
- * Synthetic names and ids only.
+ * list, its checkout-scoped paths rewritten to the native checkout as the bridge does). HS2-CMXKK2: a
+ * second paired remote has no open tab and is read through the bridge's machine path (the same server,
+ * with the capacity checkout supplied as the bridge does); a third answers the machine path with the
+ * bridge's 503, as an unreachable remote does. Every reading is a push or a long poll; leaving the
+ * screen stops them. Synthetic names and ids only.
  */
 type Server = Awaited<ReturnType<typeof realTicketServer>>;
 const BINDING = '01ARZ3NDEKTSV4RRFFQ69G5FAV';
-const OFFLINE = '01ARZ3NDEKTSV4RRFFQ69G5FB0';
+const TABLESS = '01ARZ3NDEKTSV4RRFFQ69G5FB0';
+const UNREACHABLE = '01ARZ3NDEKTSV4RRFFQ69G5FB1';
 
 async function openMachines(page: Page, server: Server) {
   const localId = server.checkoutId;
@@ -46,7 +49,11 @@ async function openMachines(page: Page, server: Server) {
     });
     if (path === '')
       return route.fulfill({
-        json: [remote(BINDING, 'https://build.example.test:7400'), remote(OFFLINE, 'https://travel.example.test')],
+        json: [
+          remote(BINDING, 'https://build.example.test:7400'),
+          remote(TABLESS, 'https://travel.example.test'),
+          remote(UNREACHABLE, 'https://lab.example.test'),
+        ],
       });
     if (path === '/selected-projects')
       return route.fulfill({ json: [{ binding_id: BINDING, checkout_id: server.checkoutId }] });
@@ -62,6 +69,24 @@ async function openMachines(page: Page, server: Server) {
         },
       });
     if (path.endsWith('/session')) return route.fulfill({ json: { binding_id: path.split('/')[1] } });
+    // HS2-CMXKK2: the machine path of a remote without a tab. The bridge reads capacity through a
+    // checkout it found by discovery, so the fixture names the server's own.
+    if (path.startsWith(`/${UNREACHABLE}/machine/`))
+      return route.fulfill({ status: 503, json: { error: 'Remote server is unavailable or its approval changed.' } });
+    if (path.startsWith(`/${TABLESS}/machine/`)) {
+      const incoming = new URL(route.request().url());
+      const machinePath = path
+        .slice(`/${TABLESS}/machine`.length)
+        .replace('/checkouts/machine/target-capacity', `/checkouts/${server.checkoutId}/target-capacity`);
+      return proxyFetch(route, {
+        url: `${server.url}${machinePath}${incoming.search}`,
+        headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+        timeout: 60_000,
+      }).then(
+        (response) => route.fulfill({ response }),
+        () => route.abort().catch(() => undefined),
+      );
+    }
     return route.fulfill({ status: 404, json: { error: 'Not in this fixture.' } });
   });
   for (const [prefix, encoded] of [
@@ -116,11 +141,11 @@ function remoteReportsSignIn(snapshot: Record<string, unknown>) {
   };
 }
 
-/** Every Systems read the page makes, by kind and tab path. */
+/** Every Systems read the page makes, by kind and tab or machine path. */
 function recordReads(page: Page, paths: { apiPath: string; remotePath: string }) {
   const reads: {
-    kind: 'capacity' | 'cpu' | 'tools' | 'admission';
-    machine: 'local' | 'remote';
+    kind: 'capacity' | 'cpu' | 'tools' | 'admission' | 'health';
+    machine: 'local' | 'remote' | 'tabless' | 'unreachable';
     after: string | null;
   }[] = [];
   page.on('request', (request: Request) => {
@@ -129,17 +154,23 @@ function recordReads(page: Page, paths: { apiPath: string; remotePath: string })
       ? 'remote'
       : url.pathname.startsWith(paths.apiPath)
         ? 'local'
-        : undefined;
+        : url.pathname.startsWith(`/__hotsheet/remotes/${TABLESS}/machine/`)
+          ? 'tabless'
+          : url.pathname.startsWith(`/__hotsheet/remotes/${UNREACHABLE}/machine/`)
+            ? 'unreachable'
+            : undefined;
     if (!machine) return;
     const kind = url.pathname.endsWith('/target-capacity')
       ? 'capacity'
-      : url.pathname.endsWith('/host-health/cpu')
-        ? 'cpu'
-        : url.pathname.endsWith('/orchestration/tool-capacity')
-          ? 'tools'
-          : url.pathname.endsWith('/admission')
-            ? 'admission'
-            : undefined;
+      : url.pathname.endsWith('/host-health')
+        ? 'health'
+        : url.pathname.endsWith('/host-health/cpu')
+          ? 'cpu'
+          : url.pathname.endsWith('/orchestration/tool-capacity')
+            ? 'tools'
+            : url.pathname.endsWith('/admission')
+              ? 'admission'
+              : undefined;
     if (kind) reads.push({ kind, machine, after: url.searchParams.get('after') });
   });
   return reads;
@@ -181,12 +212,17 @@ test('HS2-DR0ZSQ Systems shows this computer and each paired remote with live re
     await systems.click();
     await expect(systems).toHaveAttribute('aria-pressed', 'true');
 
-    // Left rail: this computer, the connected remote, and the remote without an open tab.
-    await expect(page.locator('[data-component="systems-sidebar"] [data-machine-id]')).toHaveCount(3);
+    // Left rail: this computer, the connected remote, the remote without an open tab (HS2-CMXKK2,
+    // read through its binding), and one whose machine path does not answer.
+    await expect(page.locator('[data-component="systems-sidebar"] [data-machine-id]')).toHaveCount(4);
     await expect(machineRow(page, 'local')).toHaveAttribute('aria-current', 'page');
     await expect(machineRow(page, `remote:${BINDING}`)).toContainText('Build Host');
-    await expect(machineRow(page, `remote:${OFFLINE}`)).toContainText('Not connected');
-    await expect(machineRow(page, `remote:${OFFLINE}`)).toContainText('Offline');
+    await expect(machineRow(page, `remote:${TABLESS}`)).toContainText(/Paired Remote · \d+ AI sessions?/u, {
+      timeout: 30_000,
+    });
+    await expect(machineRow(page, `remote:${TABLESS}`)).not.toContainText('Not connected');
+    await expect(machineRow(page, `remote:${UNREACHABLE}`)).toContainText('Not reachable', { timeout: 30_000 });
+    await expect(machineRow(page, `remote:${UNREACHABLE}`)).toContainText('Offline');
     // Workspace: this computer's cards, then what it is, once its capacity stream answers.
     const view = page.locator('[data-component="systems-view"]');
     await expect(view).toHaveAttribute('data-machine-id', 'local');
@@ -238,9 +274,26 @@ test('HS2-DR0ZSQ Systems shows this computer and each paired remote with live re
       })
       .toBe(true);
 
-    // A remote without an open tab says how to connect it.
-    await machineRow(page, `remote:${OFFLINE}`).click();
-    await expect(view).toContainText('travel.example.test Is Not Connected');
+    // HS2-CMXKK2: a remote without an open tab shows its live readings through its binding: its cards,
+    // what it is, its sessions, and its own live CPU feed and capacity long poll with version replay.
+    await machineRow(page, `remote:${TABLESS}`).click();
+    await expect(view).toHaveAttribute('data-machine-id', `remote:${TABLESS}`);
+    await expect(view.locator('[data-host-context]')).toContainText('Paired Remote', { timeout: 30_000 });
+    await expect(view.locator('[data-systems-section="Capabilities"]')).toContainText('Memory', { timeout: 30_000 });
+    await expect(page.locator('[data-component="systems-inspector"]')).toContainText('No AI session is running here.');
+    await expect
+      .poll(() => reads.some((read) => read.kind === 'cpu' && read.machine === 'tabless'), { timeout: 30_000 })
+      .toBe(true);
+    await expect
+      .poll(() => reads.some((read) => read.kind === 'capacity' && read.machine === 'tabless' && read.after !== null), {
+        timeout: 30_000,
+      })
+      .toBe(true);
+    expect(reads.some((read) => read.kind === 'health' && read.machine === 'tabless')).toBe(true);
+    // A remote whose machine path does not answer says so, and why.
+    await machineRow(page, `remote:${UNREACHABLE}`).click();
+    await expect(view).toContainText('lab.example.test Is Not Reachable');
+    await expect(view).toContainText('Remote server is unavailable or its approval changed.');
     await expect(page.locator('[data-component="systems-inspector"]')).toContainText(
       'Sessions show while the machine is connected.',
     );
@@ -311,6 +364,20 @@ test('HS2-5H8R0N Systems shows admission for each project placed here and this m
     await expect(limit('Free Memory Floor')).toContainText('1.0 GB');
     await expect(limit('CPU Ceiling')).toContainText('Set by each project');
     await expect(limit('Free Disk Floor')).toContainText('Set by each project');
+    for (const scheme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme: scheme });
+      for (const [width, height] of [
+        [1440, 900],
+        [1100, 800],
+        [1440, 900],
+      ] as const) {
+        await page.setViewportSize({ width, height });
+        await expect(admission).toBeInViewport();
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+        await capture(page, `hs2-5h8r0n-rail-${String(width)}-${scheme}`);
+      }
+    }
+    await page.emulateMedia({ colorScheme: 'light' });
     // The owner changes the limits: the capacity long poll answers with a new version, the rail
     // follows without a reload, and admission is asked again for the changed room.
     const asked = reads.filter((read) => read.kind === 'admission').length;
@@ -351,7 +418,7 @@ test('HS2-DR0ZSQ an idle Systems screen reads only through long polls, at a boun
     await expect
       .poll(
         () =>
-          ['local', 'remote'].every((machine) =>
+          ['local', 'remote', 'tabless'].every((machine) =>
             reads.some((read) => read.kind === 'capacity' && read.machine === machine && read.after !== null),
           ),
         { timeout: 30_000 },
@@ -366,11 +433,19 @@ test('HS2-DR0ZSQ an idle Systems screen reads only through long polls, at a boun
       idle.filter((read) => read.kind === kind && read.machine === machine).length;
     // The capacity long poll holds up to eight seconds unless the machine's room changes; allow for
     // a change or two of a busy test machine, never a request per second.
-    for (const machine of ['local', 'remote']) expect(count('capacity', machine)).toBeLessThanOrEqual(6);
+    for (const machine of ['local', 'remote', 'tabless']) expect(count('capacity', machine)).toBeLessThanOrEqual(6);
+    // HS2-CMXKK2: the tabless remote's host health is read only when its capacity version changes, and
+    // an unreachable remote's stream backs off (1 s doubling to 30 s) rather than retrying each second.
+    expect(count('health', 'tabless')).toBeLessThanOrEqual(count('capacity', 'tabless'));
+    expect(count('capacity', 'unreachable')).toBeLessThanOrEqual(5);
     // Every capacity read in the window waits on the version it saw.
-    expect(idle.filter((read) => read.kind === 'capacity' && read.after === null)).toEqual([]);
+    // (An unreachable remote never had a version: its retries back off instead.)
+    expect(
+      idle.filter((read) => read.kind === 'capacity' && read.after === null && read.machine !== 'unreachable'),
+    ).toEqual([]);
     // Only the selected machine has a live CPU feed, paced by the server's two-second frames.
     expect(count('cpu', 'remote')).toBe(0);
+    expect(count('cpu', 'tabless')).toBe(0);
     expect(count('cpu', 'local')).toBeLessThanOrEqual(windowMs / 2_000 + 2);
     // AI Tool Capacity is read when the screen opens, never again while it stays open.
     expect(idle.filter((read) => read.kind === 'tools')).toEqual([]);
@@ -427,6 +502,19 @@ test('HS2-DR0ZSQ Systems keeps both rails and its layout from wide to phone and 
     await capture(page, 'remote-1440-light');
     await page.emulateMedia({ colorScheme: 'dark' });
     await capture(page, 'remote-1440-dark');
+    // HS2-S1FEYY, HS2-CMXKK2: the remote without a tab, read through its binding, and the unreachable one.
+    await machineRow(page, `remote:${TABLESS}`).click();
+    await expect(view.locator('[data-systems-section="Capabilities"]')).toContainText('Memory', { timeout: 30_000 });
+    for (const scheme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme: scheme });
+      await capture(page, `hs2-cmxkk2-tabless-1440-${scheme}`);
+    }
+    await machineRow(page, `remote:${UNREACHABLE}`).click();
+    await expect(view).toContainText('Is Not Reachable');
+    for (const scheme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme: scheme });
+      await capture(page, `hs2-cmxkk2-unreachable-1440-${scheme}`);
+    }
   } finally {
     await server.stop(page);
   }

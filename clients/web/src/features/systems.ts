@@ -8,15 +8,20 @@ import type { SystemsViewProps } from '../components/systems-view';
 import { createHostCpuFeed, type HostCpuFeed, type HostCpuFeedOptions } from '../host-cpu-feed';
 import type { HostHealthSnapshot } from '../host-health';
 import type { HostHealthResourceState } from '../host-health-resource';
+import { describeRefusal } from '../orchestration-refusals';
 import { admissionTools } from '../orchestration-settings-model';
 import { isRemoteProjectId } from '../remote-projects/identity';
+import { REMOTE_MACHINE_CHECKOUT } from '../remote-projects/machine';
 import { createSystemsCapacityFeeds, type SystemsCapacityRead } from '../systems-capacity-feed';
 import {
   admissionRow,
   LOCAL_MACHINE_ID,
+  machineConnected,
   machineCpuPercent,
+  machineReadKey,
   machineRowDescription,
   placementLimitRows,
+  reachableMachine,
   selectedSystemsMachine,
   sessionRows,
   sitesOnMachine,
@@ -41,6 +46,9 @@ export type SystemsApi = Pick<
   | 'orchestrationAdmission'
 >;
 
+/** HS2-CMXKK2: the machine reads of a paired remote without an open tab. */
+export type SystemsMachineApi = Pick<Api, 'machineCapacity' | 'hostCpu' | 'hostHealth'>;
+
 /** HS2-5H8R0N: what Systems read of one orchestration project: its sites and its policy. */
 interface SystemsPlacement {
   sites: OrchestrationSitesView;
@@ -59,6 +67,12 @@ export interface SystemsDependencies {
   /** A remote tab's pushed host health (HS2-K4DY5G). */
   remoteHealth: (projectId: string) => HostHealthSnapshot | undefined;
   api: (projectId: string) => SystemsApi | undefined;
+  /**
+   * HS2-CMXKK2: a paired remote's machine reads through the bridge's machine path for its binding,
+   * for a remote with no open tab. Absent where the bridge offers none (a plain browser): such a
+   * remote stays Not connected.
+   */
+  machineApi?: (bindingId: string) => SystemsMachineApi | undefined;
   /** Whether an open project is an orchestration project, whose AI tool capacity Systems shows. */
   orchestrationProject: (projectId: string) => boolean;
   /** The terminals this app shows, to name a running session. */
@@ -83,11 +97,24 @@ export function createSystemsController(dependencies: SystemsDependencies) {
   const selected = signal<string>(LOCAL_MACHINE_ID);
   const toolCapacity = signal<SystemsToolCapacityState>({ status: 'none' });
   const cpu = signal<{ machineId: string; projectId: string; feed: HostCpuFeed } | undefined>(undefined);
-  const read: SystemsCapacityRead = (projectId, after, abort) => {
-    const api = dependencies.api(projectId);
-    if (!api) return Promise.reject(new Error('This project is no longer open.'));
-    return api.machineCapacity(projectId, after, abort);
+  /** The reads one machine's key reaches: an open tab's path, or a binding's machine path (HS2-CMXKK2). */
+  function readsFor(
+    key: string,
+  ): { api: Pick<SystemsApi, 'machineCapacity' | 'hostCpu'>; checkout: string } | undefined {
+    if (key.startsWith('machine:')) {
+      const api = dependencies.machineApi?.(key.slice('machine:'.length));
+      return api ? { api, checkout: REMOTE_MACHINE_CHECKOUT } : undefined;
+    }
+    const api = dependencies.api(key);
+    return api ? { api, checkout: key } : undefined;
+  }
+  const read: SystemsCapacityRead = (key, after, abort) => {
+    const reads = readsFor(key);
+    if (!reads) return Promise.reject(new Error('This project is no longer open.'));
+    return reads.api.machineCapacity(reads.checkout, after, abort);
   };
+  /** HS2-CMXKK2: host health of the remotes read without a tab, by machine id. */
+  const directHealth = signal<ReadonlyMap<string, HostHealthSnapshot>>(new Map());
   const feeds = createSystemsCapacityFeeds(read, dependencies.capacityOptions);
   // HS2-5H8R0N: each open orchestration project's sites and policy, read once per opening, and the
   // selected machine's admission answers, asked again only when its capacity version changes.
@@ -99,6 +126,7 @@ export function createSystemsController(dependencies: SystemsDependencies) {
       projects: dependencies.projects(),
       remoteServers: dependencies.remoteServers(),
       localName: dependencies.localHealth().snapshot?.host.name,
+      direct: Boolean(dependencies.machineApi),
     }),
   );
   const active = computed(() => dependencies.showing() && dependencies.pageVisible());
@@ -106,8 +134,12 @@ export function createSystemsController(dependencies: SystemsDependencies) {
 
   function healthFor(machine: SystemsMachine): HostHealthResourceState {
     if (machine.kind === 'local') return dependencies.localHealth();
-    const snapshot = machine.projectId ? dependencies.remoteHealth(machine.projectId) : undefined;
-    return snapshot ? { snapshot, loading: false } : { loading: Boolean(machine.projectId) };
+    const snapshot = machine.projectId
+      ? dependencies.remoteHealth(machine.projectId)
+      : machine.direct
+        ? directHealth.value.get(machine.id)
+        : undefined;
+    return snapshot ? { snapshot, loading: false } : { loading: machineConnected(machine) };
   }
 
   function readingsFor(machine: SystemsMachine): SystemsMachineReadings {
@@ -201,7 +233,8 @@ export function createSystemsController(dependencies: SystemsDependencies) {
           );
           return [key(site.owner, site.targetId), { status: 'ready', admissions: answered }];
         } catch (reason) {
-          return [key(site.owner, site.targetId), { status: 'error', message: describeRequestFailure(reason) }];
+          // The orchestration refusal in words, as the inspector's toasts read it.
+          return [key(site.owner, site.targetId), { status: 'error', message: describeRefusal(reason) }];
         }
       }),
     );
@@ -216,30 +249,60 @@ export function createSystemsController(dependencies: SystemsDependencies) {
       return;
     }
     feeds.sync(
-      machines.value.flatMap((machine) =>
-        machine.projectId ? [{ machineId: machine.id, projectId: machine.projectId }] : [],
-      ),
+      machines.value.flatMap((machine) => {
+        const key = machineReadKey(machine);
+        return key ? [{ machineId: machine.id, projectId: key }] : [];
+      }),
     );
+  });
+  // HS2-CMXKK2: a remote read without a tab has no change stream, so its host health is read when its
+  // capacity stream starts and again each time that stream answers with a new version.
+  const healthRead = new Map<string, string>();
+  const disposeDirectHealth = effect(() => {
+    if (!active.value) {
+      healthRead.clear();
+      return;
+    }
+    for (const machine of machines.value) {
+      const key = machineReadKey(machine);
+      if (!machine.direct || !key) continue;
+      const version = feeds.states.value.get(machine.id)?.capacity?.version ?? '';
+      const signature = `${key}\u0000${version}`;
+      if (healthRead.get(machine.id) === signature) continue;
+      healthRead.set(machine.id, signature);
+      const api = dependencies.machineApi?.(machine.bindingId ?? '');
+      if (!api) continue;
+      void api.hostHealth().then(
+        (snapshot) => {
+          if (healthRead.get(machine.id) !== signature) return;
+          const next = new Map(directHealth.peek());
+          next.set(machine.id, snapshot);
+          directHealth.value = next;
+        },
+        () => undefined,
+      );
+    }
   });
   // The live CPU long poll follows the selected machine; another machine starts a fresh feed, since
   // a frame sequence belongs to one server.
   const disposeCpu = effect(() => {
     const machine = current.value;
     const running = cpu.peek();
-    if (!active.value || !machine.projectId) {
+    const key = machineReadKey(machine);
+    if (!active.value || !key) {
       running?.feed.stop();
       return;
     }
-    if (running && running.machineId === machine.id && running.projectId === machine.projectId) {
+    if (running && running.machineId === machine.id && running.projectId === key) {
       running.feed.start();
       return;
     }
     running?.feed.stop();
-    const projectId = machine.projectId;
+    const projectId = key;
     const feed = createHostCpuFeed(() => {
-      const api = dependencies.api(projectId);
-      if (!api) throw new Error('This project is no longer open.');
-      return api;
+      const reads = readsFor(projectId);
+      if (!reads) throw new Error('This project is no longer open.');
+      return reads.api;
     }, dependencies.cpuOptions);
     cpu.value = { machineId: machine.id, projectId, feed };
     feed.start();
@@ -289,7 +352,10 @@ export function createSystemsController(dependencies: SystemsDependencies) {
 
   /** The three regions' props, read inside the shell's render so they follow every reading. */
   function view(): { sidebar: SystemsSidebarProps; workspace: SystemsViewProps; inspector: SystemsInspectorProps } {
-    const machine = current.value;
+    // HS2-CMXKK2: a tabless remote that answered nothing yet reads as Not reachable, with why.
+    const shown = (row: SystemsMachine) =>
+      reachableMachine(row, readingsFor(row), feeds.states.value.get(row.id)?.error);
+    const machine = shown(current.value);
     const capacity = feeds.states.value.get(machine.id) ?? {};
     const frame = cpu.value?.machineId === machine.id ? cpu.value.feed.state.value.frame : undefined;
     const sessions = sessionRows(capacity.capacity, dependencies.terminals(), dependencies.toolLabel);
@@ -300,7 +366,8 @@ export function createSystemsController(dependencies: SystemsDependencies) {
     const limits = placementLimitRows(capacity.capacity);
     return {
       sidebar: {
-        machines: machines.value.map((row) => {
+        machines: machines.value.map((listed) => {
+          const row = shown(listed);
           const readings = readingsFor(row);
           const percent = row.unavailable ? undefined : machineCpuPercent(readings);
           return {
@@ -340,6 +407,7 @@ export function createSystemsController(dependencies: SystemsDependencies) {
     disposeToolCapacity();
     disposePlacements();
     disposeAdmissions();
+    disposeDirectHealth();
     feeds.stop();
     cpu.peek()?.feed.stop();
   }
