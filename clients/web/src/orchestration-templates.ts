@@ -72,7 +72,12 @@ export interface PreviewTarget {
   steps: string[];
   apply: AccessNeed;
   ticket_writes: AccessNeed;
+  /** HS2-K3ESZR: whether the test profiles its steps name were checked; absent when they name none. */
+  profiles?: ProfilesCheck;
 }
+
+/** HS2-K3ESZR: `checked` when a project's test profiles were read, `unverified` when they could not be now. */
+export type ProfilesCheck = 'checked' | 'unverified';
 
 export interface TemplatePreview {
   template_id: string;
@@ -271,6 +276,7 @@ export function parseTemplatePreview(value: unknown): TemplatePreview {
           steps: texts(target.steps),
           apply: NEEDS.find((need) => need === target.apply) ?? 'asks',
           ticket_writes: NEEDS.find((need) => need === target.ticket_writes) ?? 'asks',
+          ...(target.profiles === 'checked' || target.profiles === 'unverified' ? { profiles: target.profiles } : {}),
         },
       ];
     }),
@@ -349,10 +355,41 @@ const PROBLEMS: Readonly<Record<string, string>> = {
   input_unknown: 'is not an input of this template',
   target_unknown: 'names a project this orchestration project does not include',
   choice_unknown: 'names a step this template does not have',
+  validation_profile_unknown: 'names a test profile its project does not offer',
+  validation_profiles_invalid: 'names test profiles, but its project’s test profile file has problems',
 };
 
-/** One problem in words, naming the input or step it is about. */
-export function problemText(template: PlanTemplate | undefined, problem: TemplateProblem): string {
+/**
+ * HS2-K3ESZR: a test profile problem in words, naming the profile and the project from the preview, such as
+ * "Step 2 names the test profile “lint”, which API does not offer."
+ */
+function profileProblemText(problem: TemplateProblem, preview: TemplatePreview | undefined): string | undefined {
+  const at = /^steps\[(\d+)\]\.validation(?:\[(\d+)\])?$/.exec(problem.at);
+  if (!at || !preview) return undefined;
+  const index = Number(at[1]),
+    step = preview.steps.at(index);
+  if (!step) return undefined;
+  const project = preview.targets.find((target) => target.target_id === step.target_id)?.label ?? step.target_id;
+  const profileIndex = at.at(2);
+  if (problem.code === 'validation_profile_unknown' && profileIndex !== undefined) {
+    const profile = step.validation.at(Number(profileIndex));
+    return profile === undefined
+      ? undefined
+      : `Step ${index + 1} names the test profile “${profile}”, which ${project} does not offer.`;
+  }
+  if (problem.code === 'validation_profiles_invalid')
+    return `Step ${index + 1} names test profiles, but the test profile file of ${project} has problems.`;
+  return undefined;
+}
+
+/** One problem in words, naming the input or step it is about (and, with the preview, the test profile). */
+export function problemText(
+  template: PlanTemplate | undefined,
+  problem: TemplateProblem,
+  preview?: TemplatePreview,
+): string {
+  const profile = profileProblemText(problem, preview);
+  if (profile) return profile;
   const words = PROBLEMS[problem.code] ?? problem.code.replaceAll('_', ' ');
   if (problem.at.startsWith('inputs.')) {
     const key = problem.at.slice('inputs.'.length);
@@ -402,6 +439,19 @@ const NEED_TEXT: Readonly<Record<AccessNeed, string>> = {
 
 export function accessText(need: AccessNeed): string {
   return NEED_TEXT[need];
+}
+
+/**
+ * HS2-K3ESZR: the projects whose test profiles the preview could not read now (offline, or the read was refused), in
+ * words, or undefined when every project the steps name was checked. It never disables Apply.
+ */
+export function unverifiedProfilesText(preview: TemplatePreview): string | undefined {
+  const names = preview.targets
+    .filter((target) => target.profiles === 'unverified')
+    .map((target) => target.label ?? target.target_id);
+  if (names.length === 0) return undefined;
+  const list = names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names.at(-1) ?? ''}`;
+  return `The test profiles of ${list} could not be checked now; the planner checks them when it plans.`;
 }
 
 /** The permission rows of the pre-run summary: what applying and the planner's ticket writes need per project. */

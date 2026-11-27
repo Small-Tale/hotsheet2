@@ -171,6 +171,31 @@ pub struct PreviewTarget {
     pub apply: AccessNeed,
     /// The planner's ticket writes there (the planner is an AI session).
     pub ticket_writes: AccessNeed,
+    /// HS2-K3ESZR: whether the test profiles the steps there name were checked
+    /// against the profiles the project offers. Absent when no step there names one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profiles: Option<ProfilesCheck>,
+}
+
+/// HS2-K3ESZR: what a preview read of one project's test profiles found.
+enum ProfilesSeen {
+    /// The profile file is valid (or absent, offering none): these names run.
+    Offered(BTreeSet<String>),
+    /// The profile file has problems, so no profile there runs by name.
+    Invalid,
+    /// The read failed or was refused.
+    Unverified,
+}
+
+/// HS2-K3ESZR: how a project's test profiles were checked for the preview.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProfilesCheck {
+    /// The project's profiles were read; any profile it does not offer is a problem.
+    Checked,
+    /// They could not be read now (the project is offline, or the read was refused).
+    /// Nothing is reported; the planner and the validation run check them later.
+    Unverified,
 }
 
 /// The pre-run summary: the inputs as resolved, the problems that keep Apply
@@ -658,12 +683,16 @@ impl OrchestrationRuntime {
         }
     }
 
-    /// The pre-run summary of an apply. Writes nothing and asks nobody.
+    /// The pre-run summary of an apply. Writes nothing and asks nobody. HS2-K3ESZR:
+    /// the test profiles the steps name are read from each project through the gate
+    /// as an observation (audited, never asking), so a profile a project does not
+    /// offer is a problem here rather than something only the planner finds.
     pub fn template_preview(
         &self,
         owner_id: &str,
         request: &PreviewTemplate,
         actor: Option<&MutationActor>,
+        tx: &mut Transaction<'_>,
     ) -> Result<TemplatePreview, OrchestrationError> {
         let owner = self.owner(owner_id)?;
         let template = self.active_template(&owner, &request.template_id)?;
@@ -686,6 +715,28 @@ impl OrchestrationRuntime {
                 });
             }
         }
+        let profiles = self.preview_profiles(owner_id, &brief.steps, &active, actor, tx);
+        for (n, step) in brief.steps.iter().enumerate() {
+            match profiles.get(&step.target_id) {
+                Some(ProfilesSeen::Offered(offered)) => {
+                    for (m, profile) in step.validation.iter().enumerate() {
+                        if !offered.contains(profile) {
+                            problems.push(TemplateProblem {
+                                code: "validation_profile_unknown".into(),
+                                at: format!("steps[{n}].validation[{m}]"),
+                            });
+                        }
+                    }
+                }
+                Some(ProfilesSeen::Invalid) if !step.validation.is_empty() => {
+                    problems.push(TemplateProblem {
+                        code: "validation_profiles_invalid".into(),
+                        at: format!("steps[{n}].validation"),
+                    });
+                }
+                _ => {}
+            }
+        }
         problems.sort();
         problems.dedup();
         let person = is_person(actor);
@@ -695,6 +746,10 @@ impl OrchestrationRuntime {
             .map(|target_id| {
                 let need = self.ticket_writes_need(owner_id, &target_id);
                 PreviewTarget {
+                    profiles: profiles.get(&target_id).map(|seen| match seen {
+                        ProfilesSeen::Unverified => ProfilesCheck::Unverified,
+                        _ => ProfilesCheck::Checked,
+                    }),
                     label: active.get(&target_id).cloned(),
                     declared: active.contains_key(&target_id),
                     steps: brief
@@ -728,6 +783,49 @@ impl OrchestrationRuntime {
             targets,
             placement_automatic,
         })
+    }
+
+    /// HS2-K3ESZR: the test profiles each declared project offers, read once per
+    /// project whose steps name a profile. A project that cannot be read now is
+    /// `Unverified`, never a problem: the preview stays usable while it is offline.
+    fn preview_profiles(
+        &self,
+        owner_id: &str,
+        steps: &[hotsheet_ticketing::orchestration::BriefStep],
+        active: &BTreeMap<String, String>,
+        actor: Option<&MutationActor>,
+        tx: &mut Transaction<'_>,
+    ) -> BTreeMap<String, ProfilesSeen> {
+        let named: BTreeSet<&String> = steps
+            .iter()
+            .filter(|step| !step.validation.is_empty() && active.contains_key(&step.target_id))
+            .map(|step| &step.target_id)
+            .collect();
+        named
+            .into_iter()
+            .map(|target_id| {
+                let read = self.validation_profiles(
+                    owner_id,
+                    TargetProfiles {
+                        target_id: target_id.clone(),
+                    },
+                    actor,
+                    tx,
+                );
+                let seen = match read {
+                    Ok(check) if check.valid => ProfilesSeen::Offered(
+                        check
+                            .profiles
+                            .into_iter()
+                            .map(|profile| profile.name)
+                            .collect(),
+                    ),
+                    Ok(_) => ProfilesSeen::Invalid,
+                    Err(_) => ProfilesSeen::Unverified,
+                };
+                (target_id.clone(), seen)
+            })
+            .collect()
     }
 
     /// One apply as recorded (`template_apply_not_found`).

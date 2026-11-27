@@ -297,3 +297,131 @@ async fn hs2_a4rvya_apply_starts_the_planner_once_and_keeps_a_snapshot() {
         "{audit}"
     );
 }
+
+/// HS2-K3ESZR: the preview checks the test profiles a template's steps name against
+/// the profiles the project offers, read from its checked-in file through the gate
+/// as an observation: an unknown profile is a coded problem, a damaged file is one
+/// for each step naming profiles there, the problems clear once the file offers them,
+/// and the CLI process previews the same. Nothing is asked and nothing is written.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn hs2_k3eszr_preview_checks_validation_profiles_on_a_real_server() {
+    let world = World::new(&["tickets_read"], PUSH_AGENT, PUSH_PLUGIN).await;
+    let person = json!({"role":"human","id":"maintainer"});
+    let mut checked = template("Build {{feature}}");
+    checked["steps"][0]["validation"] = json!(["smoke", "lint"]);
+    let (status, set) = world
+        .call(
+            "POST",
+            "/templates/set",
+            json!({"templates":[checked],"actor":person}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{set}");
+    let template_id = set["templates"][0]["template_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let preview = || {
+        let world = &world;
+        let body = json!({"template_id":template_id,"inputs":{"feature":"Search"},"actor":person});
+        async move {
+            let (status, preview) = world.call("POST", "/templates/preview", body).await;
+            assert_eq!(status, StatusCode::OK, "{preview}");
+            preview
+        }
+    };
+    let problems = |preview: &Value| {
+        preview["problems"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|problem| {
+                format!(
+                    "{}@{}",
+                    problem["code"].as_str().unwrap(),
+                    problem["at"].as_str().unwrap()
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    let profiles = |entries: Value| {
+        let directory = world.project.join(".hotsheet2");
+        std::fs::create_dir_all(&directory).unwrap();
+        std::fs::write(
+            directory.join("validation-profiles.json"),
+            json!({"schema_version": 1, "profiles": entries}).to_string(),
+        )
+        .unwrap();
+    };
+
+    // No profile file yet: the project offers none.
+    let none = preview().await;
+    assert_eq!(
+        problems(&none),
+        [
+            "validation_profile_unknown@steps[0].validation[0]",
+            "validation_profile_unknown@steps[0].validation[1]"
+        ],
+        "{none}"
+    );
+    assert_eq!(none["targets"][0]["profiles"], "checked", "{none}");
+    // One offered, then a damaged file, then both offered.
+    profiles(json!([{"name": "smoke", "program": "true"}]));
+    assert_eq!(
+        problems(&preview().await),
+        ["validation_profile_unknown@steps[0].validation[1]"]
+    );
+    profiles(json!([{"name": "smoke", "program": "a"}, {"name": "smoke", "program": "b"}]));
+    assert_eq!(
+        problems(&preview().await),
+        ["validation_profiles_invalid@steps[0].validation"]
+    );
+    profiles(json!([{"name": "smoke", "program": "true"}, {"name": "lint", "program": "true"}]));
+    let ok = preview().await;
+    assert_eq!(ok["problems"], json!([]), "{ok}");
+    assert_eq!(ok["targets"][0]["profiles"], "checked");
+
+    // The CLI process previews through the same route.
+    let store_arg = world.project_store.to_str().unwrap().to_owned();
+    let from_cli = cli_named(
+        &world.home,
+        &[
+            "--actor-role",
+            "human",
+            "--actor-id",
+            "maintainer",
+            "-C",
+            store_arg.as_str(),
+            "orchestration",
+            "template",
+            "--project",
+            world.checkout.id.as_str(),
+        ],
+        &["preview", &template_id, "--input", "feature=Search"],
+    );
+    assert_eq!(from_cli["problems"], json!([]), "{from_cli}");
+    assert_eq!(from_cli["targets"][0]["profiles"], "checked", "{from_cli}");
+
+    // Read as observations: audited, and nobody was asked; no goal was opened.
+    let (_, audit) = world.call("GET", "/audit", Value::Null).await;
+    let observed = audit["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|entry| entry["action"] == "gates_observe")
+        .count();
+    // Repeated identical observation reads coalesce into the newest entry
+    // (HS2-SV4SMY), so previewing after every typing pause does not flood the journal.
+    assert!(
+        (1..=4).contains(&observed),
+        "five route previews and one CLI preview: {audit}"
+    );
+    let (_, requests) = world.call("GET", "/permissions", Value::Null).await;
+    assert!(
+        requests["requests"]
+            .as_array()
+            .is_none_or(|requests| requests.is_empty()),
+        "{requests}"
+    );
+    assert!(goals(&world).is_empty() && drawer(&world.router).await.is_empty());
+}

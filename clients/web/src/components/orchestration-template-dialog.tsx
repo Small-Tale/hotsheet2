@@ -32,6 +32,7 @@ import {
   type TemplateApply,
   type TemplateInput,
   type TemplatePreview,
+  unverifiedProfilesText,
 } from '../orchestration-templates';
 import { OrchestrationInspectorSection } from './orchestration-inspector-section';
 
@@ -165,7 +166,7 @@ function TemplateDetail({ state, template }: { state: OrchestrationTemplateDialo
                 ? '1 Problem Keeps Apply Disabled'
                 : `${problems.length} Problems Keep Apply Disabled`
             }
-            detail={problems.map((problem) => problemText(template, problem)).join(' ')}
+            detail={problems.map((problem) => problemText(template, problem, preview)).join(' ')}
           />
         </List>
       ) : undefined}
@@ -212,6 +213,13 @@ function TemplateDetail({ state, template }: { state: OrchestrationTemplateDialo
             </Text>
           </List>
         )}
+        {preview && unverifiedProfilesText(preview) ? (
+          <List textInsets="rl" rootAttributes={{ 'data-template-profiles-unverified': 'true' }}>
+            <Text tone="quiet" size="compact" flush>
+              {unverifiedProfilesText(preview)}
+            </Text>
+          </List>
+        ) : undefined}
         {preview && preview.skipped.length > 0 ? (
           <List textInsets="rl">
             <Text tone="quiet" size="compact" flush>
@@ -362,14 +370,8 @@ export function OrchestrationTemplateDialog({
   if (!state) return <></>;
   const template = state.templates.find((candidate) => candidate.template_id === state.selected);
   const active = state.templates.filter((candidate) => candidate.state === 'active');
-  const problems = template
-    ? applyProblems(
-        template,
-        state.inputs,
-        state.preview?.template_id === template.template_id ? state.preview : undefined,
-        new Set(state.changed),
-      )
-    : [];
+  const preview = template && state.preview?.template_id === template.template_id ? state.preview : undefined;
+  const problems = template ? applyProblems(template, state.inputs, preview, new Set(state.changed)) : [];
   const listContent = state.loading ? (
     <List fill hAlign="center" vAlign="middle">
       <LoadingSpinner label="Reading the templates" />
@@ -490,7 +492,9 @@ export function OrchestrationTemplateDialog({
               disabled={state.busy || problems.length > 0}
               icon={state.busy ? <LoadingSpinner size="s" /> : undefined}
               title={
-                problems.length > 0 ? problemText(template, problems[0]) : 'Open a new goal and hand it to the planner'
+                problems.length > 0
+                  ? problemText(template, problems[0], preview)
+                  : 'Open a new goal and hand it to the planner'
               }
             >
               Apply Template

@@ -979,7 +979,7 @@ impl OrchestrationRuntime {
                         value(self.template_save_goal(owner, decode(body)?, actor.as_ref(), tx)?)
                     }
                     "preview" => {
-                        value(self.template_preview(owner, &decode(body)?, actor.as_ref())?)
+                        value(self.template_preview(owner, &decode(body)?, actor.as_ref(), tx)?)
                     }
                     "apply" => {
                         value(self.template_apply(owner, decode(body)?, actor.as_ref(), tx)?)

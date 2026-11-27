@@ -154,8 +154,8 @@ pub use target_lines::MAX_TARGET_LINE_OWNERS;
 pub use tasks::{RuntimeTasks, StopHook, TasksShutdown};
 pub use templates::{
     AccessNeed, ApplyRef, ApplySummary, ApplyTemplate, MAX_LISTED_APPLIES, PreviewTarget,
-    PreviewTemplate, SaveGoalTemplate, SetTemplates, TemplateApplyView, TemplateList,
-    TemplatePreview, TemplateRef, TemplateValidation, ValidateTemplate,
+    PreviewTemplate, ProfilesCheck, SaveGoalTemplate, SetTemplates, TemplateApplyView,
+    TemplateList, TemplatePreview, TemplateRef, TemplateValidation, ValidateTemplate,
 };
 pub use ticket_list::{
     DEFAULT_TARGET_TICKET_PAGE, ListTargetTickets, MAX_TARGET_TICKET_PAGE, TargetTicketPage,

@@ -610,7 +610,15 @@ export function demoTemplatePreview(): TemplatePreview {
     ],
     skipped: [],
     targets: [
-      { target_id: 'api', label: 'API', declared: true, steps: ['api'], apply: 'person', ticket_writes: 'remembered' },
+      {
+        target_id: 'api',
+        label: 'API',
+        declared: true,
+        steps: ['api'],
+        apply: 'person',
+        ticket_writes: 'remembered',
+        profiles: 'checked',
+      },
       {
         target_id: 'web',
         label: 'Web',

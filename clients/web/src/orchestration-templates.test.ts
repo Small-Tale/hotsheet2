@@ -21,6 +21,7 @@ import {
   saveProblem,
   stepNumbers,
   stepText,
+  unverifiedProfilesText,
 } from './orchestration-templates';
 import { demoTemplateApply, demoTemplatePreview, demoTemplates } from './ux-demo/orchestration-fixtures';
 
@@ -256,6 +257,58 @@ describe('plan templates in the Orchestration view (HS2-A4RVYA)', () => {
     const family = '\u{1F469}\u200D\u{1F469}\u200D\u{1F467}';
     expect(savableGoalLabel({ ...long, title: family.repeat(GOAL_LABEL_TITLE_CHARS + 1) })).toBe(
       `${family.repeat(GOAL_LABEL_TITLE_CHARS - 1)}… · LCH-3 · 4 steps`,
+    );
+  });
+
+  it('HS2-K3ESZR words test profile problems with the profile and project, and names unchecked projects', () => {
+    const preview = demoTemplatePreview();
+    const template = demoTemplates()[0];
+    const unknown = { code: 'validation_profile_unknown', at: 'steps[0].validation[0]' };
+    expect(problemText(template, unknown, preview)).toBe(
+      'Step 1 names the test profile “contract-check”, which API does not offer.',
+    );
+    // Without the preview, or pointing past its steps, the generic words name the step.
+    expect(problemText(template, unknown)).toBe('Step 1 names a test profile its project does not offer.');
+    expect(problemText(template, { ...unknown, at: 'steps[9].validation[0]' }, preview)).toBe(
+      'Step 10 names a test profile its project does not offer.',
+    );
+    expect(problemText(template, { ...unknown, at: 'steps[0].validation[4]' }, preview)).toBe(
+      'Step 1 names a test profile its project does not offer.',
+    );
+    const invalid = { code: 'validation_profiles_invalid', at: 'steps[1].validation' };
+    expect(problemText(template, invalid, preview)).toBe(
+      'Step 2 names test profiles, but the test profile file of Web has problems.',
+    );
+    // The wire parser keeps `profiles` only when it is a known value.
+    const parsed = parseTemplatePreview({
+      template: { template_id: 'T' },
+      problems: [unknown],
+      steps: [],
+      targets: [
+        { target_id: 'a', profiles: 'checked' },
+        { target_id: 'b', profiles: 'unverified' },
+        { target_id: 'c', profiles: 'later' },
+        { target_id: 'd' },
+      ],
+    });
+    expect(parsed.problems).toEqual([unknown]);
+    expect(parsed.targets.map((target) => target.profiles)).toEqual(['checked', 'unverified', undefined, undefined]);
+    expect(unverifiedProfilesText(preview)).toBeUndefined();
+    const one = {
+      ...preview,
+      targets: preview.targets.map((target) => ({ ...target, profiles: 'unverified' as const })),
+    };
+    expect(unverifiedProfilesText(one)).toBe(
+      'The test profiles of API and Web could not be checked now; the planner checks them when it plans.',
+    );
+    expect(
+      unverifiedProfilesText({
+        ...one,
+        targets: [...one.targets, { ...one.targets[0], target_id: 'docs', label: undefined }],
+      }),
+    ).toBe('The test profiles of API, Web and docs could not be checked now; the planner checks them when it plans.');
+    expect(unverifiedProfilesText({ ...one, targets: [one.targets[0]] })).toBe(
+      'The test profiles of API could not be checked now; the planner checks them when it plans.',
     );
   });
 

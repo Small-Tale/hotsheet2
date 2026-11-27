@@ -7795,6 +7795,22 @@ a remembered rule (`remembered`) or ask (`asks`): the planner is an AI session, 
 creates pass the gate as in §26.25. It also says whether the planner proposes or updates
 and whether placement starts planned work by itself.
 
+**Test profiles in the preview (HS2-K3ESZR).** For each declared project whose kept steps
+name test profiles (§26.12), the preview reads the profiles the project offers from its
+checked-in `.hotsheet2/validation-profiles.json` through the gate as an observation
+(`gates_observe`, the same read as `validation profiles`): it never asks, and repeated
+identical reads coalesce in the audit journal (HS2-SV4SMY). A profile the project does not
+offer, including every profile while it has no profile file, is
+`validation_profile_unknown` at `steps[n].validation[m]`; a profile file with problems is
+`validation_profiles_invalid` at `steps[n].validation` for each step naming profiles
+there. Both keep Apply disabled. The project's entry in `targets` says `profiles: checked`;
+when the read cannot happen now (the project is offline, or the caller is not
+identified) it says `profiles: unverified` and reports no problem, so an offline project
+never blocks Apply; the planner and the validation run check the profiles later. A step a
+false `when` leaves out is not checked. In Use Template… the problem names the profile and
+project (`Step 1 names the test profile “lint”, which API does not offer.`), and an
+unverified project shows a quiet line under the steps.
+
 ### Save a Goal as Template…
 
 `template_save_goal` turns an open goal's current plan steps into a new template, oldest

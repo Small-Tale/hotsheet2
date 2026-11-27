@@ -477,6 +477,28 @@ function OrchestrationTemplateDialogDemo() {
       }),
       false,
     ],
+    [
+      'Use Template…: Test Profile Problems',
+      templateState({
+        preview: {
+          ...demoTemplatePreview(),
+          problems: [{ code: 'validation_profile_unknown', at: 'steps[0].validation[0]' }],
+        },
+      }),
+      false,
+    ],
+    [
+      'Use Template…: Test Profiles Not Checked',
+      templateState({
+        preview: {
+          ...demoTemplatePreview(),
+          targets: demoTemplatePreview().targets.map((target) =>
+            target.target_id === 'api' ? { ...target, profiles: 'unverified' as const } : target,
+          ),
+        },
+      }),
+      false,
+    ],
     ['Use Template…: Applied', templateState({ mode: 'result', result: demoTemplateApply('planning') }), false],
     [
       'Use Template…: Waiting for the Planner',

@@ -468,6 +468,7 @@ fn hs2_a4rvya_an_ai_apply_asks_first_and_continues_after_the_answer() {
                     "inputs": {"feature": "Quotas"}}))
                 .unwrap(),
                 Some(&worker()),
+                &mut tx,
             )
             .unwrap();
     assert!(preview.problems.is_empty(), "{:?}", preview.problems);
@@ -732,7 +733,7 @@ fn hs2_a4rvya_preview_names_problems_projects_and_what_asks() {
     };
     let f = Fixture::new(2, &mut tx);
     let template = f.define("Feature", &mut tx);
-    let preview = |inputs: Value, choices: Value| {
+    let preview = |inputs: Value, choices: Value, tx: &mut Transaction<'_>| {
         f.m.runtime
             .template_preview(
                 &f.owner(),
@@ -740,10 +741,11 @@ fn hs2_a4rvya_preview_names_problems_projects_and_what_asks() {
                     "inputs": inputs, "choices": choices}))
                 .unwrap(),
                 Some(&human()),
+                tx,
             )
             .unwrap()
     };
-    let missing = preview(json!({}), json!({}));
+    let missing = preview(json!({}), json!({}), &mut tx);
     assert_eq!(
         missing
             .problems
@@ -755,6 +757,7 @@ fn hs2_a4rvya_preview_names_problems_projects_and_what_asks() {
     let unknown = preview(
         json!({"feature": "X", "web": id(5)}),
         json!({"zzz": "create"}),
+        &mut tx,
     );
     assert_eq!(
         unknown
@@ -772,7 +775,9 @@ fn hs2_a4rvya_preview_names_problems_projects_and_what_asks() {
             &mut tx,
         )
         .unwrap();
-    let ok = preview(json!({"feature": "X"}), json!({"web": "create"}));
+    let ok = preview(json!({"feature": "X"}), json!({"web": "create"}), &mut tx);
+    // No step names a test profile, so no project's profiles are read.
+    assert!(ok.targets.iter().all(|target| target.profiles.is_none()));
     assert!(ok.problems.is_empty());
     assert_eq!(ok.goal_title, "X in API and Web");
     assert_eq!(ok.steps[1].ticket, StepTicket::Create);
@@ -1047,4 +1052,150 @@ fn hs2_a4rvya_an_interrupted_apply_resumes_under_the_recorded_ids() {
         .unwrap();
     assert_eq!(again.outcome.as_deref(), Some("existing"));
     assert_eq!(f.host.launches().len(), 1);
+}
+
+/// HS2-K3ESZR: the preview reads the test profiles each project offers through the
+/// gate as an observation (never asking) and names every profile a step uses that its
+/// project does not offer; a damaged profile file is a problem of each step that
+/// names profiles there; a read that cannot happen leaves the project unverified
+/// rather than blocking Apply; a step a false `when` leaves out is not checked.
+#[test]
+fn hs2_k3eszr_preview_checks_validation_profiles_against_projects() {
+    let mut rng = Rng(700);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let f = Fixture::new(2, &mut tx);
+    let document =
+        f.m.runtime
+            .template_set(
+                &f.owner(),
+                serde_json::from_value(json!({"templates": [{
+                    "name": "Checked",
+                    "inputs": [
+                        {"key": "feature", "label": "Feature", "kind": "text", "required": true},
+                        {"key": "docs", "label": "Docs", "kind": "boolean", "default": false}
+                    ],
+                    "goal": {"title": "{{feature}}"},
+                    "steps": [
+                        {"key": "api", "target": id(1), "title": "API {{feature}}",
+                         "validation": ["smoke", "lint"]},
+                        {"key": "web", "target": id(2), "title": "Web {{feature}}",
+                         "validation": ["smoke"]},
+                        {"key": "docs", "target": id(1), "title": "Docs {{feature}}",
+                         "validation": ["missing-only-here"], "when": "{{docs}}"}
+                    ]
+                }]}))
+                .unwrap(),
+                Some(&human()),
+                &mut tx,
+            )
+            .unwrap();
+    let template = document.templates[0].clone();
+    let preview = |actor: Option<&MutationActor>, tx: &mut Transaction<'_>| {
+        f.m.runtime
+            .template_preview(
+                &f.owner(),
+                &serde_json::from_value(json!({"template_id": template.template_id,
+                    "inputs": {"feature": "Quotas"}}))
+                .unwrap(),
+                actor,
+                tx,
+            )
+            .unwrap()
+    };
+    let found = |preview: &TemplatePreview| {
+        preview
+            .problems
+            .iter()
+            .map(|problem| (problem.code.clone(), problem.at.clone()))
+            .collect::<Vec<_>>()
+    };
+    let unknown = |at: &str| ("validation_profile_unknown".to_owned(), at.to_owned());
+    let checked = |preview: &TemplatePreview| {
+        preview
+            .targets
+            .iter()
+            .map(|target| target.profiles)
+            .collect::<Vec<_>>()
+    };
+    let directory = std::path::Path::new(&f.m.target.root).join(".hotsheet2");
+    let write = |profiles: Value| {
+        std::fs::create_dir_all(&directory).unwrap();
+        std::fs::write(
+            directory.join("validation-profiles.json"),
+            json!({"schema_version": 1, "profiles": profiles}).to_string(),
+        )
+        .unwrap();
+    };
+    // No profile file: the projects offer none, so every named profile is unknown.
+    // The `docs` step is left out by its `when`, so its profile is not checked.
+    let none = preview(Some(&human()), &mut tx);
+    assert_eq!(
+        found(&none),
+        [
+            unknown("steps[0].validation[0]"),
+            unknown("steps[0].validation[1]"),
+            unknown("steps[1].validation[0]"),
+        ]
+    );
+    assert_eq!(none.skipped, ["docs"]);
+    assert_eq!(
+        checked(&none),
+        [Some(ProfilesCheck::Checked), Some(ProfilesCheck::Checked)]
+    );
+    // Read through the gate as an observation: audited, and nobody is asked.
+    assert_eq!(
+        f.m.last_audit(),
+        ("gates_observe".into(), AuditOutcome::Succeeded, None)
+    );
+    assert!(
+        f.m.runtime
+            .permission_list(&f.owner(), &mut tx)
+            .unwrap()
+            .requests
+            .is_empty()
+    );
+    // Refilled with one profile: only `lint` is still unknown (both projects share
+    // the fixture checkout).
+    write(json!([{"name": "smoke", "program": "true"}]));
+    assert_eq!(
+        found(&preview(Some(&human()), &mut tx)),
+        [unknown("steps[0].validation[1]")]
+    );
+    // A damaged file: no profile there runs by name.
+    write(json!([{"name": "smoke", "program": "a"}, {"name": "smoke", "program": "b"}]));
+    assert_eq!(
+        found(&preview(Some(&human()), &mut tx)),
+        [
+            (
+                "validation_profiles_invalid".to_owned(),
+                "steps[0].validation".to_owned()
+            ),
+            (
+                "validation_profiles_invalid".to_owned(),
+                "steps[1].validation".to_owned()
+            ),
+        ]
+    );
+    // Every profile offered: no problems, and previewing again answers the same.
+    write(json!([{"name": "smoke", "program": "true"}, {"name": "lint", "program": "true"}]));
+    let ok = preview(Some(&worker()), &mut tx);
+    assert!(ok.problems.is_empty(), "{:?}", ok.problems);
+    assert_eq!(found(&preview(Some(&worker()), &mut tx)), found(&ok));
+    // Without an identified actor the gate cannot be passed: the projects are
+    // unverified and nothing blocks Apply on their account.
+    std::fs::remove_file(directory.join("validation-profiles.json")).unwrap();
+    let anonymous = preview(None, &mut tx);
+    assert!(anonymous.problems.is_empty(), "{:?}", anonymous.problems);
+    assert_eq!(
+        checked(&anonymous),
+        [
+            Some(ProfilesCheck::Unverified),
+            Some(ProfilesCheck::Unverified)
+        ]
+    );
+    // Previewing writes nothing.
+    assert!(f.goals().is_empty() && f.host.launches().is_empty());
 }

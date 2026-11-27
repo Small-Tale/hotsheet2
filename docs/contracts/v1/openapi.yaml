@@ -3907,7 +3907,8 @@ paths:
     post:
       operationId: orchestrateTemplates
       description:
-        "`list`, `show`, `validate`, `preview` and `apply_show` read and write nothing. `set` adds or replaces templates
+        "`list`, `show`, `validate`, `preview` and `apply_show` write nothing (`preview` reads the test profiles its
+        steps name through the gate as an audited observation, HS2-K3ESZR). `set` adds or replaces templates
         merged by `template_id` (refused `template_invalid` or `template_conflict`), `retire` stops a template being
         applied, and `save_goal` turns an open goal's plan steps into a template (`template_goal_empty` without steps);
         none of them asks. `apply` is idempotent by its retained `operation_id`: a repeat never opens a second goal or
@@ -26944,7 +26945,10 @@ components:
       description:
         The pre-run summary of an apply (HS2-A4RVYA). Each target says whether applying is the person's own act
         (`person`), allowed by a remembered rule (`remembered`) or asks (`asks`), and the same for the planner's ticket
-        writes there. `planning` is `propose` or `update`.
+        writes there. `planning` is `propose` or `update`. A target whose steps (HS2-K3ESZR) name test profiles
+        carries `profiles`, `checked` when its profiles were read through the gate as an observation (each profile it
+        does not offer is a `validation_profile_unknown` problem at `steps[n].validation[m]`, a damaged profile file
+        `validation_profiles_invalid` at `steps[n].validation`) or `unverified` when they could not be read now.
       type: object
       required:
         - template
