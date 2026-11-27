@@ -1077,6 +1077,7 @@ dependencies = [
  "base64 0.22.1",
  "futures-util",
  "getrandom 0.3.4",
+ "hotsheet-http",
  "hotsheet-jobs",
  "hotsheet-plugins",
  "hotsheet-process-journal",
@@ -1095,7 +1096,7 @@ dependencies = [
  "tokio",
  "tokio-tungstenite",
  "toml 0.8.23",
- "ureq 2.12.1",
+ "ureq 3.5.2",
  "windows-sys 0.61.2",
 ]
 

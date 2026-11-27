@@ -46,7 +46,12 @@ pub struct UreqHttp {
 impl UreqHttp {
     pub fn new(timeout: Duration) -> Self {
         Self {
-            agent: ureq::AgentBuilder::new().timeout(timeout).build(),
+            // HS2-9ABVDW: error statuses are responses the adapter reads.
+            agent: hotsheet_http::build(
+                hotsheet_http::config()
+                    .http_status_as_error(false)
+                    .timeout_global(Some(timeout)),
+            ),
         }
     }
 }
@@ -59,23 +64,27 @@ impl Default for UreqHttp {
 
 impl HttpPort for UreqHttp {
     fn send(&self, request: &HttpRequest) -> Result<HttpResponse, String> {
-        let mut call = self.agent.request(request.method, &request.url);
+        let mut call = ureq::http::Request::builder()
+            .method(request.method)
+            .uri(&request.url);
         if let Some(authorization) = &request.authorization {
-            call = call.set("Authorization", authorization.expose());
+            call = call.header("Authorization", authorization.expose());
         }
         let result = match &request.body {
             Some(body) => call
-                .set("Content-Type", "application/json")
-                .send_string(&body.to_string()),
-            None => call.call(),
+                .header("Content-Type", "application/json")
+                .body(body.to_string())
+                .map(|call| self.agent.run(call)),
+            None => call.body(()).map(|call| self.agent.run(call)),
         };
-        let response = match result {
-            Ok(response) => response,
-            Err(ureq::Error::Status(_, response)) => response,
-            Err(ureq::Error::Transport(error)) => return Err(error.to_string()),
-        };
-        let status = response.status();
-        let body = response.into_string().map_err(|error| error.to_string())?;
+        let mut response = result
+            .map_err(|error| error.to_string())?
+            .map_err(|error| error.to_string())?;
+        let status = response.status().as_u16();
+        let body = response
+            .body_mut()
+            .read_to_string()
+            .map_err(|error| error.to_string())?;
         Ok(HttpResponse { status, body })
     }
 }
