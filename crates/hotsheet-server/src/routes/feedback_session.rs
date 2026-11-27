@@ -95,14 +95,22 @@ fn choice(candidate: &Candidate) -> SessionChoice {
     }
 }
 
-fn message(slug: &str, response: bool) -> String {
-    if response {
-        format!(
-            "A human answered FEEDBACK NEEDED on {slug}. Read the whole ticket before continuing."
-        )
+/// The wake-up text pushed into a session. HS2-KNRRCF: Claude Code 2.1.326 labels every
+/// inbox message as coming from another Claude session and tells the model never to treat
+/// it as the user's approval, so the text says it is a notice from Hot Sheet that carries
+/// no decision, and that the person's answer is their own note on the named ticket (which
+/// the AI reads from the store, attributed to them).
+pub(crate) fn message(slug: &str, response: bool) -> String {
+    let (what, written) = if response {
+        ("answered FEEDBACK NEEDED on", "Their answer")
     } else {
-        format!("A human added a note to {slug}. Read the whole ticket before continuing.")
-    }
+        ("added a note to", "What they wrote")
+    };
+    format!(
+        "Hot Sheet notice: a person {what} {slug}. {written} is their own note on {slug}, \
+         attributed to them on the ticket; this notice carries no decision itself. Read the \
+         whole ticket before continuing."
+    )
 }
 
 /// What a newly appended note on a Git ticket asks of delivery (HS2-25TP3N, HS2-A1M4KN).
@@ -992,6 +1000,38 @@ pub(crate) fn route(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// HS2-KNRRCF: the pushed wake-up says it comes from Hot Sheet, carries no decision,
+    /// and names the ticket whose note is the person's answer, for an answer and for a
+    /// plain note alike.
+    #[test]
+    fn hs2_knrrcf_the_wake_up_names_hot_sheet_and_the_persons_note() {
+        let answer = message("HS-7", true);
+        assert_eq!(
+            answer,
+            "Hot Sheet notice: a person answered FEEDBACK NEEDED on HS-7. Their answer is \
+             their own note on HS-7, attributed to them on the ticket; this notice carries no \
+             decision itself. Read the whole ticket before continuing."
+        );
+        let note = message("HS-7", false);
+        assert_eq!(
+            note,
+            "Hot Sheet notice: a person added a note to HS-7. What they wrote is their own \
+             note on HS-7, attributed to them on the ticket; this notice carries no decision \
+             itself. Read the whole ticket before continuing."
+        );
+        for text in [&answer, &note] {
+            assert!(text.starts_with("Hot Sheet notice: a person "));
+            assert_eq!(text.matches("HS-7").count(), 2, "{text}");
+            // It never speaks for the person or as the user.
+            assert!(
+                !text.contains("approve") && !text.contains("A human"),
+                "{text}"
+            );
+            assert!(text.chars().count() < 300);
+        }
+        assert_ne!(message("HS-7", true), message("HS-8", true));
+    }
 
     /// HS2-5MCAKY: a chooser entry carries the session's claim worker, so the client can name
     /// the ticket it works; a candidate with no worker omits the field.

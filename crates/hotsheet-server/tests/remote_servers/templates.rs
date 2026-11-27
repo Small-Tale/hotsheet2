@@ -673,7 +673,10 @@ async fn hs2_a1m4kn_a_reuse_answer_on_an_unclaimed_template_goal_reaches_the_pla
     received_prompt(
         &world.reports,
         &planner_terminal,
-        &format!("A human answered FEEDBACK NEEDED on {}", goal.slug),
+        &format!(
+            "Hot Sheet notice: a person answered FEEDBACK NEEDED on {}",
+            goal.slug
+        ),
     );
     let other_prompts =
         std::fs::read_to_string(world.reports.join(format!("{other}.prompts"))).unwrap();
