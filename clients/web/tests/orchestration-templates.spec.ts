@@ -279,3 +279,58 @@ test('HS2-A4RVYA Save a Goal as Template… saves a goal’s plan steps and sele
     await server.stop(page);
   }
 });
+
+test('HS2-DTP7QR an open select in Use Template… stays open while a preview answer removes a problem above it', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer({ seed: ({ env }) => syntheticTool(env.HOTSHEET_HOME!) });
+  try {
+    await orchestrateSelf(server);
+    await checkInTemplate(server);
+    await resizeTo(page, { width: 1440, height: 900 });
+    await openProject(page, server);
+    await page.locator('[data-orchestration-toolbar="no_plan"]').getByRole('button', { name: 'Use Template…' }).click();
+    const dialog = dialogOf(page);
+    await expect(dialog).toContainText('1 Problem Keeps Apply Disabled');
+    // Preview answers carry a problem for the project input until `clear`; the next one is held until a select is
+    // open, then answers without it, which removes the banner above the inputs.
+    let problem = true;
+    let release: (() => void) | undefined;
+    await page.route('**/orchestration/templates/preview', async (route) => {
+      if (!problem)
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+      const incoming = new URL(route.request().url());
+      const response = await proxyFetch(route, {
+        url: `${server.url}${incoming.pathname.slice(`/__hotsheet/project-api/${server.checkoutId}`.length)}`,
+        headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+        timeout: 60_000,
+      });
+      const body = (await response.json()) as { problems?: unknown[] };
+      const problems = problem ? [{ code: 'input_invalid', at: 'inputs.project' }] : [];
+      await route.fulfill({ response, json: { ...body, problems: [...(body.problems ?? []), ...problems] } });
+    });
+    const feature = dialog.getByLabel('Feature', { exact: true });
+    await feature.fill('Rate limits');
+    const banner = dialog.locator('[data-template-detail] > :not([hidden])').first();
+    await expect(banner).toContainText('1 Problem Keeps Apply Disabled');
+    await expect(banner).toContainText('Project is not a value it accepts.');
+    // The next answer is held and clears the problem; the person opens the project select meanwhile.
+    problem = false;
+    await feature.fill('Rate limits, again');
+    await expect.poll(() => release !== undefined).toBe(true);
+    const project = dialog.locator('[data-template-input="project"]').getByRole('combobox', { name: 'Project' });
+    await project.click();
+    await expect(page.getByRole('option', { name: 'Self', exact: true })).toBeVisible();
+    release?.();
+    await expect(dialog).not.toContainText('Keeps Apply Disabled');
+    await expect(project).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.getByRole('option', { name: 'Self', exact: true })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await page.unroute('**/orchestration/templates/preview');
+  } finally {
+    await server.stop(page);
+  }
+});
