@@ -13,6 +13,40 @@ use std::fs;
 use std::time::{Duration, Instant};
 use support::{Fixture, git};
 
+/// HS2-237JQE: the default coordination wake bound is nextest's slow-timeout period, so a
+/// missed wake fails when nextest would call the test SLOW, and the load factor parses safely.
+#[test]
+fn hs2_237jqe_default_wake_bound_is_the_nextest_slow_period() {
+    let config = fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.config/nextest.toml"),
+    )
+    .unwrap();
+    let period = config
+        .lines()
+        .find_map(|line| {
+            line.strip_prefix("slow-timeout = { period = \"")?
+                .split_once("s\"")
+                .map(|(seconds, _)| seconds.parse::<u64>().unwrap())
+        })
+        .expect("nextest default slow-timeout period");
+    assert_eq!(
+        support::IDLE_WAKE_BOUND * support::DEFAULT_LOAD_FACTOR,
+        Duration::from_secs(period)
+    );
+    assert_eq!(
+        support::load_factor_from(None),
+        support::DEFAULT_LOAD_FACTOR
+    );
+    assert_eq!(support::load_factor_from(Some(" 12 ")), 12);
+    for invalid in ["0", "-1", "1.5", "fast", ""] {
+        assert_eq!(
+            support::load_factor_from(Some(invalid)),
+            support::DEFAULT_LOAD_FACTOR,
+            "{invalid:?}"
+        );
+    }
+}
+
 #[test]
 fn hs2_xcmavt_real_cli_plan_revision_and_dispatch_replay() {
     let f = Fixture::new();

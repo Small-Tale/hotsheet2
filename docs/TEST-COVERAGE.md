@@ -92,6 +92,15 @@ Codex rollout and Claude transcript followers, the orchestration-settings and
 target-store watches) keep their own suites, proved under load for the named
 flakes (`hs2_76vmyg`, `hs2_anqxq4`, `hs2_cyhawb`, `hs2_jw6n67`).
 
+HS2-237JQE: the `hotsheet-cli` coordination suites bound each wait child's
+subscription, wake and stderr close by one `wake_bound()` in
+`tests/support/coordination.rs`: a 10 s idle bound times
+`HOTSHEET_TEST_LOAD_FACTOR` (default 6), so the default is nextest's 60 s
+slow-timeout period. A fixed 10 s missed four wakes together in a full local
+gate during an fseventsd backlog (HS2-P702Y8); a missed wake still fails.
+`tests/coordination.rs # hs2_237jqe_default_wake_bound_is_the_nextest_slow_period`
+pins the default to `.config/nextest.toml` and the factor's parsing.
+
 HS2-3R9V0R: `hotsheet-jobs/src/github.rs` unit tests cover the gate decision for
 every run status and conclusion, covering by a newer run, runs from before the
 commit, a diverged branch, a spent lookup budget, the re-watch floor and a
