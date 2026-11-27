@@ -11,7 +11,9 @@ const header = (status: HostHealthStatus, reason: string | null = null) => ({ st
 export type HostHealthScenario = 'normal' | 'crossed' | 'unsupported' | 'disks' | 'long-process';
 
 /** HS2-2TEAFA: a long, unbroken synthetic process name, the kind a CPU card must truncate. */
-export const LONG_PROCESS_NAME = 'com.example.SyntheticRenderer.WebContent.Development.Helper';
+// HS2-6G0BFT: long enough to overflow the CPU card at every tested width with any platform's fonts.
+export const LONG_PROCESS_NAME =
+  'com.example.SyntheticRenderer.WebContent.Development.Helper.Extended.Diagnostics.Worker.Subprocess.Background.Agent';
 
 const volume = (id: string, label: string, overrides: Partial<HostHealthDiskVolume> = {}): HostHealthDiskVolume => ({
   id,
