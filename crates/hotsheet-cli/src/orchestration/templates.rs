@@ -1220,3 +1220,170 @@ fn sanitize_line(text: &str) -> String {
         line
     }
 }
+
+/// HS2-AMJNER: the longest a resume that left an apply waiting is put off before the
+/// next try. A resume that did something, or a changed apply, starts over.
+pub const MAX_RESUME_BACKOFF_MS: u64 = 60_000;
+const FIRST_RESUME_BACKOFF_MS: u64 = 1_000;
+
+/// HS2-AMJNER: what a resume pass remembers between passes: the applies it tried that
+/// are still waiting, so one that stays blocked is tried again with a growing pause
+/// rather than at every wake. Kept by the caller (the server's automation thread);
+/// a headless pass starts empty.
+#[derive(Debug, Default, Clone)]
+pub struct ResumeMemory {
+    tried: BTreeMap<String, (u64, u64, u64)>,
+}
+
+impl ResumeMemory {
+    /// The earliest instant a put-off resume may be tried again.
+    pub fn next_try_ms(&self) -> Option<u64> {
+        self.tried.values().map(|(_, next_at, _)| *next_at).min()
+    }
+}
+
+/// HS2-AMJNER: one apply a resume pass continued, and where it now stands.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ResumedApply {
+    pub operation_id: String,
+    pub state: ApplyState,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+/// HS2-AMJNER: what a resume pass did.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ResumeReport {
+    pub resumed: Vec<ResumedApply>,
+}
+
+impl OrchestrationRuntime {
+    /// HS2-AMJNER: whether the planner can take a goal now: no plan update drafting and
+    /// no planner at work on another proposal (one that finished its turn can).
+    pub(super) fn planner_free(&self, owner: &Checkout, tx: &mut Transaction<'_>) -> bool {
+        if self
+            .replan_latest(owner, tx)
+            .map_or(true, |latest| latest.is_some_and(|(_, drafting)| drafting))
+        {
+            return false;
+        }
+        let Ok(planners) = self.planners(owner, tx) else {
+            return false;
+        };
+        let facts = Self::planner_facts(&planners);
+        hotsheet_ticketing::orchestration::planning_state(&facts)
+            != hotsheet_ticketing::orchestration::PlanningState::Planning
+            || hotsheet_ticketing::orchestration::current_planner(&facts)
+                .is_some_and(|planner| planner.replannable())
+    }
+
+    /// HS2-AMJNER: continue every apply of the owner that waits and can go on now,
+    /// under its own operation id and as the actor who applied it, exactly as that
+    /// caller repeating the apply would:
+    ///
+    /// - `waiting_permission` once a person answered every request it waits on
+    ///   (Allow goes on, Deny makes it `denied`);
+    /// - `waiting_planner` (the planner was busy, or a crash came between asking and
+    ///   the answer) once the planner is free.
+    ///
+    /// Anything else waits for its caller. An apply left waiting is tried again only
+    /// after a pause that doubles up to [`MAX_RESUME_BACKOFF_MS`], so a planner that
+    /// stays busy is not asked at every wake. Audited as the ordinary `template_apply`.
+    pub fn template_resume_waiting(
+        &self,
+        owner_id: &str,
+        memory: &mut ResumeMemory,
+        tx: &mut Transaction<'_>,
+    ) -> Result<ResumeReport, OrchestrationError> {
+        let owner = self.owner(owner_id)?;
+        let now = tx.clock.now_ms();
+        let applies = self.template_applies(owner_id)?.applies()?;
+        memory
+            .tried
+            .retain(|operation, _| applies.iter().any(|apply| &apply.operation_id == operation));
+        let mut planner_free: Option<bool> = None;
+        let mut report = ResumeReport::default();
+        for apply in applies {
+            if let Some((_, next_at, seen)) = memory.tried.get(&apply.operation_id)
+                && *seen == apply.updated_at_ms
+                && now < *next_at
+            {
+                continue;
+            }
+            let ready = match apply.state {
+                ApplyState::WaitingPermission => {
+                    !apply.permission_requests.is_empty()
+                        && apply
+                            .permission_requests
+                            .iter()
+                            .all(|request| !self.permission_waiting(owner_id, request, now))
+                }
+                ApplyState::WaitingPlanner => {
+                    let resumable = apply.reason.is_none()
+                        || apply.reason.as_deref() == Some(ReadinessError::PlannerBusy.code());
+                    resumable && *planner_free.get_or_insert_with(|| self.planner_free(&owner, tx))
+                }
+                ApplyState::Planning | ApplyState::Denied => false,
+            };
+            if !ready {
+                continue;
+            }
+            let Ok(actor) = MutationActor::parse(
+                apply.actor_role.as_deref().unwrap_or("system"),
+                apply.actor_id.clone(),
+            ) else {
+                continue;
+            };
+            let request = ApplyTemplate {
+                template_id: apply.template_id.clone(),
+                inputs: apply.inputs.clone(),
+                choices: apply.choices.clone(),
+                tool: apply.tool.clone(),
+                model: apply.model.clone(),
+                effort: apply.effort.clone(),
+                operation_id: apply.operation_id.clone(),
+            };
+            let (state, reason, updated) =
+                match self.template_apply(owner_id, request, Some(&actor), tx) {
+                    Ok(view) => (
+                        view.apply.state,
+                        view.apply.reason.clone(),
+                        view.apply.updated_at_ms,
+                    ),
+                    Err(error) => {
+                        let current = self
+                            .template_applies(owner_id)?
+                            .find(&apply.operation_id)?
+                            .unwrap_or_else(|| apply.clone());
+                        (
+                            current.state,
+                            Some(error.code().to_owned()),
+                            current.updated_at_ms,
+                        )
+                    }
+                };
+            if matches!(state, ApplyState::Planning | ApplyState::Denied) {
+                memory.tried.remove(&apply.operation_id);
+            } else {
+                let failures = memory
+                    .tried
+                    .get(&apply.operation_id)
+                    .map_or(0, |(failures, _, _)| *failures)
+                    + 1;
+                let pause = FIRST_RESUME_BACKOFF_MS
+                    .saturating_mul(1 << failures.min(6).saturating_sub(1))
+                    .min(MAX_RESUME_BACKOFF_MS);
+                memory.tried.insert(
+                    apply.operation_id.clone(),
+                    (failures, now.saturating_add(pause), updated),
+                );
+            }
+            report.resumed.push(ResumedApply {
+                operation_id: apply.operation_id,
+                state,
+                reason,
+            });
+        }
+        Ok(report)
+    }
+}

@@ -11,6 +11,7 @@ import {
   coalescedPlacement,
   createOrchestrationViewController,
   createServerPlanner,
+  editTriggerForm,
   orchestrationPersonId,
   parseOrchestrationDetails,
   plannerTerminalOf,
@@ -1219,6 +1220,228 @@ describe('Use Template… through the view (HS2-A4RVYA)', () => {
     expect(t.controller.templateDialog.value?.detailActive).toBe(false);
     t.controller.closeTemplates();
     expect(t.controller.templateDialog.value).toBeUndefined();
+    t.controller.dispose();
+  });
+});
+
+describe('Triggers… through the view (HS2-KXKA7X)', () => {
+  const saved = {
+    trigger_id: 'TR1',
+    name: 'Night shift',
+    source: {
+      kind: 'schedule',
+      schedule: {
+        time_zone: 'UTC',
+        local_time: '02:00',
+        recurrence: { kind: 'daily', every: 1, start_date: '2026-11-01' },
+      },
+    },
+    action: { placement: 'start' },
+    state: 'dry_run',
+    updated_at_ms: 1,
+    history: [],
+    next_runs_ms: [1, 2, 3],
+    reviewed: false,
+    running: false,
+  };
+
+  function setup(options: { confirm?: boolean } = {}) {
+    const project = { id: 'orch', name: 'Launch', root: '/synthetic/orch', apiPath: '/api/orch' } as Project;
+    const calls: Array<[string, Record<string, unknown>]> = [],
+      toasts: string[] = [];
+    let triggers: Array<Record<string, unknown>> = [saved];
+    const known: Record<string, unknown> = {
+      orchestrationPlanning: () => Promise.resolve({}),
+      orchestrationTimeline: (_owner: string, after?: string) =>
+        after ? new Promise<never>(() => undefined) : Promise.resolve(demoTimeline('proposed')),
+      orchestrationTemplates: () => Promise.resolve({ templates: [], applies: [] }),
+      orchestrationTriggers: (_owner: string, operation: string, body: Record<string, unknown>) => {
+        calls.push([operation, body]);
+        switch (operation) {
+          case 'list':
+            return Promise.resolve({ triggers });
+          case 'review':
+            return Promise.resolve({
+              problems: [],
+              scope: {},
+              permissions: [],
+              next: {},
+              digest: 'd',
+              turn_on: 'person',
+            });
+          case 'set': {
+            const added = { ...saved, ...body, trigger_id: body.trigger_id ?? 'TR2', state: body.start };
+            triggers = [...triggers.filter((trigger) => trigger.trigger_id !== added.trigger_id), added];
+            return Promise.resolve(added);
+          }
+          case 'on':
+          case 'pause':
+          case 'resume':
+            triggers = triggers.map((trigger) =>
+              trigger.trigger_id === body.trigger_id
+                ? { ...trigger, state: operation === 'on' ? 'on' : operation === 'pause' ? 'paused' : 'dry_run' }
+                : trigger,
+            );
+            return Promise.resolve(triggers.find((trigger) => trigger.trigger_id === body.trigger_id));
+          default:
+            return Promise.reject(new Error(operation));
+        }
+      },
+    };
+    const client = new Proxy(known, {
+      get: (target, key: string) => target[key] ?? (() => new Promise<never>(() => undefined)),
+    }) as unknown as Api;
+    const controller = createOrchestrationViewController({
+      project: () => project,
+      viewMode: signal<WorkspaceViewMode>('orchestration'),
+      fallbackViewMode: () => 'list',
+      orchestrationViewMode: signal<OrchestrationProjectViewMode>('orchestration'),
+      mobile: () => false,
+      confirm: () => Promise.resolve(options.confirm ?? true),
+      showToast: (message) => void toasts.push(message),
+      openTicket: () => Promise.resolve(),
+      showPermissionRequest: () => Promise.resolve(),
+      openOrchestrationSettings: () => undefined,
+      persistWorkspacePreferences: () => undefined,
+      planner: { availability: () => ({ available: true }), choice: () => ({ tool: 'claude' }) } as never,
+      personId: () => 'person-1',
+      createClient: () => client,
+      orchestrationProject: () => true,
+    });
+    const operations = () => calls.map(([operation]) => operation);
+    return { controller, calls, toasts, operations };
+  }
+
+  it('opens on the first trigger with its review, sets one up as a dry run, turns it on and pauses it', async () => {
+    const t = setup();
+    await vi.waitFor(() => {
+      expect(t.controller.timeline.value).toBeDefined();
+    });
+    await t.controller.openTriggers();
+    await vi.waitFor(() => {
+      expect(t.controller.triggerDialog.value?.review).toBeDefined();
+    });
+    const opened = t.controller.triggerDialog.value!;
+    expect(opened).toMatchObject({ selected: 'TR1', mode: 'detail', ownerName: 'Launch', detailActive: false });
+    expect(t.calls.find(([operation]) => operation === 'review')?.[1]).toEqual({ trigger_id: 'TR1' });
+
+    // New Trigger…: a setup defaulting to the planner's tool, reviewed as an unsaved definition.
+    t.controller.newTrigger();
+    expect(t.controller.triggerDialog.value).toMatchObject({ mode: 'setup', editing: undefined, detailActive: true });
+    expect(t.controller.triggerDialog.value?.form.tool).toBe('claude');
+    // A committed change reads the review now; the same definition again reads nothing.
+    t.controller.editTriggerField('form-name', 'Morning shift', true);
+    t.controller.editTriggerField('form-placement', 'start', true);
+    await vi.waitFor(() => {
+      expect(t.controller.triggerDialog.value?.reviewing).toBe(false);
+    });
+    const reviews = t.operations().filter((operation) => operation === 'review').length;
+    t.controller.editTriggerField('form-name', 'Morning shift', true);
+    expect(t.operations().filter((operation) => operation === 'review').length).toBe(reviews);
+    const lastReview = t.calls.filter(([operation]) => operation === 'review').at(-1)![1];
+    expect(lastReview.trigger).toMatchObject({ name: 'Morning shift', action: { placement: 'start' } });
+
+    await t.controller.saveTrigger();
+    const set = t.calls.find(([operation]) => operation === 'set')![1];
+    expect(set).toMatchObject({ name: 'Morning shift', start: 'dry_run', action: { placement: 'start' } });
+    expect(set.trigger_id).toBeUndefined();
+    expect(t.toasts.at(-1)).toBe('Saved the trigger Morning shift as a dry run.');
+    expect(t.controller.triggerDialog.value).toMatchObject({ mode: 'detail', selected: 'TR2' });
+
+    // Turn On… is confirmed first; declining sends nothing.
+    await t.controller.turnOnTrigger();
+    expect(t.calls.find(([operation]) => operation === 'on')?.[1]).toEqual({ trigger_id: 'TR2' });
+    expect(t.controller.triggerDialog.value?.triggers.find((trigger) => trigger.trigger_id === 'TR2')?.state).toBe(
+      'on',
+    );
+    await t.controller.pauseTrigger();
+    expect(t.controller.triggerDialog.value?.triggers.find((trigger) => trigger.trigger_id === 'TR2')?.state).toBe(
+      'paused',
+    );
+    await t.controller.resumeTrigger();
+    expect(t.operations().filter((operation) => operation === 'resume')).toHaveLength(1);
+
+    // Edit…: the saved definition, saved back under its id.
+    t.controller.editTrigger();
+    expect(t.controller.triggerDialog.value).toMatchObject({ mode: 'setup', editing: 'TR2' });
+    expect(t.controller.triggerDialog.value?.form.name).toBe('Morning shift');
+    t.controller.cancelTriggerSetup();
+    expect(t.controller.triggerDialog.value?.mode).toBe('detail');
+
+    // An orchestration change reads the triggers again while the dialog shows one.
+    const lists = t.operations().filter((operation) => operation === 'list').length;
+    t.controller.sessionsChanged('orch');
+    await vi.waitFor(() => {
+      expect(t.operations().filter((operation) => operation === 'list').length).toBe(lists + 1);
+    });
+    t.controller.closeTriggers();
+    expect(t.controller.triggerDialog.value).toBeUndefined();
+    t.controller.dispose();
+  });
+
+  it('sends nothing when Turn On… is declined', async () => {
+    const t = setup({ confirm: false });
+    await t.controller.openTriggers();
+    await t.controller.turnOnTrigger();
+    expect(t.operations()).not.toContain('on');
+    t.controller.dispose();
+  });
+
+  it('edits each setup field, resetting event inputs when the template changes', () => {
+    const t = setup();
+    let form = editTriggerForm(t.controller.triggerDialog.value?.form ?? ({} as never), 'nothing', 'x');
+    expect(form).toEqual({});
+    const base = editTriggerForm(
+      {
+        name: '',
+        when: 'schedule',
+        schedule: {
+          repeats: 'daily',
+          every: '1',
+          weekdays: [1],
+          startDate: '2026-11-01',
+          time: '09:00',
+          timeZone: 'UTC',
+        },
+        target: '',
+        event: 'branch_ci_failed',
+        tag: '',
+        category: '',
+        provider: '',
+        repository: '',
+        workflow: '',
+        branch: 'main',
+        template: 'T1',
+        tool: '',
+        eventInputs: { commit: 'commit' },
+        placement: '',
+        start: 'dry_run',
+        overlap: 'skip',
+      } as never,
+      'form-when',
+      'event',
+    );
+    expect(base.when).toBe('event');
+    expect(editTriggerForm(base, 'form-when', 'sometimes').when).toBe('event');
+    form = editTriggerForm(base, 'event-input-sha', 'commit');
+    expect(form.eventInputs).toEqual({ commit: 'commit', sha: 'commit' });
+    expect(editTriggerForm(form, 'event-input-sha', '').eventInputs).toEqual({ commit: 'commit' });
+    expect(editTriggerForm(form, 'form-template', 'T1').eventInputs).toEqual(form.eventInputs);
+    expect(editTriggerForm(form, 'form-template', 'T2').eventInputs).toEqual({});
+    expect(editTriggerForm(form, 'schedule-repeats', 'minutely').schedule).toMatchObject({
+      repeats: 'minutely',
+      every: '15',
+    });
+    expect(editTriggerForm(form, 'schedule-repeats', 'hourly').schedule).toMatchObject({
+      repeats: 'hourly',
+      every: '1',
+    });
+    expect(editTriggerForm(form, 'schedule-weekday', '5').schedule.weekdays).toEqual([5]);
+    expect(editTriggerForm(form, 'form-placement', 'none').placement).toBe('');
+    expect(editTriggerForm(form, 'form-overlap', 'queue_latest').overlap).toBe('queue_latest');
+    expect(editTriggerForm(form, 'form-start', 'paused').start).toBe('paused');
+    expect(editTriggerForm(form, 'form-event', 'ticket_opened').event).toBe('ticket_opened');
+    expect(editTriggerForm(form, 'form-event', 'bogus').event).toBe('branch_ci_failed');
     t.controller.dispose();
   });
 });

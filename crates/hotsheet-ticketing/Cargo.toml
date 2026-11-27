@@ -31,6 +31,8 @@ quick-xml.workspace = true
 webp-animation.workspace = true
 png.workspace = true
 time.workspace = true
+# HS2-KXKA7X: the command-schedule host instants, shared with orchestration triggers.
+jiff.workspace = true
 rusqlite.workspace = true
 libavif-sys = "0.17.0"
 

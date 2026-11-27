@@ -112,6 +112,9 @@ pub fn is_path(path: &str) -> bool {
             | ["checkouts", _, "orchestration", "planning", _]
             // HS2-A4RVYA: plan templates and their applies.
             | ["checkouts", _, "orchestration", "templates", _]
+            // HS2-KXKA7X: this machine's triggers, and a hosted branch head.
+            | ["checkouts", _, "orchestration", "triggers", _]
+            | ["checkouts", _, "target-branch-head"]
             | ["remote-checkouts", _, "resolution"]
     )
 }
@@ -206,6 +209,10 @@ pub fn is_machine_path(path: &str) -> bool {
             // HS2-A4RVYA: an apply starts the planner on this machine and reads its
             // permission ledger; templates are read and written beside its plan.
             | ["checkouts", _, "orchestration", "templates", _]
+            // HS2-KXKA7X: triggers live on one machine, like command schedules. The
+            // hosted `target-branch-head` route stays ordinary authenticated data so a
+            // remote orchestrator can reach it.
+            | ["checkouts", _, "orchestration", "triggers", _]
     )
 }
 
@@ -327,6 +334,13 @@ impl hotsheet_ticketing::Clock for Clock {
             .duration_since(std::time::UNIX_EPOCH)
             .map(|time| time.as_millis().try_into().unwrap_or(u64::MAX))
             .unwrap_or(0)
+    }
+}
+/// HS2-KXKA7X: a pass at one instant, for a test build's real-server schedule test.
+struct FixedClock(u64);
+impl hotsheet_ticketing::Clock for FixedClock {
+    fn now_ms(&self) -> u64 {
+        self.0
     }
 }
 pub(super) struct Rng;
@@ -747,6 +761,12 @@ impl OrchestrationRuntime {
                     query_number(path, "wait_ms", 0)?,
                 )?)
             }
+            // HS2-KXKA7X hosted half: where a branch of this checkout points.
+            ("GET", ["checkouts", checkout, "target-branch-head"]) => {
+                let branch = query_text(path, "branch")?
+                    .ok_or(OrchestrationError::Invalid("branch is required"))?;
+                value(self.hosted_branch_head(checkout, &branch)?)
+            }
             // HS2-YYNW9F: the profiles this checkout offers, checked.
             ("GET", ["checkouts", checkout, "target-validation-output", digest]) => {
                 value(self.validation_output(checkout, digest)?)
@@ -985,6 +1005,65 @@ impl OrchestrationRuntime {
                         value(self.template_apply(owner, decode(body)?, actor.as_ref(), tx)?)
                     }
                     "apply_show" => value(self.template_apply_show(owner, &decode(body)?)?),
+                    // HS2-AMJNER: one resume pass, as the server runs on its own.
+                    "resume" => {
+                        decode::<super::PlanRequest>(body)?;
+                        value(self.template_resume_waiting(
+                            owner,
+                            &mut super::ResumeMemory::default(),
+                            tx,
+                        )?)
+                    }
+                    _ => Err(OrchestrationError::Invalid("unsupported target route")),
+                }
+            }
+            // HS2-KXKA7X: triggers. `list`, `show`, `review` read; the rest change this
+            // machine's records, and `fire`/`pass` deliver.
+            ("POST", ["checkouts", owner, "orchestration", "triggers", operation]) => {
+                let actor = actor(body)?;
+                match *operation {
+                    "list" => {
+                        decode::<super::PlanRequest>(body)?;
+                        value(self.trigger_list(owner, tx)?)
+                    }
+                    "show" => value(self.trigger_show(owner, &decode(body)?, tx)?),
+                    "review" => {
+                        value(self.trigger_review(owner, &decode(body)?, actor.as_ref(), tx)?)
+                    }
+                    "set" => value(self.trigger_set(owner, decode(body)?, actor.as_ref(), tx)?),
+                    "remove" => {
+                        value(self.trigger_remove(owner, &decode(body)?, actor.as_ref(), tx)?)
+                    }
+                    "on" => value(self.trigger_on(owner, &decode(body)?, actor.as_ref(), tx)?),
+                    "dry_run" | "pause" | "resume" => {
+                        let op = match *operation {
+                            "dry_run" => hotsheet_ticketing::orchestration::TriggerOp::DryRun,
+                            "pause" => hotsheet_ticketing::orchestration::TriggerOp::Pause,
+                            _ => hotsheet_ticketing::orchestration::TriggerOp::Resume,
+                        };
+                        value(self.trigger_state(owner, &decode(body)?, op, actor.as_ref(), tx)?)
+                    }
+                    "fire" => value(self.trigger_fire(owner, decode(body)?, actor.as_ref(), tx)?),
+                    "pass" => {
+                        let request: super::TriggerPassRequest = decode(body)?;
+                        match request
+                            .at_ms
+                            .filter(|_| hotsheet_aitools::test_permission_vault_available())
+                        {
+                            Some(at_ms) => {
+                                let clock = FixedClock(at_ms);
+                                let mut rng = Rng;
+                                value(self.trigger_pass(
+                                    owner,
+                                    &mut Transaction {
+                                        clock: &clock,
+                                        rng: &mut rng,
+                                    },
+                                )?)
+                            }
+                            None => value(self.trigger_pass(owner, tx)?),
+                        }
+                    }
                     _ => Err(OrchestrationError::Invalid("unsupported target route")),
                 }
             }

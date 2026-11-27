@@ -4,6 +4,8 @@
 mod access;
 mod assignment;
 mod auto_replan;
+// HS2-AMJNER: the work a host runs between requests (resuming waiting applies).
+mod automation;
 // HS2-H1CSSN: the one bounded backoff of the follower loops.
 mod backoff;
 mod cancel_hold;
@@ -51,10 +53,12 @@ mod target_lines;
 mod templates;
 // HS2-H1CSSN: the owner of the runtime's background threads.
 mod tasks;
+// HS2-KXKA7X: scheduled and event triggers.
 mod ticket_list;
 mod tickets;
 mod timeline;
 mod tool_capacity;
+mod triggers;
 mod validation;
 mod validation_output;
 mod validation_runner;
@@ -62,6 +66,7 @@ mod watch;
 pub use access::{ActionRequest, Authorized};
 pub use assignment::{Assignment, CLAIMED_FOR_SESSION, REVIEW_RETURNED};
 pub use auto_replan::{AUTO_REPLAN_ACTION, AutoReplan};
+pub use automation::{AutomationMemory, AutomationReport};
 pub use backoff::{BACKOFF_FAST_STEP, BACKOFF_FIRST, BACKOFF_MAX, Backoff, is_fast_step};
 pub use cancel_hold::CANCELLED_BY_PERSON;
 pub use capacity::{
@@ -153,9 +158,10 @@ pub use sessions::{
 pub use target_lines::MAX_TARGET_LINE_OWNERS;
 pub use tasks::{RuntimeTasks, StopHook, TasksShutdown};
 pub use templates::{
-    AccessNeed, ApplyRef, ApplySummary, ApplyTemplate, MAX_LISTED_APPLIES, PreviewTarget,
-    PreviewTemplate, ProfilesCheck, SaveGoalTemplate, SetTemplates, TemplateApplyView,
-    TemplateList, TemplatePreview, TemplateRef, TemplateValidation, ValidateTemplate,
+    AccessNeed, ApplyRef, ApplySummary, ApplyTemplate, MAX_LISTED_APPLIES, MAX_RESUME_BACKOFF_MS,
+    PreviewTarget, PreviewTemplate, ProfilesCheck, ResumeMemory, ResumeReport, ResumedApply,
+    SaveGoalTemplate, SetTemplates, TemplateApplyView, TemplateList, TemplatePreview, TemplateRef,
+    TemplateValidation, ValidateTemplate,
 };
 pub use ticket_list::{
     DEFAULT_TARGET_TICKET_PAGE, ListTargetTickets, MAX_TARGET_TICKET_PAGE, TargetTicketPage,
@@ -169,6 +175,12 @@ pub use tickets::{
 pub use timeline::{MAX_TIMELINE_WAIT_MS, PERMISSION_REQUIRED};
 pub use tool_capacity::{
     SelectTool, SignalResult, ToolCapacityRow, ToolCapacityView, ToolSelection,
+};
+pub use triggers::{
+    BranchFollowState, BranchStep, DeliveryView, FireTrigger, MAX_BRANCH_WAIT_MS, ReviewNeed,
+    ReviewNext, ReviewPerDelivery, ReviewPermission, ReviewProject, ReviewScope, ReviewTrigger,
+    ReviewWatch, SetTrigger, TRIGGER_NEXT_RUNS, TriggerList, TriggerNotification,
+    TriggerPassReport, TriggerPassRequest, TriggerRef, TriggerReviewView, TriggerView,
 };
 pub use validation::{
     CancelValidation, DefineValidation, HostedExecutionState, HostedValidation,
@@ -699,6 +711,16 @@ pub fn error_status(error: &OrchestrationError) -> u16 {
                 E::Retired | E::Conflict | E::TargetUnknown | E::ApplyConflict | E::GoalEmpty => {
                     409
                 }
+            }
+        }
+        // HS2-KXKA7X: an unknown trigger is absent; a definition that does not fit is
+        // invalid; a trigger that does not fire, or lost its template, conflicts.
+        OrchestrationError::Trigger(error) => {
+            use hotsheet_ticketing::orchestration::TriggerError as E;
+            match error {
+                E::NotFound => 404,
+                E::Invalid => 422,
+                E::NotFiring | E::TemplateMissing => 409,
             }
         }
         OrchestrationError::Session(error) => {

@@ -152,6 +152,8 @@ pub struct WatchStep {
     pub speculation_changed: bool,
     /// HS2-BQN0M5: what this step did about re-planning the default goal.
     pub replan: super::AutoReplan,
+    /// HS2-KXKA7X: `ticket_opened` trigger deliveries this step made.
+    pub triggered: usize,
 }
 
 /// The actor a run's supervision acts as: whoever dispatched it.
@@ -231,13 +233,17 @@ impl OrchestrationRuntime {
         // HS2-BQN0M5: while the default goal is re-planned automatically, the target
         // is followed for its new tickets, as the scheduler's actor.
         let replanner = self.replan_actor(owner_id);
-        // Idle: no run, no session, no planned ticket and no re-plan, no request.
+        // HS2-KXKA7X: a `ticket_opened` trigger that fires follows its project too.
+        let trigger_reader = self.trigger_follower(owner_id, target_id);
+        // Idle: no run, no session, no planned ticket, no re-plan and no trigger, no
+        // request.
         let Some(lead) = runs
             .iter()
             .find_map(supervisor)
             .or_else(|| sessions.iter().find_map(session_supervisor))
             .or(planner)
             .or_else(|| replanner.clone())
+            .or_else(|| trigger_reader.clone())
         else {
             // HS2-G6F5BP: the re-plan does not apply either; forget what it remembered.
             self.replan_forget(owner_id, &mut state.replan);
@@ -413,6 +419,20 @@ impl OrchestrationRuntime {
                 );
             }
             _ => self.replan_forget(owner_id, &mut state.replan),
+        }
+        // HS2-KXKA7X: a ticket opened here may fire a trigger. After a handshake, an
+        // overflow or a reconnect the open tickets are listed instead.
+        if trigger_reader.is_some()
+            && let Some((authorized, _)) = &state.authorized
+        {
+            step.triggered = self
+                .trigger_ticket_events(
+                    (owner_id, target_id),
+                    (!caught_up).then_some(page.events.as_slice()),
+                    authorized,
+                    tx,
+                )
+                .len();
         }
         if caught_up {
             // Nothing is known about what happened before: catch every run up.

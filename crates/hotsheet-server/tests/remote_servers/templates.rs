@@ -425,3 +425,105 @@ async fn hs2_k3eszr_preview_checks_validation_profiles_on_a_real_server() {
     );
     assert!(goals(&world).is_empty() && drawer(&world.router).await.is_empty());
 }
+
+/// HS2-AMJNER: an AI session's apply that waits for a person continues on its own once
+/// the person answers on the permission card: the server's automation thread repeats
+/// it under its operation id, so the planner starts with no second call from the AI.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn hs2_amjner_answering_the_card_resumes_the_apply_without_a_second_call() {
+    let world = World::new(
+        &["tickets_read", "sessions_manage"],
+        PUSH_AGENT,
+        PUSH_PLUGIN,
+    )
+    .await;
+    world.host.spawn_orchestration_automation();
+    let person = json!({"role":"human","id":"maintainer"});
+    let (status, set) = world
+        .call(
+            "POST",
+            "/templates/set",
+            json!({"templates":[template("Build {{feature}}")],"actor":person}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{set}");
+    let template_id = set["templates"][0]["template_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let (status, asked) = world
+        .call(
+            "POST",
+            "/templates/apply",
+            json!({"template_id":template_id,"inputs":{"feature":"Quotas"},
+                "tool":REPORT_TOOL,"operation_id":"tpl-auto",
+                "actor":{"role":"ai","id":"worker-1"}}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "{asked}");
+    let request = asked["request_id"].as_str().unwrap().to_owned();
+    assert!(goals(&world).is_empty());
+    let (status, answered) = world
+        .call(
+            "POST",
+            &format!("/permissions/{request}"),
+            json!({"answer":"allow_once","actor":person}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{answered}");
+    // Woken by the machine's records changing, never read on a timer.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    loop {
+        let waiter = hotsheet_jobs::ChangeWaiter::starting(&[world.home.as_path()]).unwrap();
+        let (_, shown) = world
+            .call(
+                "POST",
+                "/templates/apply_show",
+                json!({"operation_id":"tpl-auto"}),
+            )
+            .await;
+        // The apply is recorded before its audit entry: wait for both.
+        let (_, audit) = world.call("GET", "/audit", Value::Null).await;
+        let audited = audit["entries"].as_array().is_some_and(|entries| {
+            entries.iter().any(|entry| {
+                entry["action"] == "template_apply" && entry["reason"] == "template_planning"
+            })
+        });
+        if shown["state"] == "planning" && audited {
+            break;
+        }
+        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+        assert!(!remaining.is_zero(), "the apply never resumed: {shown}");
+        tokio::task::block_in_place(|| {
+            waiter.wait(remaining.min(std::time::Duration::from_secs(1)))
+        });
+    }
+    assert_eq!(goals(&world).len(), 1);
+    assert_eq!(drawer(&world.router).await.len(), 1, "one planner");
+    // Resumed once: a headless pass afterwards finds nothing to continue.
+    let (status, again) = world.call("POST", "/templates/resume", json!({})).await;
+    assert_eq!(status, StatusCode::OK, "{again}");
+    assert_eq!(again["resumed"], json!([]), "{again}");
+    let (_, audit) = world.call("GET", "/audit", Value::Null).await;
+    let applies = audit["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|entry| entry["action"] == "template_apply")
+        .map(|entry| {
+            (
+                entry["actor_id"].as_str().unwrap_or_default().to_owned(),
+                entry["reason"].as_str().unwrap_or_default().to_owned(),
+            )
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        applies,
+        [
+            ("worker-1".to_owned(), "permission_required".to_owned()),
+            ("worker-1".to_owned(), "template_planning".to_owned())
+        ],
+        "{audit}"
+    );
+    world.host.begin_stopping();
+}

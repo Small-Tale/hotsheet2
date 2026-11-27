@@ -6,9 +6,10 @@ use axum::{
     http::{Method, StatusCode},
 };
 use hotsheet_cli::orchestration::{
-    Backoff, GateFollowState, MAX_SCHEDULER_WAIT_MS, MAX_TARGET_EVENT_WAIT_MS,
-    OrchestrationRuntime, SchedulerFollowState, TargetEventPage, TargetEvents, TargetSessionEvent,
-    TargetTicketEvent, WatchState, error_status, is_fast_step, request_cleanup_now,
+    Backoff, BranchFollowState, GateFollowState, MAX_BRANCH_WAIT_MS, MAX_SCHEDULER_WAIT_MS,
+    MAX_TARGET_EVENT_WAIT_MS, OrchestrationRuntime, SchedulerFollowState, TargetEventPage,
+    TargetEvents, TargetSessionEvent, TargetTicketEvent, WatchState, error_status, is_fast_step,
+    request_cleanup_now,
 };
 use hotsheet_sync::LockExt;
 use hotsheet_ticketing::orchestration::OrchestrationError;
@@ -350,6 +351,8 @@ fn ensure_watchers(state: &AppState, owner: &str) {
     // HS2-BQN0M5: every project target while a new ticket there re-plans the default
     // goal automatically.
     targets.extend(shared.replan_targets(owner));
+    // HS2-KXKA7X: every project a `ticket_opened` trigger that fires watches.
+    targets.extend(shared.trigger_targets(owner));
     for target in targets {
         // Followers of targets, one per `(machine home, owner, target)` of this server
         // (HS2-KM9CTG), kept by its orchestration tasks (HS2-H1CSSN).
@@ -473,6 +476,83 @@ fn ensure_gate_follower(state: &AppState, owner: &str) {
         }
         state.orchestration_tasks().end_loop(&key);
     });
+}
+
+/// HS2-KXKA7X: follow the branch of every trigger of the owner that watches a branch's
+/// CI or the commits landing on it, one loop per trigger. Each step holds one bounded
+/// long poll open on the CI watch where the project lives (here, or over the reviewed
+/// transport), delivers what it learned, and backs off after a failure or a step that
+/// neither waited nor learned anything. A loop ends when its trigger stops firing.
+pub(crate) fn ensure_branch_watchers(state: &AppState, owner: &str) {
+    let Ok(shared) = runtime(state, tokio::runtime::Handle::current()) else {
+        return;
+    };
+    for trigger in shared.branch_triggers(owner) {
+        let key = format!("{}|{trigger}|branch", loop_key(state, owner));
+        if !state.orchestration_tasks().begin_loop(&key) {
+            continue;
+        }
+        let (task_key, state, owner) = (key.clone(), state.clone(), owner.to_owned());
+        let tasks = state.orchestration_tasks().clone();
+        tasks.spawn_keyed_loop(&key, async move {
+            let mut follow = BranchFollowState::default();
+            let mut backoff = Backoff::default();
+            while !state.is_stopping() {
+                let (task_state, task_owner, task_trigger) =
+                    (state.clone(), owner.clone(), trigger.clone());
+                let started = std::time::Instant::now();
+                let step = tokio::task::spawn_blocking(move || {
+                    let step =
+                        runtime(&task_state, tokio::runtime::Handle::current()).map(|runtime| {
+                            runtime.trigger_branch_step_now(
+                                &task_owner,
+                                &task_trigger,
+                                &mut follow,
+                                MAX_BRANCH_WAIT_MS,
+                            )
+                        });
+                    (step, follow)
+                });
+                let Some(Ok((Ok(step), returned))) = until_stopping(&state, step).await else {
+                    break;
+                };
+                follow = returned;
+                if !step.active {
+                    break;
+                }
+                if !step.deliveries.is_empty() {
+                    note_orchestration_change(&state, &owner);
+                }
+                let idle = step.deliveries.is_empty() && is_fast_step(started.elapsed());
+                if let Some(delay) = backoff.after_step(step.failed || idle)
+                    && !pause(&state, delay).await
+                {
+                    break;
+                }
+            }
+            state.orchestration_tasks().end_loop(&task_key);
+        });
+    }
+}
+
+/// HS2-KXKA7X: a request that changed the owner's triggers: clients read them again,
+/// and the target followers and branch watches they need start.
+fn triggered_owner(method: &Method, path: &str) -> Option<String> {
+    let path = path.split_once('?').map_or(path, |(path, _)| path);
+    let parts: Vec<&str> = path.trim_start_matches('/').split('/').collect();
+    match (method.as_str(), parts.as_slice()) {
+        (
+            "POST",
+            [
+                "checkouts",
+                owner,
+                "orchestration",
+                "triggers",
+                "set" | "remove" | "on" | "dry_run" | "pause" | "resume" | "fire" | "pass",
+            ],
+        ) => Some((*owner).to_owned()),
+        _ => None,
+    }
 }
 
 /// HS2-ECWG50: run the owner's scheduling loop while its policy enables automatic
@@ -601,6 +681,11 @@ impl AppState {
                 }
                 // HS2-TMA4YA: and every owner whose plan names target tickets.
                 for owner in shared.plan_owners() {
+                    ensure_watchers_blocking(&state, &owner);
+                }
+                // HS2-KXKA7X: and every owner with triggers (their ticket followers
+                // and branch watches).
+                for owner in shared.trigger_owners() {
                     ensure_watchers_blocking(&state, &owner);
                 }
                 // HS2-ECWG50: and the scheduling loop of every owner whose policy
@@ -812,6 +897,8 @@ async fn execute(
     if let Some((state, owner)) = &changed {
         super::orchestration_settings_watch::begin_change(state, owner);
     }
+    let (state_for_triggers, method_for_triggers, path_for_triggers) =
+        (state.clone(), method.clone(), path.clone());
     let result = execute_blocking(state, method, path, body, requester).await;
     if let (Err(_), Some((state, owner))) = (&result, &changed) {
         super::orchestration_settings_watch::change_failed(state, owner);
@@ -829,6 +916,16 @@ async fn execute(
         })
         .await;
         note_orchestration_change(&state, &owner);
+    }
+    // HS2-KXKA7X: changed triggers are read again by clients and get their followers.
+    // A trigger that asked for a permission changed too (its pending turn On).
+    if let Some(owner) = triggered_owner(&method_for_triggers, &path_for_triggers) {
+        note_orchestration_change(&state_for_triggers, &owner);
+        let state = state_for_triggers.clone();
+        let _ = tokio::task::spawn_blocking(move || {
+            ensure_watchers_blocking(&state, &owner);
+        })
+        .await;
     }
     // HS2-ECWG50: a policy that now enables automatic placement gets its loop.
     if let (Ok(_), Some((state, owner))) = (&result, scheduled) {
@@ -1023,7 +1120,20 @@ fn ensure_watchers_blocking(state: &AppState, owner: &str) {
         let _guard = handle.enter();
         ensure_watchers(state, owner);
         ensure_gate_follower(state, owner);
+        // HS2-KXKA7X: and the branch watches of its triggers.
+        ensure_branch_watchers(state, owner);
     }
+}
+
+/// HS2-KXKA7X: [`ensure_watchers_blocking`] from a thread that holds a handle.
+pub(crate) fn ensure_trigger_followers(
+    state: &AppState,
+    handle: &tokio::runtime::Handle,
+    owner: &str,
+) {
+    let _guard = handle.enter();
+    ensure_watchers(state, owner);
+    ensure_branch_watchers(state, owner);
 }
 
 fn ensure_scheduler_blocking(state: &AppState, owner: &str) {

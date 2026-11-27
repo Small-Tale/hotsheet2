@@ -14,10 +14,15 @@ import {
 import { wireOrchestrationTimeline } from '../components/orchestration-timeline-interactions';
 import { OrchestrationTimelineView } from '../components/orchestration-timeline-view';
 import { OrchestrationToolbar } from '../components/orchestration-toolbar';
+import {
+  OrchestrationTriggerDialog,
+  type OrchestrationTriggerDialogState,
+} from '../components/orchestration-trigger-dialog';
 import { TicketRow } from '../components/ticket-row';
 import { CI_WATCH_REASONS } from '../orchestration-run-checks';
 import type { OrchestrationTimeline, TimelineItem, TimelinePhase } from '../orchestration-timeline';
 import { findTimelineItem, timelineCard } from '../orchestration-timeline-board';
+import { newTriggerForm } from '../orchestration-triggers';
 import type { DemoModule, FormControl } from './demo-module';
 import { DemoSettingsForm } from './demo-settings-form';
 import {
@@ -27,12 +32,15 @@ import {
   demoDecisions,
   demoHomeOutages,
   demoIntegrator,
+  demoOverlapTrigger,
   demoRoles,
   demoSummary,
   demoTemplateApply,
   demoTemplatePreview,
   demoTemplates,
   demoTimeline,
+  demoTriggerReview,
+  demoTriggers,
 } from './orchestration-fixtures';
 import { syncSettingsControls } from './settings-controls';
 
@@ -421,11 +429,13 @@ export function OrchestrationToolbarDemo() {
             planning={orchestrationDemoSettings.planning.value || undefined}
             showPlanner={orchestrationDemoSettings.planning.value === 'waiting'}
             templates
+            triggers
             clock={demoClock}
           />
         </CatalogExample>
       ))}
       <OrchestrationTemplateDialogDemo />
+      <OrchestrationTriggerDialogDemo />
     </>
   );
 }
@@ -804,3 +814,71 @@ export const demoModule: DemoModule = {
   },
   wire: wireOrchestrationDemo,
 };
+
+/** HS2-KXKA7X: the Triggers… dialog the header opens, in place, in each of its states. */
+function triggerState(change: Partial<OrchestrationTriggerDialogState> = {}): OrchestrationTriggerDialogState {
+  const triggers = demoTriggers();
+  return {
+    loading: false,
+    triggers,
+    selected: triggers[1].trigger_id,
+    mode: 'detail',
+    detailActive: false,
+    form: newTriggerForm({ tool: 'claude', target: 'api' }),
+    fixedInputs: {},
+    templates: demoTemplates(),
+    projects: [
+      { target_id: 'api', label: 'API · Build host' },
+      { target_id: 'web', label: 'Web · This computer' },
+      { target_id: 'docs', label: 'Docs · This computer' },
+    ],
+    ownerName: 'Launch',
+    review: demoTriggerReview(),
+    reviewing: false,
+    busy: false,
+    now: DEMO_NOW,
+    session: 1,
+    ...change,
+  };
+}
+
+function OrchestrationTriggerDialogDemo() {
+  const triggers = demoTriggers();
+  const setup = {
+    ...newTriggerForm({ tool: 'claude', target: 'api' }),
+    name: 'Repair API main CI',
+    when: 'event' as const,
+    event: 'branch_ci_failed' as const,
+    repository: 'small/api',
+    workflow: 'ci.yml',
+    template: demoTemplates()[0].template_id,
+    eventInputs: { feature: 'commit' as const },
+  };
+  const examples: Array<[string, OrchestrationTriggerDialogState, boolean]> = [
+    ['Triggers…: New Trigger', triggerState({ mode: 'setup', form: setup, detailActive: true }), false],
+    ['Triggers…: On', triggerState({ selected: triggers[0].trigger_id }), false],
+    ['Triggers…: Dry Run', triggerState(), false],
+    [
+      'Triggers…: Overlapping Run Skipped',
+      triggerState({
+        triggers: [demoOverlapTrigger(), ...triggers.slice(1)],
+        selected: triggers[0].trigger_id,
+      }),
+      false,
+    ],
+    ['Triggers…: Needs Review', triggerState({ selected: triggers[3].trigger_id }), false],
+    ['Triggers…: Paused', triggerState({ selected: triggers[2].trigger_id }), false],
+    ['Triggers…: No Triggers Yet', triggerState({ triggers: [], selected: undefined, review: undefined }), false],
+    ['Triggers…: Loading', triggerState({ loading: true, triggers: [], selected: undefined }), false],
+    ['Triggers…: Phone', triggerState({ detailActive: true }), true],
+  ];
+  return (
+    <>
+      {examples.map(([label, state, compact]) => (
+        <CatalogExample label={label} viewport={{ width: compact ? 'compact' : 'full' }}>
+          <OrchestrationTriggerDialog state={state} compact={compact} embedded />
+        </CatalogExample>
+      ))}
+    </>
+  );
+}

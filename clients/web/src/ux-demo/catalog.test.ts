@@ -484,6 +484,10 @@ describe('UX demo catalog', () => {
         'Template editor dialog opened from the Templates section of the cataloged OrchestrationSettings (HS2-1XCW6N, demoed in place in every state).',
       'orchestration-template-button':
         'Use Template… button rendered within the cataloged OrchestrationToolbar and OrchestrationTimelineView (HS2-A4RVYA, demoed).',
+      'orchestration-trigger-dialog':
+        'Triggers… dialog opened from the cataloged OrchestrationToolbar (HS2-KXKA7X, demoed in place in every state).',
+      'orchestration-trigger-button':
+        'Triggers… button rendered within the cataloged OrchestrationToolbar (HS2-KXKA7X, demoed).',
       'orchestration-home-outage':
         'Home site unavailable banners of the cataloged OrchestrationTimelineView (HS2-EX594V, demoed as Home Site Unavailable).',
       'orchestration-plan-problem':

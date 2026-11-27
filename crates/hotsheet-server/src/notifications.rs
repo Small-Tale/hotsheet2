@@ -160,6 +160,20 @@ impl hotsheet_cli::orchestration::HomeNotices for ServerHomeNotices {
         self.state
             .publish_notification(home_notification(notification));
     }
+
+    /// HS2-KXKA7X: a trigger's review, source outage or refused delivery, through the
+    /// same inbox and notifier channels.
+    fn notify_trigger(&self, notification: &hotsheet_cli::orchestration::TriggerNotification) {
+        self.state.publish_notification(NewNotification {
+            message: format!("{}\n{}", notification.title, notification.body),
+            severity: notification.severity.into(),
+            checkout: Some(notification.owner_id.clone()),
+            store: None,
+            ticket: None,
+            recipient: None,
+            dedupe_key: Some(notification.dedupe_key.clone()),
+        });
+    }
 }
 
 /// The inbox entry for a home-outage notification: its title on the first line, as

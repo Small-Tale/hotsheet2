@@ -17,12 +17,9 @@ use hotsheet_ticketing::command_schedules::{
 };
 use hotsheet_ticketing::commands::{self, CommandDefinition, CommandKind};
 use hotsheet_ticketing::{ApiTicket, Scope, Settings, TicketQuery, ops};
-use jiff::{
-    Timestamp, civil,
-    tz::{AmbiguousOffset, TimeZone},
-};
+use jiff::{Timestamp, tz::TimeZone};
 use serde::{Deserialize, Serialize};
-use time::{Date, Duration, PrimitiveDateTime, Time};
+use time::{Date, Duration, PrimitiveDateTime};
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -152,13 +149,7 @@ fn next_runs(schedule: &CommandSchedule, now: Timestamp) -> Result<Vec<String>, 
 }
 
 fn local_date(zone: &TimeZone, now: Timestamp) -> Result<Date, ApiError> {
-    let day = zone.to_datetime(now).date();
-    Date::from_calendar_date(
-        day.year() as i32,
-        time::Month::try_from(day.month() as u8).map_err(invalid)?,
-        day.day() as u8,
-    )
-    .map_err(invalid)
+    command_schedules::zoned::local_date(zone, now).map_err(invalid)
 }
 
 fn date_before_today(schedule: &CommandSchedule, now: Timestamp) -> Result<String, ApiError> {
@@ -169,69 +160,29 @@ fn date_before_today(schedule: &CommandSchedule, now: Timestamp) -> Result<Strin
         .ok_or_else(|| invalid("local date is outside supported range"))
 }
 
+/// HS2-KXKA7X: the schedule's recurrence as the shared host engine reads it.
+fn zoned(schedule: &CommandSchedule) -> command_schedules::zoned::Zoned<'_> {
+    command_schedules::zoned::Zoned {
+        time_zone: &schedule.time_zone,
+        local_time: &schedule.local_time,
+        recurrence: &schedule.recurrence,
+    }
+}
+
 /// Resolve a local date and time. A gap advances to the first valid minute; a fold
 /// chooses its first occurrence. The occurrence's calendar date remains its identity.
 pub(crate) fn occurrence_instant(
     schedule: &CommandSchedule,
     date: Date,
 ) -> Result<Timestamp, ApiError> {
-    let zone = TimeZone::get(&schedule.time_zone).map_err(invalid)?;
-    let (hour, minute) =
-        command_schedules::parse_local_time(&schedule.local_time).map_err(invalid)?;
-    let local = date.with_time(Time::from_hms(hour, minute, 0).map_err(invalid)?);
-    local_instant(&zone, local).map(|(instant, _)| instant)
-}
-
-/// Resolve one local civil minute: a gap advances to the first valid minute (reported as
-/// `true`), and a fold chooses its first occurrence.
-fn local_instant(zone: &TimeZone, local: PrimitiveDateTime) -> Result<(Timestamp, bool), ApiError> {
-    for step in 0..=1440 {
-        let candidate = local
-            .checked_add(Duration::minutes(step))
-            .ok_or_else(|| invalid("local time overflow"))?;
-        let date = candidate.date();
-        let time = candidate.time();
-        let civil = civil::DateTime::new(
-            date.year() as i16,
-            date.month() as u8 as i8,
-            date.day() as i8,
-            time.hour() as i8,
-            time.minute() as i8,
-            0,
-            0,
-        )
-        .map_err(invalid)?;
-        let ambiguous = zone.to_ambiguous_timestamp(civil);
-        if !matches!(ambiguous.offset(), AmbiguousOffset::Gap { .. }) {
-            return ambiguous
-                .earlier()
-                .map(|instant| (instant, step > 0))
-                .map_err(invalid);
-        }
-    }
-    Err(invalid("no valid local minute within a day"))
+    zoned(schedule).date_instant(date).map_err(invalid)
 }
 
 fn local_now(zone: &TimeZone, now: Timestamp) -> Result<PrimitiveDateTime, ApiError> {
-    let local = zone.to_datetime(now);
-    let date = Date::from_calendar_date(
-        i32::from(local.year()),
-        time::Month::try_from(local.month() as u8).map_err(invalid)?,
-        local.day() as u8,
-    )
-    .map_err(invalid)?;
-    let time = Time::from_hms(
-        local.hour() as u8,
-        local.minute() as u8,
-        local.second() as u8,
-    )
-    .map_err(invalid)?;
-    Ok(date.with_time(time))
+    command_schedules::zoned::local_now(zone, now).map_err(invalid)
 }
 
-/// Resolve sub-day slots to instants (HS2-29V4ZG). A slot in a DST gap runs at the first
-/// valid minute after the gap unless the next slot resolves at or before that instant,
-/// in which case the next slot covers it. A folded slot runs once, at its first instant.
+/// Resolve sub-day slots to instants (HS2-29V4ZG), through the shared host engine.
 fn sub_day_instants(
     schedule: &CommandSchedule,
     zone: &TimeZone,
@@ -239,37 +190,12 @@ fn sub_day_instants(
     through: PrimitiveDateTime,
     limit: usize,
 ) -> Result<Vec<(PrimitiveDateTime, Timestamp)>, ApiError> {
-    let slots = command_schedules::slots_through(
-        &schedule.recurrence,
-        &schedule.local_time,
-        after,
-        through,
-        limit + 1,
-    )
-    .map_err(invalid)?;
-    let resolved = slots
-        .iter()
-        .map(|slot| local_instant(zone, *slot))
-        .collect::<Result<Vec<_>, _>>()?;
-    let full = slots.len() == limit + 1;
-    let mut result = Vec::new();
-    for (index, (slot, (instant, gap))) in slots.iter().zip(&resolved).enumerate() {
-        let next = resolved.get(index + 1).map(|(instant, _)| *instant);
-        if next.is_none() && full {
-            // The lookahead slot only decides its predecessor.
-            break;
-        }
-        if *gap && next.is_some_and(|next| next <= *instant) {
-            continue;
-        }
-        result.push((*slot, *instant));
-    }
-    Ok(result)
+    zoned(schedule)
+        .sub_day_instants(zone, after, through, limit)
+        .map_err(invalid)
 }
 
-/// Folds and offset changes are at most a few hours; a three-hour margin keeps the
-/// current slot in view on both sides of a transition.
-const SUB_DAY_MARGIN: Duration = Duration::hours(3);
+const SUB_DAY_MARGIN: Duration = command_schedules::zoned::SUB_DAY_MARGIN;
 
 fn sub_day_next_runs(schedule: &CommandSchedule, now: Timestamp) -> Result<Vec<String>, ApiError> {
     Ok(next_sub_day_instants(schedule, now, 3)?
@@ -283,17 +209,9 @@ fn next_sub_day_instants(
     now: Timestamp,
     count: usize,
 ) -> Result<Vec<(PrimitiveDateTime, Timestamp)>, ApiError> {
-    let zone = TimeZone::get(&schedule.time_zone).map_err(invalid)?;
-    let local = local_now(&zone, now)?;
-    let after = local.saturating_sub(SUB_DAY_MARGIN);
-    let through = local.saturating_add(Duration::days(366 * 20));
-    // Three hours at the five-minute floor is 36 slots before `now`.
-    let limit = 40 + count;
-    Ok(sub_day_instants(schedule, &zone, after, through, limit)?
-        .into_iter()
-        .filter(|(_, instant)| *instant > now)
-        .take(count)
-        .collect())
+    zoned(schedule)
+        .next_sub_day_instants(now, count)
+        .map_err(invalid)
 }
 
 pub(crate) async fn list(
@@ -1609,6 +1527,7 @@ mod tests {
         Arc, Mutex,
         atomic::{AtomicBool, Ordering},
     };
+    use time::Time;
     use tower::ServiceExt;
 
     type PreparationRecord = (String, Option<String>, Option<String>, Option<String>);

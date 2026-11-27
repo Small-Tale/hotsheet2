@@ -40,6 +40,8 @@ mod summary_wait;
 mod target_lines;
 // HS2-A4RVYA: reusable plan templates, applied through the planner.
 mod templates;
+// HS2-KXKA7X: scheduled and event triggers that apply templates or set placement.
+mod triggers;
 // HS2-YDY5HJ: the checked-in step definitions of a plan.
 mod shared_plan;
 // HS2-KB2Y51: lines another machine pushed for a checkout hosted here.
@@ -242,6 +244,16 @@ pub use tool_capacity::{
     SignalKind, SignalOutcome, SignalSupport, ToolCapacityRegistry, apply_signal, backoff_ms,
     known_spend_cents, select, state_at, status_for,
 };
+pub use triggers::{
+    ActiveRun, BranchWatch, Delivery, DeliveryDecision, DeliveryKind, DeliveryOutcome, EventField,
+    MAX_DELIVERY_KEY, MAX_HANDLED_KEYS, MAX_TRIGGER_HISTORY, MAX_TRIGGER_INPUTS, MAX_TRIGGER_LINE,
+    MAX_TRIGGERS, Overlap, PendingOn, TRIGGER_ACTOR_PREFIX, TRIGGER_DIR, TRIGGER_OPERATION_PREFIX,
+    Trigger, TriggerAction, TriggerCursor, TriggerError, TriggerHistoryEntry, TriggerOp,
+    TriggerPlacement, TriggerProblem, TriggerReview, TriggerSchedule, TriggerSource, TriggerSpec,
+    TriggerState, TriggerStore, TriggerTemplate, TriggerWarning, WouldRun, decide_delivery,
+    delivery_operation_id, event_value, keys as trigger_keys, schedule_due, schedule_next_ms,
+    spec_digest, transition as trigger_transition, validate_spec as validate_trigger,
+};
 pub use validation::{
     DEFAULT_STEP_TIMEOUT_SECONDS, ExecutionEnd, ExecutionOutcome, ExpectedEvidence,
     MAX_COMMAND_ARGS, MAX_COMMAND_BYTES, MAX_STEP_ATTEMPTS, MAX_STEP_PREREQUISITES,
@@ -330,6 +342,9 @@ pub enum OrchestrationError {
     /// HS2-A4RVYA: a plan template, its inputs or its apply refused the request.
     #[error("orchestration template refused the request: {}", .0.code())]
     Template(TemplateError),
+    /// HS2-KXKA7X: a trigger refused the request.
+    #[error("orchestration trigger refused the request: {}", .0.code())]
+    Trigger(TriggerError),
 }
 
 impl From<std::io::Error> for OrchestrationError {
@@ -368,6 +383,7 @@ impl OrchestrationError {
             },
             Self::AdmissionRefused(_) => SessionError::AdmissionRefused.code(),
             Self::Template(error) => error.code(),
+            Self::Trigger(error) => error.code(),
         }
     }
 
@@ -637,5 +653,7 @@ mod tests;
 mod timeline_tests;
 #[cfg(test)]
 mod tool_capacity_tests;
+#[cfg(test)]
+mod trigger_tests;
 #[cfg(test)]
 mod validation_tests;

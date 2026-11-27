@@ -99,6 +99,7 @@ import { orchestrationInspectorPanel } from '../components/orchestration-inspect
 import { OrchestrationTemplateDialog } from '../components/orchestration-template-dialog';
 import { OrchestrationTemplateEditor } from '../components/orchestration-template-editor';
 import { OrchestrationToolbar } from '../components/orchestration-toolbar';
+import { OrchestrationTriggerDialog } from '../components/orchestration-trigger-dialog';
 import { type ProjectCloseDialogState } from '../components/project-close-dialog';
 import { projectRestoreTabId } from '../components/project-restore-error';
 import { type ProjectTabBarMode } from '../components/project-tab-bar';
@@ -6935,6 +6936,7 @@ export async function startHotSheetWebClient() {
             planning={orchestrationView.planning.value}
             showPlanner={orchestrationView.plannerShowable()}
             templates
+            triggers
           />
         ) : undefined;
       },
@@ -7092,6 +7094,7 @@ export async function startHotSheetWebClient() {
         />
         <OrchestrationTemplateDialog state={orchestrationView.templateDialog.value} compact={viewportMobile.value} />
         <OrchestrationTemplateEditor {...orchestrationSurface.templateEditor()} compact={viewportMobile.value} />
+        <OrchestrationTriggerDialog state={orchestrationView.triggerDialog.value} compact={viewportMobile.value} />
       </>
     ),
     composerAttachmentError,
@@ -7488,6 +7491,35 @@ export async function startHotSheetWebClient() {
         },
         close: () => {
           orchestrationView.closeTemplates();
+        },
+      },
+      triggers: {
+        open: () => void orchestrationView.openTriggers(),
+        select: (triggerId) => {
+          orchestrationView.selectTrigger(triggerId);
+        },
+        create: () => {
+          orchestrationView.newTrigger();
+        },
+        edit: () => {
+          orchestrationView.editTrigger();
+        },
+        editField: (field, value, commit) => {
+          orchestrationView.editTriggerField(field, value, commit);
+        },
+        save: () => void orchestrationView.saveTrigger(),
+        cancel: () => {
+          orchestrationView.cancelTriggerSetup();
+        },
+        turnOn: () => void orchestrationView.turnOnTrigger(),
+        pause: () => void orchestrationView.pauseTrigger(),
+        resume: () => void orchestrationView.resumeTrigger(),
+        openGoal: () => void orchestrationView.openTriggerGoal(),
+        back: () => {
+          orchestrationView.backToTriggers();
+        },
+        close: () => {
+          orchestrationView.closeTriggers();
         },
       },
     },

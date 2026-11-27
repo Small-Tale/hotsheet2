@@ -629,6 +629,9 @@ async fn main() -> Result<()> {
     // Start an owner's scheduling loop when a CLI process enables automatic placement
     // (HS2-PNCA93). Idle until the scheduler wake marker changes.
     state.spawn_scheduler_wake_follower();
+    // Continue template applies once their permission is answered or the planner is
+    // free (HS2-AMJNER). Idle when nothing waits.
+    state.spawn_orchestration_automation();
     state.spawn_command_schedule_runner();
 
     // Explicit shutdown only (HS2-59), bounded (HS2-W1KJR4): the first SIGTERM / Ctrl-C (or

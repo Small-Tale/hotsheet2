@@ -2,11 +2,11 @@ import { CatalogExample } from '@kerfjs/ui/catalog';
 
 import { OrchestrationSettings } from '../components/orchestration-settings';
 import { wireOrchestrationSettings } from '../components/orchestration-settings-interactions';
-import { projectCollapseKey } from '../orchestration-project-tree';
 import { OrchestrationTemplateEditor } from '../components/orchestration-template-editor';
 import { wireOrchestrationTemplateEditor } from '../components/orchestration-template-editor-interactions';
 import { templateSettingsRows } from '../components/orchestration-template-settings';
 import type { TemplateEditorState } from '../features/orchestration-template-editing';
+import { projectCollapseKey } from '../orchestration-project-tree';
 import { addChoices, policyDraftFrom, projectRows, siteChoicesByProject } from '../orchestration-settings-model';
 import {
   addInput,

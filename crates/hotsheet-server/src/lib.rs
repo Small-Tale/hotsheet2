@@ -2615,6 +2615,16 @@ pub fn app(state: AppState) -> Router {
             "/checkouts/{owner}/orchestration/templates/{operation}",
             post(routes::orchestration::write),
         )
+        // HS2-KXKA7X: scheduled and event triggers (machine-local).
+        .route(
+            "/checkouts/{owner}/orchestration/triggers/{operation}",
+            post(routes::orchestration::write),
+        )
+        // HS2-KXKA7X: where a branch of a hosted checkout points, for a branch watch.
+        .route(
+            "/checkouts/{checkout}/target-branch-head",
+            get(routes::orchestration::read),
+        )
         .route(
             "/checkouts/{checkout}/target-validations",
             get(routes::orchestration::read)
