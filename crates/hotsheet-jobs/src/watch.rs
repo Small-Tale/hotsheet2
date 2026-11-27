@@ -25,10 +25,13 @@ use notify as backend;
 #[cfg(target_os = "macos")]
 use notify_batched as backend;
 
-use backend::Watcher;
-pub use backend::{Error, Event, EventKind, RecursiveMode};
 #[cfg(any(target_os = "linux", test))]
-pub(crate) use backend::{ErrorKind, event};
+pub(crate) use backend::ErrorKind;
+use backend::Watcher;
+pub use backend::{Error, Event, EventKind, RecursiveMode, event};
+
+/// HS2-BN9MMJ: the in-process stand-in for the platform's file-event service.
+pub use crate::in_process_stream::InProcessStream;
 
 /// What a watcher hands its handler: an event, or the reason the platform lost some.
 pub type Delivery = Result<Event, Error>;
@@ -64,6 +67,8 @@ enum Inner {
     /// HS2-236XY3: per-directory inotify watches that leave excluded subtrees out.
     #[cfg(target_os = "linux")]
     Tree(crate::inotify_tree::TreeWatcher),
+    /// HS2-BN9MMJ: a watcher on an [`InProcessStream`].
+    InProcess(crate::in_process_stream::Registration),
 }
 
 impl std::fmt::Debug for PathWatcher {
@@ -151,6 +156,14 @@ impl PathWatcher {
         Self::start(paths, handler)
     }
 
+    /// HS2-BN9MMJ: a watcher on an [`InProcessStream`], registered by it.
+    pub(crate) fn in_process(registration: crate::in_process_stream::Registration) -> Self {
+        Self {
+            watcher: Inner::InProcess(registration),
+            starts: 1,
+        }
+    }
+
     /// Watch one more path. On macOS this restarts the event stream once, so pass
     /// every path known at the start to [`PathWatcher::start`] instead.
     pub fn add(&mut self, path: &Path, mode: RecursiveMode) -> Result<(), Error> {
@@ -190,6 +203,7 @@ impl PathWatcher {
             }
             #[cfg(target_os = "linux")]
             Inner::Tree(tree) => tree.change(removed, added)?,
+            Inner::InProcess(registration) => registration.change(removed, added)?,
         }
         self.starts += 1;
         Ok(())
@@ -321,6 +335,13 @@ pub fn rescan_event() -> Event {
 pub const START_RETRY_FIRST: std::time::Duration = std::time::Duration::from_millis(100);
 /// The longest wait between attempts while the platform refuses to start a stream.
 pub const START_RETRY_MAX: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// HS2-BN9MMJ: how long a real-stream test waits for one delivery it depends on. Tests wait
+/// on ordered delivery (an event written after the ones they check), never on a quiet
+/// window, so this only fails a delivery that never comes. A backlogged `fseventsd`
+/// delivered a healthy stream's events minutes late (HS2-P702Y8); the bound stays inside
+/// the test runner's ten-minute limit. Consumer behaviour is tested on [`InProcessStream`].
+pub const REAL_STREAM_TEST_BOUND: std::time::Duration = std::time::Duration::from_secs(300);
 
 /// How often an owner reads on its own while its stream is not live yet (HS2-F6F42W).
 pub const PENDING_RECHECK: std::time::Duration = std::time::Duration::from_secs(1);
@@ -644,9 +665,12 @@ mod tests {
         (watcher, receiver)
     }
 
-    /// Wait for a content event on `path`; false when none arrives in ten seconds.
+    /// Wait for a content event on `path`; false when none arrives within
+    /// [`REAL_STREAM_TEST_BOUND`]. HS2-BN9MMJ: the platform delivers in order, so this ends
+    /// at the event; the bound only fails a delivery that never comes (a backlogged
+    /// `fseventsd` delivered minutes late, which a ten-second wait took for a lost event).
     fn sees(receiver: &Receiver<Delivery>, path: &Path) -> bool {
-        let deadline = Instant::now() + Duration::from_secs(10);
+        let deadline = Instant::now() + REAL_STREAM_TEST_BOUND;
         loop {
             let remaining = deadline.saturating_duration_since(Instant::now());
             match receiver.recv_timeout(remaining) {
@@ -668,15 +692,25 @@ mod tests {
         }
     }
 
-    /// Whether any event names `path` within `window`.
-    fn mentions(receiver: &Receiver<Delivery>, path: &Path, window: Duration) -> bool {
-        let deadline = Instant::now() + window;
+    /// HS2-BN9MMJ: every path reported up to and including the first event on `marker`,
+    /// which the test writes after the writes it checks. The platform delivers in order, so
+    /// an absent path among these was never reported, whatever the delivery's latency; a
+    /// quiet window instead passed or failed with `fseventsd`'s backlog.
+    fn through(receiver: &Receiver<Delivery>, marker: &Path) -> Vec<PathBuf> {
+        let deadline = Instant::now() + REAL_STREAM_TEST_BOUND;
+        let mut seen = Vec::new();
         loop {
             let remaining = deadline.saturating_duration_since(Instant::now());
             match receiver.recv_timeout(remaining) {
-                Ok(Ok(event)) if event.paths.iter().any(|seen| seen == path) => return true,
-                Ok(_) => {}
-                Err(_) => return false,
+                Ok(Ok(event)) => {
+                    let done = event.paths.iter().any(|path| path == marker);
+                    seen.extend(event.paths);
+                    if done {
+                        return seen;
+                    }
+                }
+                Ok(Err(_)) => {}
+                Err(_) => panic!("no event for {}", marker.display()),
             }
         }
     }
@@ -775,8 +809,7 @@ mod tests {
         let moved = second.join("moved");
         fs::write(&left, b"x").unwrap();
         fs::write(&moved, b"x").unwrap();
-        assert!(sees(&receiver, &moved));
-        assert!(!mentions(&receiver, &left, Duration::from_millis(500)));
+        assert!(!through(&receiver, &moved).contains(&left));
 
         // Nothing to change is no start; removing an unwatched path is not an error.
         watcher.change(&[], &[]).unwrap();
@@ -806,13 +839,12 @@ mod tests {
         ]);
 
         // A file two levels under the shallow path is not reported; the write after it
-        // under the deep path is, which bounds the wait for the absent event.
+        // under the deep path is, and delivery is ordered (HS2-BN9MMJ).
         let hidden = shallow.join("below/hidden");
         let nested = deep.join("below/nested");
         fs::write(&hidden, b"x").unwrap();
         fs::write(&nested, b"x").unwrap();
-        assert!(sees(&receiver, &nested));
-        assert!(!mentions(&receiver, &hidden, Duration::from_millis(500)));
+        assert!(!through(&receiver, &nested).contains(&hidden));
 
         let direct = shallow.join("direct");
         fs::write(&direct, b"x").unwrap();
@@ -829,9 +861,13 @@ mod tests {
         // Linux adds the watch of a new directory when it sees the directory appear.
         assert!(sees(&receiver, &root.join("later")));
         let file = created.join("file");
+        // Each attempt ends at a marker in the watched root (HS2-BN9MMJ: ordered delivery,
+        // not a quiet window); Linux may miss a write made before the new watch is armed.
         for attempt in 0.. {
             fs::write(&file, attempt.to_string()).unwrap();
-            if mentions(&receiver, &file, Duration::from_millis(500)) {
+            let marker = root.join(format!("marker-{attempt}"));
+            fs::write(&marker, b"x").unwrap();
+            if through(&receiver, &marker).contains(&file) {
                 break;
             }
             assert!(attempt < 20, "no event under a directory created later");
@@ -889,10 +925,10 @@ mod tests {
         }
     }
 
-    /// How long these tests let the platform take to start or restart one stream: its own
-    /// service, measured at up to 7 s to start and 19 s to restart on a loaded Mac, never a
-    /// wake of ours (HS2-F6F42W).
-    const PLATFORM: Duration = Duration::from_secs(120);
+    /// How long these tests let the background thread take to report a state. HS2-BN9MMJ:
+    /// they run on an [`InProcessStream`], so no platform service or `fseventsd` timing is
+    /// involved; only this thread's own scheduling on a loaded runner.
+    const PLATFORM: Duration = Duration::from_secs(30);
 
     /// HS2-F6F42W: a stream start the platform holds up holds up neither the owner nor its
     /// drop; `Live` follows once the start returns.
@@ -903,7 +939,9 @@ mod tests {
         let (release, released) = mpsc::channel::<()>();
         let released = std::sync::Mutex::new(released);
         let (status_tx, status) = mpsc::channel();
+        let stream = InProcessStream::default();
         let started = Instant::now();
+        let platform = stream.clone();
         let watcher = BackgroundWatcher::start_with(
             &[(root.path(), RecursiveMode::Recursive)],
             |_| {},
@@ -913,7 +951,7 @@ mod tests {
             Box::new(move |paths, handler| {
                 let _ = entered.send(());
                 let _ = released.lock().unwrap().recv();
-                PathWatcher::start(paths, handler)
+                platform.start(paths, handler)
             }),
         );
         assert!(
@@ -936,7 +974,7 @@ mod tests {
             |_| {},
             Box::new(move |paths, handler| {
                 let _ = held.lock().unwrap().recv();
-                PathWatcher::start(paths, handler)
+                InProcessStream::default().start(paths, handler)
             }),
         );
         let dropping = Instant::now();
@@ -957,6 +995,8 @@ mod tests {
         let counted = attempts.clone();
         let (status_tx, status) = mpsc::channel();
         let (sender, receiver) = mpsc::channel();
+        let stream = InProcessStream::default();
+        let platform = stream.clone();
         let watcher = BackgroundWatcher::start_with(
             &[(root.as_path(), RecursiveMode::Recursive)],
             move |delivery| {
@@ -969,7 +1009,7 @@ mod tests {
                 if counted.fetch_add(1, std::sync::atomic::Ordering::SeqCst) < 3 {
                     return Err(Error::generic("refused"));
                 }
-                PathWatcher::start(paths, handler)
+                platform.start(paths, handler)
             }),
         );
         let reports: Vec<(WatchStatus, Instant)> = (0..4)
@@ -991,7 +1031,9 @@ mod tests {
         assert!(watcher.is_live());
         let file = root.join("after");
         fs::write(&file, b"x").unwrap();
+        stream.changed(&file);
         assert!(sees(&receiver, &file), "the retried stream reports");
+        assert_eq!(stream.starts(), 1, "refused starts register nothing");
         // Never started: refusals keep coming, then stop with the drop.
         let refused = BackgroundWatcher::start_with(
             &[(root.as_path(), RecursiveMode::Recursive)],
@@ -1013,7 +1055,8 @@ mod tests {
         fs::create_dir_all(&later).unwrap();
         let (status_tx, status) = mpsc::channel();
         let (sender, receiver) = mpsc::channel();
-        let watcher = BackgroundWatcher::start(
+        let stream = InProcessStream::default();
+        let watcher = BackgroundWatcher::start_with(
             &[(first.as_path(), RecursiveMode::Recursive)],
             move |delivery| {
                 let _ = sender.send(delivery);
@@ -1021,6 +1064,7 @@ mod tests {
             move |state| {
                 let _ = status_tx.send(state);
             },
+            stream.start_stream(),
         );
         assert_eq!(status.recv_timeout(PLATFORM).unwrap(), WatchStatus::Live);
         watcher.change(&[], &[]);
@@ -1032,9 +1076,17 @@ mod tests {
         );
         assert_eq!(status.recv_timeout(PLATFORM).unwrap(), WatchStatus::Live);
         assert_eq!(watcher.starts(), 2);
+        assert_eq!(
+            stream.watched(),
+            [
+                (first.clone(), RecursiveMode::Recursive),
+                (later.clone(), RecursiveMode::Recursive)
+            ]
+        );
         for directory in [&later, &first] {
             let file = directory.join("file");
             fs::write(&file, b"x").unwrap();
+            stream.changed(&file);
             assert!(sees(&receiver, &file), "no event for {}", file.display());
         }
         assert!(rescan_event().need_rescan());
@@ -1070,22 +1122,7 @@ mod tests {
             }
         }
         fs::write(marker, b"x").unwrap();
-        let deadline = Instant::now() + Duration::from_secs(30);
-        let mut seen = Vec::new();
-        loop {
-            let remaining = deadline.saturating_duration_since(Instant::now());
-            match receiver.recv_timeout(remaining) {
-                Ok(Ok(event)) => {
-                    let done = event.paths.iter().any(|path| path == marker);
-                    seen.extend(event.paths);
-                    if done {
-                        return seen;
-                    }
-                }
-                Ok(Err(_)) => {}
-                Err(_) => panic!("no event for {}", marker.display()),
-            }
-        }
+        through(receiver, marker)
     }
 
     /// HS2-2HZN2C: excluded build trees (as given or through the macOS `/var` symlink) are
@@ -1194,8 +1231,7 @@ mod tests {
         fs::write(&left, b"x").unwrap();
         let after = two.join("after");
         fs::write(&after, b"x").unwrap();
-        assert!(sees(&receiver, &after));
-        assert!(!mentions(&receiver, &left, Duration::from_millis(300)));
+        assert!(!through(&receiver, &after).contains(&left));
 
         let (_plain, plain_events) = watching_excluding(&one, &[]);
         let file = one.join("plain");

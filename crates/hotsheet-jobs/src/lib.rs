@@ -38,6 +38,7 @@ mod fixture;
 mod fsevent_stream;
 mod github;
 mod gitlab;
+mod in_process_stream;
 #[cfg(target_os = "linux")]
 mod inotify_tree;
 mod jenkins;
