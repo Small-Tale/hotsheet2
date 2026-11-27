@@ -1,7 +1,9 @@
 import { expect, type Page, type Route, test, type WebSocketRoute } from '@playwright/test';
 
+import type { ChangeEvent } from '../src/api';
 import { PROJECT_WARM_CACHE_CAPACITY } from '../src/project-warm-cache';
 import { appRequests } from './app-requests';
+import { permissionAskedEvent } from './server-event-fixtures';
 
 // HS2-AZZ9TF: recently used project tabs stay warm (tickets, commands, AI tool inventory, terminal
 // snapshot) so switching is instant — no loading placeholder, busy bars, or "Loading AI tools" /
@@ -107,7 +109,7 @@ async function installWorkspace(page: Page) {
     heldCatchups = new Map<string, Route>();
   const sockets = new Map<string, WebSocketRoute[]>(),
     cursor = new Map<string, number>(),
-    events = new Map<string, Array<{ cursor: number; store: string; kind: string; id: string; slug: string }>>();
+    events = new Map<string, Array<ChangeEvent & { cursor: number }>>();
   const pollPage = (id: string, since: string | null) => ({
     cursor: cursor.get(id) ?? 1,
     events: since === null ? [] : (events.get(id) ?? []).filter((event) => event.cursor > Number(since)),
@@ -285,12 +287,16 @@ async function installWorkspace(page: Page) {
       page.evaluate(() => {
         (window as unknown as { __busyLog: string[] }).__busyLog.length = 0;
       }),
-    emit: async (index: number, kind: string) => {
+    /** Emits a ticket change of `kind`, or a server-shaped nudge from `server-event-fixtures` (HS2-CSPDW8). */
+    emit: async (index: number, change: string | ChangeEvent) => {
       const id = projectId(index);
       await expect.poll(() => sockets.get(id)?.length ?? 0).toBeGreaterThan(0);
       const next = (cursor.get(id) ?? 1) + 1;
       cursor.set(id, next);
-      const event = { cursor: next, store: 'git', kind, id: 'ticket', slug: `HS2-${projects[index].name}A` };
+      const event =
+        typeof change === 'string'
+          ? { cursor: next, store: 'git', kind: change, id: 'ticket', slug: `HS2-${projects[index].name}A` }
+          : { ...change, cursor: next };
       events.set(id, [...(events.get(id) ?? []), event]);
       sockets.get(id)!.at(-1)!.send(JSON.stringify(event));
     },
@@ -574,7 +580,8 @@ test('a stream-triggered permission reconciliation in flight across a warm switc
   // in flight while the user switches to another warm project.
   const otherBefore = workspace.requestsFor(1, '/permissions');
   workspace.gate(2, '/permissions');
-  await workspace.emit(2, 'permission_asked');
+  // The server's nudge names the asking project, the request id and the tool (HS2-CSPDW8).
+  await workspace.emit(2, permissionAskedEvent('1', 'Bash', `checkout:${projectId(2)}`));
   await workspace.gateReached(2, '/permissions');
   workspace.hold(1);
   await switchTo(workspace, 1);

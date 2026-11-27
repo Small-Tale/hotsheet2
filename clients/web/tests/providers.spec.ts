@@ -35,66 +35,17 @@ import { attachmentRevealLabel, ticketFileRevealLabel } from './platform-labels'
 import { holdReaderReturnFocus } from './reader-return-focus-delivery';
 import { seedLocalGitTickets } from './real-ticket-fixture';
 import { openUpstreamSocket, proxyFetch, realTicketServer, routeProjectChangeSocket } from './real-ticket-server';
+import {
+  pendingPermission,
+  permissionAnsweredEvent,
+  permissionAskedEvent,
+  permissionRemovedEvent,
+  type ServerPermissionInfo,
+  terminalEvent,
+} from './server-event-fixtures';
 import { printThenEcho } from './terminal-fixture-command';
 import { ticketsJson } from './ticket-page-fixture';
 import { editLongTitleThroughWrappingEditor } from './title-editor-geometry';
-
-/**
- * The mocked project's permission identity: `ask_project` (`crates/hotsheet-server/src/routes/permissions.rs`)
- * names a registered checkout's ask `checkout:<id>` (HS2-K7CZR2, HS2-GM6A8W).
- */
-const DEMO_PERMISSION_PROJECT = 'checkout:demo-checkout';
-
-/**
- * The server's `permission_asked` nudge (`crates/hotsheet-server/src/lib.rs`): `store` is the asking
- * project's identity (`checkout:<id>` for a registered checkout), `slug` is the tool, and `message`
- * is omitted rather than null (HS2-K7CZR2).
- */
-const permissionAskedEvent = (id: string, tool = 'Bash', store = DEMO_PERMISSION_PROJECT) =>
-  ({ store, kind: 'permission_asked', id, slug: tool }) satisfies ChangeEvent;
-
-/**
- * The server's `permission_resolved` nudge for an answered request (`routes/terminals/signals.rs`):
- * `store` is the request's project, `slug` is empty, and `message` is `<decision>:<scope>` (HS2-GM6A8W).
- */
-const permissionAnsweredEvent = (
-  id: string,
-  answer: `${PermissionDecision}:${PermissionScope}`,
-  store = DEMO_PERMISSION_PROJECT,
-) => ({ store, kind: 'permission_resolved', id, slug: '', message: answer }) satisfies ChangeEvent;
-
-/**
- * The server's `permission_resolved` nudge for a request removed without an answer from this
- * client's routes (timeout, withdrawn ask; `set_on_removed` in `crates/hotsheet-server/src/lib.rs`):
- * `store` is the request's project, `slug` is the tool, and `message` is omitted (HS2-GM6A8W).
- */
-const permissionRemovedEvent = (id: string, tool = 'Bash', store = DEMO_PERMISSION_PROJECT) =>
-  ({ store, kind: 'permission_resolved', id, slug: tool }) satisfies ChangeEvent;
-
-/**
- * One `GET /permissions` entry as the server's `PermissionInfo` (`routes/permissions.rs`) serializes it:
- * `project`, `always_allow_supported` and `suggestions` are always present; `agent`, `requester` and
- * `orchestrator` are omitted when absent (HS2-GM6A8W).
- */
-type ServerPermissionInfo = { [Key in keyof PermissionRequest]: PermissionRequest[Key] } & Required<
-  Pick<PermissionRequest, 'project' | 'always_allow_supported' | 'suggestions'>
->;
-const pendingPermission = <Request extends Pick<PermissionRequest, 'id' | 'connection' | 'tool' | 'action'>>(
-  request: Request & Partial<ServerPermissionInfo>,
-): ServerPermissionInfo & Request => ({
-  project: DEMO_PERMISSION_PROJECT,
-  always_allow_supported: false,
-  suggestions: [],
-  ...request,
-});
-
-/**
- * The server's terminal nudges (`emit_terminal_question` / `emit_terminal_halted` in
- * `routes/terminals/signals.rs`) are not store-scoped: `store` and `slug` are empty, and only a
- * detected halt carries its message (HS2-GM6A8W).
- */
-const terminalEvent = (kind: 'terminal_question' | 'terminal_halted', id: string, message?: string) =>
-  ({ store: '', kind, id, slug: '', ...(message === undefined ? {} : { message }) }) satisfies ChangeEvent;
 
 test('routes live server notices into the project inbox and bell (HS2-ZP869N)', async ({ page }, testInfo) => {
   test.setTimeout(120_000);
@@ -3098,10 +3049,9 @@ async function mockProject(
             always_allow_supported: true,
           }),
         ];
-        pushDriveEvent({
-          ...permissionAskedEvent('73'),
-          turn: { connection_id: id, event: { type: 'permission_asked', tool: 'Bash', summary: 'Run date' } },
-        });
+        // The server sends the turn's ask as a `turn_event` and the queue nudge on its own (HS2-CSPDW8).
+        turnEvent(running, { type: 'permission_asked', tool: 'Bash', summary: 'Run date' });
+        pushDriveEvent(permissionAskedEvent('73'));
         return route.fulfill({ status: 202, json: running });
       }
       if (body.content === 'What time is it in California?') {
@@ -3147,13 +3097,8 @@ async function mockProject(
             always_allow_supported: true,
           }),
         ];
-        pushDriveEvent({
-          ...permissionAskedEvent('42'),
-          turn: {
-            connection_id: id,
-            event: { type: 'permission_asked', tool: 'Bash', summary: 'Run the focused test' },
-          },
-        });
+        turnEvent(running, { type: 'permission_asked', tool: 'Bash', summary: 'Run the focused test' });
+        pushDriveEvent(permissionAskedEvent('42'));
       }
       return route.fulfill({ status: 202, json: running });
     }
