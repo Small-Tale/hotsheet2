@@ -202,6 +202,58 @@ pub fn is_access(delivery: &Delivery) -> bool {
     matches!(delivery, Ok(event) if matches!(event.kind, EventKind::Access(_)))
 }
 
+/// HS2-AZFCB6: a watch on one directory's path that reports when the directory there
+/// changes (removed, created, replaced, renamed away or back, its parent moved) without
+/// watching anything beneath the parent.
+///
+/// A consumer that must notice its directory vanish and return used to watch the parent
+/// with a [`PathWatcher`]. On macOS that is an FSEvents stream, which is always recursive,
+/// so every event beneath the parent reached the process; on a developer machine, a whole
+/// projects folder. On macOS this watch is a kqueue vnode watch on the directory and on its
+/// parent's entries (see `root_watch.rs`); the handler runs only when the directory object
+/// at the path changed, so churn beside it delivers nothing. Elsewhere the native watchers
+/// watch a parent without its subtree already, and [`RootWatch::start`] refuses so callers
+/// keep doing that.
+pub struct RootWatch {
+    #[cfg(target_os = "macos")]
+    _watch: crate::root_watch::KqueueRootWatch,
+}
+
+impl std::fmt::Debug for RootWatch {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RootWatch").finish_non_exhaustive()
+    }
+}
+
+impl RootWatch {
+    /// Start watching `root`'s path. The path need not exist yet. Returns once the watch
+    /// is registered: every change after that runs `handler` (from the watch's own thread),
+    /// and several changes before it runs may share one call.
+    pub fn start<F>(root: &Path, handler: F) -> Result<Self, Error>
+    where
+        F: FnMut() + Send + 'static,
+    {
+        #[cfg(target_os = "macos")]
+        {
+            let watch = crate::root_watch::KqueueRootWatch::start(root, Box::new(handler))
+                .map_err(Error::io)?;
+            Ok(Self { _watch: watch })
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = (root, handler);
+            Err(Error::generic(
+                "a root watch is only needed on macOS; watch the parent instead",
+            ))
+        }
+    }
+
+    /// Whether [`RootWatch::start`] works on this platform.
+    pub fn supported() -> bool {
+        cfg!(target_os = "macos")
+    }
+}
+
 /// HS2-F6F42W: an event that tells a consumer to read again because some changes may not
 /// have been reported, as a platform's own rescan notice does. [`BackgroundWatcher`] sends
 /// one when its stream goes live and while the platform refuses to start one.

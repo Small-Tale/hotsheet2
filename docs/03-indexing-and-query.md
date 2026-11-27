@@ -205,8 +205,22 @@ Git and other churn beside `tickets/` never reaches the watch loop, so an idle s
 A relinked store is watched again at its new path when it is hosted there. The target-feed watch of
 an unhosted linked store (HS2-G5FYP6) uses the same scope.
 
-If a hosted store is deleted and recreated at the same path, the server watches its stable parent
-for the store root to return (HS2-R6FZ54). On macOS and Linux it also watches the root without
+If a hosted store is deleted and recreated at the same path, the server watches for the store root
+to return (HS2-R6FZ54). On Linux and Windows it watches the stable parent without its subtree. On
+macOS it does not register the parent with FSEvents (HS2-AZFCB6): an FSEvents stream is always
+recursive, so the parent registration routed every event beneath the parent (a whole projects
+folder on a development Mac) to the server only to be dropped. Instead a root watch
+(`hotsheet_jobs::watch::RootWatch`) holds kqueue vnode filters on the store root (removed, renamed,
+revoked) and on its parent's entries (`NOTE_WRITE` fires for an entry added, removed or renamed,
+never for anything deeper), plus the parent being moved or removed; while the parent is missing it
+watches the nearest existing ancestor's entries. It reports only when the directory object at the
+store path changed (device and inode, or present and absent) or the root or its parent moved, so
+churn beside the store delivers nothing. Each wake registers again while the old registration stays
+in place and collects events raised in between, so a move away and straight back is still reported.
+FSEvents' own `kFSEventStreamCreateFlagWatchRoot` was measured first and rejected: it dropped about
+one in six root-changed notices when the store or its parent moved away and back, sometimes several
+in a row. Unlike the parent watch on Linux and Windows, the root watch also follows a parent that is
+removed and recreated (HS2-CRXWR9 tracks that gap there). On macOS and Linux the watcher also watches the root without
 recursion for a new `tickets/` directory. It removes the invalid native watch, registers the
 replacement directory, and reconciles the entire store index before declaring the watch live.
 The removal signal marks the index out of sync before a platform-native unwatch can block,
@@ -218,7 +232,8 @@ These parent and root monitors respond to filesystem events; they do not rescan 
 Their events only signal re-arming: on every platform the watch loop admits only paths under
 `tickets/`, so churn in a busy parent (often the shared temporary directory) never reaches it
 (HS2-TFBFRP).
-The parent is registered before its child watches. During startup, a missing child leaves the
+The parent (or the macOS root watch) is registered before its child watches; if the root watch
+cannot start, the parent registration is used instead. During startup, a missing child leaves the
 parent monitor running, and a directory identity sampled before and after child registration
 detects replacement during that call and triggers a fresh child registration
 and full reconcile before the watcher becomes live.
@@ -272,8 +287,8 @@ at once; any other swap waits 30 s after the last replacement, so churn alternat
 eight trees cannot restart the stream often. The exclusions are paths, so they survive the checkout
 root being removed and recreated. Linux and Windows have no exclusion API here: they keep notify's
 watcher and the event filter, and Linux inotify still watches each directory under ignored trees.
-The store watcher's stream over a store's parent directory (HS2-R6FZ54) is a separate source of
-the same cost (HS2-AZFCB6).
+The store watcher's former stream over a store's parent directory (HS2-R6FZ54) was a separate
+source of the same cost; on macOS it is replaced by the kqueue root watch above (HS2-AZFCB6).
 
 On change:
 

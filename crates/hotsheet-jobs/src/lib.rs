@@ -44,6 +44,8 @@ mod model;
 mod monitor;
 mod pipelines;
 mod probe;
+#[cfg(target_os = "macos")]
+mod root_watch;
 mod signal;
 mod slot;
 mod state;

@@ -5664,3 +5664,38 @@ temp directory failed 5 of 5 runs before the fix (each a 120 s timeout) and pass
 (about 9 s each). Under that sustained churn other native-latency tests (`hs2_vn96j5_*`, the
 native repository monitor) time out before and after the fix alike, because `fseventsd` itself
 falls minutes behind; that residual risk is tracked separately.
+
+### Store root watch without the parent stream (HS2-AZFCB6)
+
+`crates/hotsheet-jobs/src/root_watch.rs` runs the macOS kqueue root watch against real directories
+(unsandboxed: the Bash sandbox blocks native file events):
+
+- 3,000 writes in a sibling project, 200 entries created and removed directly in the parent, and
+  200 writes inside the store run the handler zero times; the store's move afterwards runs it once
+  or twice;
+- every transition runs the handler: moved away, moved back, removed, recreated, replaced by another
+  directory renamed over the path, renamed then created anew, parent moved away and back, parent
+  removed and recreated with the store; then 20 rounds each of the store and its parent moved away
+  and straight back without waiting (FSEvents' WatchRoot dropped about one in six of these);
+- a watch started before its directory and parent exist reports their creation, and a dropped watch
+  reports nothing more;
+- `hs2_azfcb6_measure_records_routed_with_and_without_the_parent_stream` (ignored) counts the
+  FSEvents records routed to the process before any callback filter. With 20,000 writes in a
+  sibling project (2026-11-27, three rounds): about 20,000 records with the parent registered, 1
+  without it, and zero root-watch wakes.
+
+`crates/hotsheet-jobs/src/watch.rs` has no root-watch cases of its own: `RootWatch` only forwards to
+that module on macOS and refuses elsewhere.
+
+`crates/hotsheet-server/src/watcher.rs` (`freshness_tests`) runs the production store watcher:
+
+- `hs2_azfcb6_sibling_churn_never_reaches_the_store_watcher`: 3,000 writes in a sibling project
+  deliver fewer than 40 native events (the following ticket write's own), and that ticket is
+  indexed; on macOS the root watch is in use.
+- `hs2_azfcb6_the_store_watcher_follows_its_root_without_the_parent`: a store moved away, written
+  to and moved back reconciles the write; a parent renamed away (with a write) and back reconciles
+  it; on macOS a removed parent recreated with a new store replaces the index (Linux and Windows
+  skip that step: HS2-CRXWR9); later writes are indexed after each transition.
+- The HS2-R6FZ54 and HS2-190GDZ native tests now run through the root watch on macOS.
+- `hs2_azfcb6_measure_sibling_churn_with_and_without_the_parent_watch` (ignored) prints deliveries
+  and process CPU for the former parent registration against the root watch.

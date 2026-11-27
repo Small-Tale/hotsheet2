@@ -26,6 +26,12 @@ use crate::watch::MAX_EXCLUDED_PATHS;
 
 type Handler = Box<dyn FnMut(Delivery) + Send>;
 
+/// HS2-AZFCB6 measurement: every record any stream in this test process received from the
+/// file-event service, before the callback's own path filter.
+#[cfg(test)]
+pub(crate) static RECORDS_RECEIVED: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
 struct StreamInfo {
     handler: Mutex<Handler>,
     /// Each watched path (as the service reports it) and whether its subtree is watched.
@@ -222,6 +228,8 @@ unsafe extern "C-unwind" fn callback(
             std::slice::from_raw_parts(flags.as_ptr(), count),
         )
     };
+    #[cfg(test)]
+    RECORDS_RECEIVED.fetch_add(count, std::sync::atomic::Ordering::Relaxed);
     let mut handler = info
         .handler
         .lock()
