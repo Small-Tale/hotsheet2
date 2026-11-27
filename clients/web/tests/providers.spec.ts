@@ -28996,9 +28996,12 @@ for (const width of [1280, 390])
         await page.goto('/');
         await openMockedProject(page);
         const row = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]');
-        await test.step('Select the workspace ticket', () => row.click({ timeout: 10_000 }));
+        // HS2-8DPRAB: clicks wait on actionability within the test's 60 s budget, like the rest of the
+        // suite. A loaded host can hold an actionable control's input delivery for seconds while the
+        // page stays responsive; a 10 s per-click cap turned that delay into a failure.
+        await test.step('Select the workspace ticket', () => row.click());
         const opener = page.getByRole('button', { name: 'Open Ticket Reader', exact: true });
-        await test.step('Open the selected ticket reader', () => opener.click({ timeout: 10_000 }));
+        await test.step('Open the selected ticket reader', () => opener.click());
         const reader = page.locator('[data-component="ticket-reader"][data-reader-active="true"]');
         await expect(reader).toBeVisible();
         await page.keyboard.press('Escape');
@@ -29013,11 +29016,11 @@ for (const width of [1280, 390])
         // This case exercises newer intent in a workspace the user has revealed.
         if (width === 390)
           await test.step('Reveal the phone workspace after reader close', async () => {
-            await page.getByRole('button', { name: 'Hide Ticket Inspector', exact: true }).click({ timeout: 10_000 });
+            await page.getByRole('button', { name: 'Hide Ticket Inspector', exact: true }).click();
           });
         await test.step(`Open the newer ${intent} editor`, async () => {
           if (intent === 'keyboard') await page.keyboard.press('ControlOrMeta+k');
-          else await page.getByRole('button', { name: 'New ticket…', exact: true }).click({ timeout: 10_000 });
+          else await page.getByRole('button', { name: 'New ticket…', exact: true }).click();
         });
         const editor =
           intent === 'keyboard'
@@ -29069,7 +29072,7 @@ for (const width of [1280, 390])
             }
           await editor.fill('');
           await test.step('Leave the empty composed search field', async () => {
-            await row.click({ timeout: 10_000 });
+            await row.click();
             await expect
               .poll(() => page.evaluate(() => !document.activeElement?.closest('[data-component="search-field"]')))
               .toBe(true);
@@ -29095,15 +29098,15 @@ for (const width of [1280, 390])
           await page
             .locator('[data-action="create-ticket-form"]')
             .getByRole('button', { name: 'Cancel', exact: true })
-            .click({ timeout: 10_000 });
+            .click();
           await expect(editor).toBeHidden();
         }
         if (width === 390) {
           const hideInspector = page.getByRole('button', { name: 'Hide Ticket Inspector', exact: true });
-          if (await hideInspector.isVisible()) await hideInspector.click({ timeout: 10_000 });
+          if (await hideInspector.isVisible()) await hideInspector.click();
         }
-        await test.step('Select the workspace ticket', () => row.click({ timeout: 10_000 }));
-        await test.step('Open the selected ticket reader', () => opener.click({ timeout: 10_000 }));
+        await test.step('Select the workspace ticket', () => row.click());
+        await test.step('Open the selected ticket reader', () => opener.click());
         await expect(reader).toBeVisible();
         await page.keyboard.press('Escape');
         await expect(reader).toBeHidden();
