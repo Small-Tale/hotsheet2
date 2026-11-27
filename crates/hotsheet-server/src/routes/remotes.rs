@@ -5,7 +5,8 @@ use std::sync::Arc;
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
-use hotsheet_cli::remote_servers::RemoteRuntime;
+use hotsheet_cli::remote_servers::machine::{MachineError, MachineQuery};
+use hotsheet_cli::remote_servers::{PeerSession, RemoteRuntime};
 use hotsheet_ticketing::remote_servers::{
     MAX_REMOTE_CHECKOUTS, RegisterRemote, RemoteCheckout, RemoteCheckoutState, RemoteDiscovery,
     RemoteError, RemoteIdentity, RemoteSource, RemoteView, ReviewRemote, RevokeRemote,
@@ -184,4 +185,71 @@ pub(crate) async fn discover(
 ) -> Result<Json<RemoteDiscovery>, ApiError> {
     let runtime = runtime(&state);
     blocking(move || runtime.discover(&id)).await
+}
+
+/// HS2-SW03MK: a machine read's refusal. Registry errors keep their statuses; a binding
+/// that changed or a remote with no project to read capacity through conflicts, and a
+/// failed or refused peer read is a bad gateway that keeps only the peer's status and code.
+fn machine_error(error: MachineError) -> ApiError {
+    match error {
+        MachineError::Remote(error) => self::error(error),
+        MachineError::Invalid(message) => {
+            ApiError::new(StatusCode::BAD_REQUEST, message).with_code("invalid_request")
+        }
+        MachineError::Changed => {
+            ApiError::new(StatusCode::CONFLICT, MachineError::Changed.to_string())
+                .with_code("remote_changed")
+        }
+        MachineError::NoCheckout => {
+            ApiError::new(StatusCode::CONFLICT, MachineError::NoCheckout.to_string())
+                .with_code("no_available_checkout")
+        }
+        other @ (MachineError::Transport(_) | MachineError::Refused { .. }) => {
+            ApiError::new(StatusCode::BAD_GATEWAY, other.to_string())
+        }
+    }
+}
+
+/// HS2-SW03MK: `POST /remotes/{id}/machine`, the machine of paired remote `id` with no open
+/// project, as `hotsheet-cli remote machine` reads it (HS2-VQ92XZ). The body names the
+/// readings ([`MachineQuery`]); `{}` reads all three. Loopback-only, as every `/remotes`
+/// route is, and it answers readings only, never a session or credential.
+pub(crate) async fn machine(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(value): Json<serde_json::Value>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let query: MachineQuery = body(value)?;
+    let (reads, capacity_optional) = query.reads().map_err(machine_error)?;
+    let runtime = runtime(&state);
+    tokio::task::spawn_blocking(move || runtime.machine(&id, &reads, capacity_optional))
+        .await
+        .map_err(|_| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "remote machine read task failed",
+            )
+        })?
+        .map(Json)
+        .map_err(machine_error)
+}
+
+/// HS2-SW03MK: `GET /remotes/{id}/session`, this machine's paired session on remote `id`,
+/// as `hotsheet-cli remote session` reads it (HS2-4B0KSD).
+pub(crate) async fn session(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<PeerSession>, ApiError> {
+    let runtime = runtime(&state);
+    blocking(move || runtime.peer_session(&id, false)).await
+}
+
+/// HS2-SW03MK: `POST /remotes/{id}/renew` asks remote `id`'s host to renew this machine's
+/// paired session in place, as `hotsheet-cli remote renew` does (HS2-4B0KSD).
+pub(crate) async fn renew(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<PeerSession>, ApiError> {
+    let runtime = runtime(&state);
+    blocking(move || runtime.peer_session(&id, true)).await
 }

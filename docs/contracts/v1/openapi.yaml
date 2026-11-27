@@ -5463,6 +5463,95 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+  /remotes/{id}/machine:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          description: Immutable remote registration ULID.
+    post:
+      operationId: readRemoteMachine
+      description:
+        HS2-SW03MK. The machine of paired remote `id` with no open project, as `hotsheet-cli remote machine` reads it
+        (HS2-VQ92XZ), for a served MCP `hotsheet_remotes`. Loopback-only. Fresh discovery re-checks the binding first (a
+        changed one is `remote_changed`); capacity goes through the first project the remote reports available
+        (`no_available_checkout` when it is named and there is none). Answers readings only, never a session or
+        credential; a peer's refusal keeps only its status and stable code.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RemoteMachineQuery'
+      responses:
+        '200':
+          description:
+            The binding id, label, server id and host name, with `health`, `cpu` and `capacity` as read, and
+            `capacity_unavailable` when capacity was left out for want of a project.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteMachineReport'
+        default:
+          description: Fixed diagnostic with no peer body or credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /remotes/{id}/session:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          description: Immutable remote registration ULID.
+    get:
+      operationId: readRemotePeerSession
+      description:
+        HS2-SW03MK. This machine's paired session on remote `id`, as `hotsheet-cli remote session` reads it
+        (HS2-4B0KSD). Loopback-only.
+      responses:
+        '200':
+          description: The peer's device record, or why the session no longer works.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemotePeerSession'
+        default:
+          description: Fixed diagnostic with no peer body or credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /remotes/{id}/renew:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          description: Immutable remote registration ULID.
+    post:
+      operationId: renewRemotePeerSession
+      description:
+        HS2-SW03MK. Ask remote `id`'s host to renew this machine's paired session in place, as `hotsheet-cli remote
+        renew` does (HS2-4B0KSD); a person there approves it. Loopback-only.
+      responses:
+        '200':
+          description: The peer's device record after asking, or why the session no longer works.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemotePeerSession'
+        default:
+          description: Fixed diagnostic with no peer body or credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /checkouts/{reference}/tickets:
     parameters: &a3
       - $ref: '#/components/parameters/CheckoutReference'
@@ -29343,6 +29432,74 @@ components:
           items:
             $ref: '#/components/schemas/RemoteReview'
       additionalProperties: true
+    RemoteMachineQuery:
+      description:
+        HS2-SW03MK. Which readings to take; none named reads all three. `after` (a CPU frame `seq` or a capacity
+        `version`) with `wait_ms` needs exactly one of `cpu` or `capacity`; `claim_namespaces` needs `capacity`.
+      type: object
+      additionalProperties: false
+      properties:
+        health:
+          type: boolean
+        cpu:
+          type: boolean
+        capacity:
+          type: boolean
+        claim_namespaces:
+          type: array
+          items:
+            type: string
+        after:
+          oneOf:
+            - type: string
+            - type: integer
+              minimum: 0
+        wait_ms:
+          description: Capped at 8000.
+          type: integer
+          minimum: 0
+    RemoteMachineReport:
+      description: HS2-SW03MK. The binding and the machine's name, with each reading under its key.
+      type: object
+      required:
+        - binding_id
+        - label
+        - server_id
+      properties:
+        binding_id:
+          type: string
+        label:
+          type: string
+        server_id:
+          type: string
+        host_name:
+          type:
+            - string
+            - 'null'
+        health:
+          $ref: '#/components/schemas/HostHealthSnapshot'
+        cpu:
+          $ref: '#/components/schemas/HostCpuFrame'
+        capacity:
+          $ref: '#/components/schemas/TargetCapacitySnapshot'
+        capacity_unavailable:
+          enum:
+            - no_available_checkout
+    RemotePeerSession:
+      description:
+        HS2-SW03MK. This machine's paired session on a remote (HS2-4B0KSD) - `device` with `renewed_at`, `expires_at`,
+        `idle_expires_at`, `reminder_day` and `renewal_requested_at`, or `failure` (such as `session_expired`,
+        `session_revoked`, `unreachable`, or `unsupported` for a certificate binding).
+      type: object
+      required:
+        - binding_id
+      properties:
+        binding_id:
+          type: string
+        device:
+          type: object
+        failure:
+          type: string
     RemoteDiscovery:
       type: object
       description: checkouts is null on any failure or revocation. Cached observations are diagnostic only.

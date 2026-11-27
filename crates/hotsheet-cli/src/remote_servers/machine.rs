@@ -89,6 +89,102 @@ impl MachineRead {
     }
 }
 
+/// HS2-SW03MK: which machine readings to take, as `remote machine`'s flags, the
+/// `POST /remotes/{id}/machine` body and the `hotsheet_remotes` `machine` action name them.
+/// No reading named means all three, with capacity skipped (not failed) when the remote has
+/// no available project.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MachineQuery {
+    /// The latest evaluated host sample.
+    #[serde(default)]
+    pub health: bool,
+    /// The live CPU frame.
+    #[serde(default)]
+    pub cpu: bool,
+    /// The machine's capacity, read through the first available project.
+    #[serde(default)]
+    pub capacity: bool,
+    /// Also list live claims of these resource-claim namespaces (with `capacity`).
+    #[serde(default)]
+    pub claim_namespaces: Vec<String>,
+    /// The CPU frame `seq` or capacity `version` the caller has: with `wait_ms`, answer
+    /// when a newer one arrives. Needs exactly one of `cpu` or `capacity`.
+    #[serde(default, deserialize_with = "cursor")]
+    pub after: Option<String>,
+    /// How long to wait for a newer reading, capped at [`MAX_MACHINE_WAIT_MS`].
+    #[serde(default)]
+    pub wait_ms: Option<u64>,
+}
+
+/// A cursor given as a number (a CPU frame `seq`) or as text.
+fn cursor<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Option<String>, D::Error> {
+    use serde::Deserialize;
+    #[derive(serde::Deserialize)]
+    #[serde(untagged)]
+    enum Cursor {
+        Number(u64),
+        Text(String),
+    }
+    Ok(
+        Option::<Cursor>::deserialize(deserializer)?.map(|cursor| match cursor {
+            Cursor::Number(number) => number.to_string(),
+            Cursor::Text(text) => text,
+        }),
+    )
+}
+
+impl MachineQuery {
+    /// The reads to make, in order, and whether capacity may be skipped for want of a
+    /// project (only when no reading was named). An ambiguous or malformed cursor, or
+    /// claim namespaces without capacity, is refused before any request.
+    pub fn reads(&self) -> Result<(Vec<MachineRead>, bool), MachineError> {
+        if self.after.is_some() && usize::from(self.cpu) + usize::from(self.capacity) != 1 {
+            return Err(MachineError::Invalid(
+                "after (a cursor) needs exactly one of cpu or capacity",
+            ));
+        }
+        if self.wait_ms.is_some() && self.after.is_none() {
+            return Err(MachineError::Invalid(
+                "a wait needs after, the cursor it waits past",
+            ));
+        }
+        if !self.claim_namespaces.is_empty() && !self.capacity {
+            return Err(MachineError::Invalid(
+                "claim namespaces need the capacity read",
+            ));
+        }
+        let cpu_after = match (&self.after, self.cpu) {
+            (Some(after), true) => Some(
+                after
+                    .parse::<u64>()
+                    .map_err(|_| MachineError::Invalid("after with cpu is a frame seq number"))?,
+            ),
+            _ => None,
+        };
+        let all = !(self.health || self.cpu || self.capacity);
+        let mut reads = Vec::new();
+        if all || self.health {
+            reads.push(MachineRead::Health);
+        }
+        if all || self.cpu {
+            reads.push(MachineRead::Cpu {
+                after: cpu_after,
+                wait_ms: cpu_after.and(self.wait_ms),
+            });
+        }
+        if all || self.capacity {
+            let after = self.after.clone().filter(|_| self.capacity);
+            reads.push(MachineRead::Capacity {
+                wait_ms: after.as_ref().and(self.wait_ms),
+                after,
+                claim_namespaces: self.claim_namespaces.clone(),
+            });
+        }
+        Ok((reads, all))
+    }
+}
+
 /// Percent-encode everything but RFC 3986 unreserved bytes, so no value can add a query
 /// parameter or move the request to another route.
 fn encode(value: &str) -> String {
@@ -116,6 +212,8 @@ pub enum MachineError {
     Changed,
     /// The remote server has no available project to read capacity through.
     NoCheckout,
+    /// HS2-SW03MK: the readings asked for do not fit together; nothing was requested.
+    Invalid(&'static str),
     /// The remote answered the read with an error status (and its stable code, if any).
     Refused {
         read: &'static str,
@@ -135,6 +233,7 @@ impl std::fmt::Display for MachineError {
             Self::NoCheckout => formatter.write_str(
                 "no_available_checkout: this remote server has no project this computer can read its capacity through",
             ),
+            Self::Invalid(message) => formatter.write_str(message),
             Self::Refused { read, status, code } => {
                 write!(formatter, "the remote server refused the {read} read ({status}")?;
                 if let Some(code) = code {

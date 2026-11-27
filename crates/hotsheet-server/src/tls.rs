@@ -440,6 +440,11 @@ mod tests {
             "/checkouts/owner/orchestration/target-lines",
             // HS2-3D8D6V: and so are a remote checkout's lines.
             "/remotes/id/checkouts/checkout/orchestration/target-lines",
+            // HS2-SW03MK: a remote's machine read and this machine's paired session there
+            // ride this machine's binding credentials.
+            "/remotes/id/machine",
+            "/remotes/id/session",
+            "/remotes/id/renew",
             // HS2-KB2Y51: a push pass uses this machine's bindings and credentials.
             "/checkouts/owner/orchestration/target-lines/push",
             // HS2-AHG7HW: observed tool capacity is this machine's.

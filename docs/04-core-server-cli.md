@@ -2206,7 +2206,8 @@ credential, role and grants. A desktop asks a remote host to renew its own bindi
 `remote renew <binding-id>` and reads its lifetime with `remote session <binding-id>`.
 `remote machine <binding-id>` reads a paired remote's host health, live CPU and
 capacity with no open project, over the same binding connection (HS2-VQ92XZ,
-[08](08-distributed-and-remote.md) §8.2.1).
+[08](08-distributed-and-remote.md) §8.2.1). The `hotsheet_remotes` MCP tool offers all
+three as its `machine`, `session` and `renew` actions (HS2-SW03MK).
 A refused session answers 401 with `code` `session_expired`, `session_revoked` or
 `session_invalid`. The browser host checks same-origin writes,
 and for the session cookie the server requires the matching Origin and CSRF token

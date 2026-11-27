@@ -7,9 +7,9 @@ use crate::{Backend, BackendError};
 pub(crate) fn definition() -> Value {
     json!({
         "name": "hotsheet_remotes",
-        "description": "Manage this machine's explicitly paired remote Hot Sheet servers. list performs no requests; checkouts performs fresh authenticated discovery. Registration/review imports a local credential JSON file without returning its contents. Only local backends support this tool; credentials are never copied to a remote backend. Revoke disables local access and does not revoke the issued remote device certificate.",
+        "description": "Manage this machine's explicitly paired remote Hot Sheet servers. list performs no requests; checkouts performs fresh authenticated discovery. Registration/review imports a local credential JSON file without returning its contents. Only local backends support this tool; credentials are never copied to a remote backend. Revoke disables local access and does not revoke the issued remote device certificate. machine reads a paired remote's machine with no open project (HS2-VQ92XZ): health (the latest host sample), cpu (the live CPU frame) and capacity (read through the first project the remote reports available, with claim_namespaces listing live resource claims), all three when none is named, capacity then left out with capacity_unavailable when the remote has no available project; it re-checks the binding with fresh discovery first and refuses one that changed (remote_changed). Pass after (a cpu frame seq or a capacity version) with wait_ms (at most 8000) and exactly one of cpu or capacity to wait for a newer reading instead of polling. session reads this machine's paired session on the remote (renewed_at, expires_at, reminder_day, or failure such as session_expired, session_revoked or unsupported for a certificate binding) and renew asks the remote's host to renew it in place, which a person there approves (HS2-4B0KSD). These answer readings and lifetimes only, never a session, cookie, certificate or key, and repeating them changes nothing on this machine (HS2-SW03MK).",
         "inputSchema": { "type": "object", "required": ["action"], "properties": {
-            "action": { "type": "string", "enum": ["identity", "list", "register", "review", "revoke", "checkouts"] },
+            "action": { "type": "string", "enum": ["identity", "list", "register", "review", "revoke", "checkouts", "machine", "session", "renew"] },
             "id": { "type": "string", "description": "immutable registration ULID, required for mutation/discovery" },
             "label": { "type": "string" }, "origin": { "type": "string" },
             "expected_server_id": { "type": "string", "description": "server ULID explicitly supplied by pairing" },
@@ -17,27 +17,50 @@ pub(crate) fn definition() -> Value {
             "expected_revision": { "type": "integer", "minimum": 1 },
             "previous_identity": { "type": "object", "required": ["server_id", "ca_fingerprint"], "properties": {
                 "server_id": { "type": "string" }, "ca_fingerprint": { "type": ["string", "null"] }
-            } }
+            } },
+            "health": { "type": "boolean", "description": "machine: read the latest host sample" },
+            "cpu": { "type": "boolean", "description": "machine: read the live CPU frame" },
+            "capacity": { "type": "boolean", "description": "machine: read the capacity through the first available project" },
+            "claim_namespaces": { "type": "array", "items": { "type": "string" }, "description": "machine with capacity: also list live claims of these resource-claim namespaces" },
+            "after": { "type": ["string", "integer"], "description": "machine: the cpu frame seq or capacity version you have; with wait_ms answer when a newer one arrives" },
+            "wait_ms": { "type": "integer", "minimum": 0, "maximum": 8000, "description": "machine with after: how long to wait for a newer reading" }
         } }
     })
 }
+
+/// The arguments of the `machine` action that name the readings (HS2-SW03MK).
+const MACHINE_FIELDS: [&str; 6] = [
+    "health",
+    "cpu",
+    "capacity",
+    "claim_namespaces",
+    "after",
+    "wait_ms",
+];
 
 pub(crate) fn is_registry_path(path: &str) -> bool {
     path == "/remotes" || path.starts_with("/remotes/") || path == "/remote-identity"
 }
 
 pub(crate) fn backend_error(
-    error: hotsheet_ticketing::remote_servers::RemoteError,
+    error: hotsheet_cli::remote_servers::machine::MachineError,
 ) -> BackendError {
+    use hotsheet_cli::remote_servers::machine::MachineError;
     use hotsheet_ticketing::remote_servers::RemoteError;
-    let status = match error {
-        RemoteError::Invalid(_) => 400,
-        RemoteError::Conflict | RemoteError::Revoked => 409,
-        RemoteError::NotFound => 404,
-        RemoteError::Verification(_) => 502,
-        RemoteError::Credentials => 503,
-        RemoteError::UnsupportedVersion => 426,
-        RemoteError::Storage(_) | RemoteError::Corrupt => 500,
+    let status = match &error {
+        MachineError::Remote(error) => match error {
+            RemoteError::Invalid(_) => 400,
+            RemoteError::Conflict | RemoteError::Revoked => 409,
+            RemoteError::NotFound => 404,
+            RemoteError::Verification(_) => 502,
+            RemoteError::Credentials => 503,
+            RemoteError::UnsupportedVersion => 426,
+            RemoteError::Storage(_) | RemoteError::Corrupt => 500,
+        },
+        // HS2-SW03MK: a machine read's own refusal keeps its code and the peer's status.
+        MachineError::Invalid(_) => 400,
+        MachineError::Changed | MachineError::NoCheckout => 409,
+        MachineError::Transport(_) | MachineError::Refused { .. } => 502,
     };
     BackendError {
         status: Some(status),
@@ -68,6 +91,35 @@ pub(crate) fn dispatch(args: &Value, backend: &dyn Backend) -> Result<Value, Str
     if action == "checkouts" {
         return backend
             .get(&format!("/remotes/{id}/checkouts"), &[])
+            .map_err(crate::be_msg);
+    }
+    // HS2-SW03MK: the paired session and the machine read. Only the reading selection is
+    // forwarded; anything else in the arguments stays here.
+    if action == "session" {
+        return backend
+            .get(&format!("/remotes/{id}/session"), &[])
+            .map_err(crate::be_msg);
+    }
+    if action == "renew" {
+        return backend
+            .send("POST", &format!("/remotes/{id}/renew"), &json!({}))
+            .map_err(crate::be_msg);
+    }
+    if action == "machine" {
+        let selection: serde_json::Map<String, Value> = MACHINE_FIELDS
+            .iter()
+            .filter_map(|field| {
+                args.get(*field)
+                    .filter(|value| !value.is_null())
+                    .map(|value| ((*field).to_owned(), value.clone()))
+            })
+            .collect();
+        return backend
+            .send(
+                "POST",
+                &format!("/remotes/{id}/machine"),
+                &Value::Object(selection),
+            )
             .map_err(crate::be_msg);
     }
     let mut body = args.clone();
@@ -228,6 +280,106 @@ mod tests {
         }
         assert_eq!(backend.calls.lock_or_recover().len(), 5);
     }
+    /// HS2-SW03MK: machine, session and renew route to their registry paths on a local
+    /// backend; the machine read forwards only the reading selection, a non-local backend
+    /// is refused before any request, and an id that is not a ULID never reaches a path.
+    #[test]
+    fn hs2_sw03mk_machine_session_and_renew_route_to_the_registry() {
+        let backend = Local {
+            calls: Mutex::new(Vec::new()),
+        };
+        let id = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
+        dispatch(
+            &json!({"action":"machine", "id":id, "capacity":true, "after":"ab12",
+                "wait_ms":1000, "claim_namespaces":["vm"], "health":null,
+                "checkout":"synthetic-project", "credentials":{"bearer_secret":"synthetic"},
+                "actor_role":"ai"}),
+            &backend,
+        )
+        .unwrap();
+        dispatch(&json!({"action":"machine", "id":id}), &backend).unwrap();
+        dispatch(&json!({"action":"session", "id":id}), &backend).unwrap();
+        dispatch(
+            &json!({"action":"renew", "id":id, "label":"ignored"}),
+            &backend,
+        )
+        .unwrap();
+        let calls = backend.calls.lock_or_recover().clone();
+        assert_eq!(
+            calls,
+            [
+                (
+                    format!("POST /remotes/{id}/machine"),
+                    json!({"capacity":true, "after":"ab12", "wait_ms":1000,
+                        "claim_namespaces":["vm"]})
+                ),
+                (format!("POST /remotes/{id}/machine"), json!({})),
+                (format!("/remotes/{id}/session"), Value::Null),
+                (format!("POST /remotes/{id}/renew"), json!({})),
+            ]
+        );
+        for action in ["machine", "session", "renew"] {
+            assert_eq!(
+                dispatch(&json!({"action":action, "id":"../x"}), &backend).unwrap_err(),
+                "id must be a ULID"
+            );
+            assert_eq!(
+                dispatch(&json!({"action":action}), &backend).unwrap_err(),
+                "id is required"
+            );
+            let remote = crate::HttpBackend::new("https://remote.example.test", "synthetic");
+            assert!(
+                dispatch(&json!({"action":action, "id":id}), &remote)
+                    .unwrap_err()
+                    .contains("machine-local")
+            );
+        }
+        assert_eq!(backend.calls.lock_or_recover().len(), 4);
+        // The schema offers the three actions and the reading selection.
+        let schema = definition();
+        let actions = schema["inputSchema"]["properties"]["action"]["enum"].clone();
+        for action in ["machine", "session", "renew"] {
+            assert!(actions.as_array().unwrap().contains(&json!(action)));
+        }
+        for field in MACHINE_FIELDS {
+            assert!(
+                schema["inputSchema"]["properties"].get(field).is_some(),
+                "{field}"
+            );
+        }
+    }
+
+    /// HS2-SW03MK: a machine read's own refusals keep their status and code.
+    #[test]
+    fn hs2_sw03mk_machine_refusals_keep_their_status_and_code() {
+        use hotsheet_cli::remote_servers::machine::MachineError;
+        use hotsheet_ticketing::remote_servers::RemoteError;
+        for (error, status, text) in [
+            (MachineError::Changed, 409, "remote_changed"),
+            (MachineError::NoCheckout, 409, "no_available_checkout"),
+            (
+                MachineError::Invalid("after needs cpu"),
+                400,
+                "after needs cpu",
+            ),
+            (
+                MachineError::Refused {
+                    read: "cpu",
+                    status: 503,
+                    code: Some("host_health_unavailable".into()),
+                },
+                502,
+                "host_health_unavailable",
+            ),
+            (RemoteError::Revoked.into(), 409, "revoked"),
+            (RemoteError::NotFound.into(), 404, "not found"),
+        ] {
+            let mapped = backend_error(error);
+            assert_eq!(mapped.status, Some(status));
+            assert!(mapped.message.contains(text), "{}", mapped.message);
+        }
+    }
+
     #[test]
     fn hs2_1y45mz_registry_requests_refuse_redirects_before_forwarding_credentials() {
         use std::io::{Read, Write};

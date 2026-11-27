@@ -226,3 +226,68 @@ fn hs2_vq92xz_the_report_names_the_machine_and_only_its_readings() {
     assert_eq!(plain["host_name"], Value::Null);
     assert!(plain.get("capacity_unavailable").is_none());
 }
+
+/// HS2-SW03MK: the HTTP route and the MCP action name readings as a JSON body: unknown
+/// fields are refused, a cursor is a number or text, and the same combinations the CLI
+/// refuses are refused before any request.
+#[test]
+fn hs2_sw03mk_a_machine_query_reads_from_json_and_refuses_what_does_not_fit() {
+    let query = |body: Value| serde_json::from_value::<MachineQuery>(body);
+    let (reads, optional) = query(json!({})).unwrap().reads().unwrap();
+    assert!(optional);
+    assert_eq!(
+        reads.iter().map(MachineRead::key).collect::<Vec<_>>(),
+        ["health", "cpu", "capacity"]
+    );
+    let (reads, optional) = query(json!({"cpu": true, "after": 7, "wait_ms": 20_000}))
+        .unwrap()
+        .reads()
+        .unwrap();
+    assert!(!optional);
+    assert_eq!(
+        reads,
+        [MachineRead::Cpu {
+            after: Some(7),
+            wait_ms: Some(20_000)
+        }]
+    );
+    // The wait is capped where the path is built.
+    assert_eq!(
+        reads[0].server_path(None).unwrap(),
+        "/host-health/cpu?after=7&timeout_ms=8000"
+    );
+    let (reads, _) = query(json!({"capacity": true, "after": "ab12", "wait_ms": 1000,
+        "claim_namespaces": ["vm"]}))
+    .unwrap()
+    .reads()
+    .unwrap();
+    assert_eq!(
+        reads,
+        [MachineRead::Capacity {
+            after: Some("ab12".into()),
+            wait_ms: Some(1000),
+            claim_namespaces: vec!["vm".into()]
+        }]
+    );
+    // Refused before any request.
+    assert!(query(json!({"credentials": {}})).is_err());
+    assert!(query(json!({"health": "yes"})).is_err());
+    for body in [
+        json!({"after": 7}),
+        json!({"cpu": true, "capacity": true, "after": 7}),
+        json!({"cpu": true, "after": "v1"}),
+        json!({"cpu": true, "wait_ms": 1000}),
+        json!({"health": true, "claim_namespaces": ["vm"]}),
+    ] {
+        let refused = query(body.clone()).unwrap().reads().unwrap_err();
+        assert!(matches!(refused, MachineError::Invalid(_)), "{body}");
+    }
+    assert_eq!(
+        query(json!({"after": 7}))
+            .unwrap()
+            .reads()
+            .unwrap_err()
+            .to_string(),
+        "after (a cursor) needs exactly one of cpu or capacity"
+    );
+}

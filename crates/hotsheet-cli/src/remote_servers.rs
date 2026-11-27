@@ -156,14 +156,19 @@ impl RemoteRuntime {
     }
 
     /// The same machine-local route workflow used by serverless MCP and HTTP handlers.
+    /// HS2-SW03MK: a machine read's own refusals (`remote_changed`, `no_available_checkout`,
+    /// the peer's status and code) are kept, so the error is a [`machine::MachineError`],
+    /// which wraps every registry error unchanged.
     pub fn request(
         &self,
         method: &str,
         path: &str,
         body: &serde_json::Value,
-    ) -> Result<serde_json::Value, RemoteError> {
-        fn value(result: impl serde::Serialize) -> Result<serde_json::Value, RemoteError> {
-            serde_json::to_value(result).map_err(|_| RemoteError::Corrupt)
+    ) -> Result<serde_json::Value, machine::MachineError> {
+        fn value(
+            result: impl serde::Serialize,
+        ) -> Result<serde_json::Value, machine::MachineError> {
+            serde_json::to_value(result).map_err(|_| RemoteError::Corrupt.into())
         }
         let mut body = body.clone();
         if let Some(object) = body.as_object_mut() {
@@ -202,7 +207,21 @@ impl RemoteRuntime {
                 value(self.revoke(id, request.expected_revision)?)
             }
             ("GET", ["remotes", id, "checkouts"]) => value(self.discover(id)?),
-            _ => Err(RemoteError::Invalid("unsupported remote registry route")),
+            // HS2-SW03MK: the machine read and the paired session, as `remote machine`,
+            // `remote session` and `remote renew` answer them.
+            ("POST", ["remotes", id, "machine"]) => {
+                let query: machine::MachineQuery = if body.is_null() {
+                    machine::MachineQuery::default()
+                } else {
+                    serde_json::from_value(body)
+                        .map_err(|_| RemoteError::Invalid("invalid machine read request"))?
+                };
+                let (reads, capacity_optional) = query.reads()?;
+                self.machine(id, &reads, capacity_optional)
+            }
+            ("GET", ["remotes", id, "session"]) => value(self.peer_session(id, false)?),
+            ("POST", ["remotes", id, "renew"]) => value(self.peer_session(id, true)?),
+            _ => Err(RemoteError::Invalid("unsupported remote registry route").into()),
         }
     }
 }

@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use clap::{Args, Subcommand};
-use hotsheet_cli::remote_servers::machine::MachineRead;
+use hotsheet_cli::remote_servers::machine::{MachineQuery, MachineRead};
 use hotsheet_cli::remote_servers::{
     RemoteCredentialInput, RemoteRuntime, read_remote_credential_input,
 };
@@ -126,43 +126,22 @@ struct MachineArgs {
 }
 
 impl MachineArgs {
-    /// The reads to make, in order, and whether capacity may be skipped for want of a
-    /// project (only when no reading was named).
+    /// The reads to make, through the selection the HTTP route and MCP share (HS2-SW03MK).
     fn reads(&self) -> Result<(Vec<MachineRead>, bool)> {
-        let wait_ms = self
-            .wait_seconds
-            .map(|seconds| seconds.saturating_mul(1000));
-        if self.after.is_some() && usize::from(self.cpu) + usize::from(self.capacity) != 1 {
-            anyhow::bail!("--after needs exactly one of --cpu or --capacity");
+        Ok(self.query().reads()?)
+    }
+
+    fn query(&self) -> MachineQuery {
+        MachineQuery {
+            health: self.health,
+            cpu: self.cpu,
+            capacity: self.capacity,
+            claim_namespaces: self.claims.clone(),
+            after: self.after.clone(),
+            wait_ms: self
+                .wait_seconds
+                .map(|seconds| seconds.saturating_mul(1000)),
         }
-        let cpu_after = match (&self.after, self.cpu) {
-            (Some(after), true) => Some(
-                after
-                    .parse::<u64>()
-                    .map_err(|_| anyhow::anyhow!("--after with --cpu takes a frame seq number"))?,
-            ),
-            _ => None,
-        };
-        let all = !(self.health || self.cpu || self.capacity);
-        let mut reads = Vec::new();
-        if all || self.health {
-            reads.push(MachineRead::Health);
-        }
-        if all || self.cpu {
-            reads.push(MachineRead::Cpu {
-                after: cpu_after,
-                wait_ms: cpu_after.and(wait_ms),
-            });
-        }
-        if all || self.capacity {
-            let after = self.after.clone().filter(|_| self.capacity);
-            reads.push(MachineRead::Capacity {
-                wait_ms: after.as_ref().and(wait_ms),
-                after,
-                claim_namespaces: self.claims.clone(),
-            });
-        }
-        Ok((reads, all))
     }
 }
 

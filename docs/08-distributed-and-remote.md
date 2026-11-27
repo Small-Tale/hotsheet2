@@ -232,6 +232,16 @@ and a refusal keeps only the status and the peer's stable code. `hotsheet-cli
 orchestration capacity show --project <owner> --target <target>` still reads a
 bound target's machine through the orchestration gate.
 
+The `hotsheet_remotes` MCP tool offers the same read as its `machine` action, with
+`health`, `cpu`, `capacity`, `claim_namespaces`, `after` and `wait_ms` (at most 8000)
+in place of the flags, and the paired session as `session` and `renew` (HS2-SW03MK).
+Serverless MCP runs them through the same machine-local workflow the CLI uses; a served
+MCP reaches them through `POST /remotes/{id}/machine`, `GET /remotes/{id}/session` and
+`POST /remotes/{id}/renew`, which are loopback-only like every `/remotes` route. Only the
+reading selection is forwarded, the same combinations are refused before any request,
+and the answers are the readings and the device lifetime, never a session, cookie,
+certificate or key.
+
 Listing performs no network requests and marks cached checkout observations stale.
 Explicit discovery returns live checkouts only on successful authenticated identity
 verification. Unreachable, unauthorized, missing-credential, unsupported, changed-id
@@ -250,12 +260,13 @@ on the issuing machine for that operation. Failed/interrupted credential creatio
 recovered by repeating the registration/review; cleanup intent is persisted before
 writing the secret and never deletes an active reference.
 
-Authenticated `/remotes`, `/remotes/{id}` and `/remotes/{id}/checkouts` expose the
+Authenticated `/remotes`, `/remotes/{id}`, `/remotes/{id}/checkouts` and (HS2-SW03MK)
+`/remotes/{id}/machine`, `/remotes/{id}/session` and `/remotes/{id}/renew` expose the
 same registry workflow. Administration is loopback-only; an off-box mTLS client,
 including a write-capable one, cannot administer this machine's other bindings.
 Read-only/denied certificate roles retain their normal restrictions. The serverless,
 local-HTTP and generated `--project` MCP `hotsheet_remotes` tool supports identity/
-list/register/review/revoke/checkouts. Machine-wide enrollment does not inherit the
+list/register/review/revoke/checkouts/machine/session/renew. Machine-wide enrollment does not inherit the
 project shim's checkout selector. The shim checks its cached literal-loopback origin
 without launching a server, and the HTTP adapter rechecks the actual origin before
 sending. It imports a local `credentials_file` rather than placing values

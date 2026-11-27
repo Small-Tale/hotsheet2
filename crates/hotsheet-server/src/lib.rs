@@ -2351,6 +2351,11 @@ pub fn app(state: AppState) -> Router {
             axum::routing::put(routes::remotes::review).delete(routes::remotes::revoke),
         )
         .route("/remotes/{id}/checkouts", get(routes::remotes::discover))
+        // HS2-SW03MK: the machine read and the paired session of a remote, for a served
+        // MCP `hotsheet_remotes` (loopback-only, as every `/remotes` route is).
+        .route("/remotes/{id}/machine", post(routes::remotes::machine))
+        .route("/remotes/{id}/session", get(routes::remotes::session))
+        .route("/remotes/{id}/renew", post(routes::remotes::renew))
         // HS2-3D8D6V: the orchestration lines of a remote checkout bound here, a long
         // poll by version (machine-local: every `/remotes` route is loopback-only).
         .route(
