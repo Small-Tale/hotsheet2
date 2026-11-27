@@ -355,29 +355,24 @@ impl GitHubTransport for UreqGitHubTransport {
         headers: &[(&str, String)],
         body: Option<&Value>,
     ) -> Result<HttpResponse, String> {
-        let mut request = ureq::request(method, url).timeout(std::time::Duration::from_secs(30));
-        for (name, value) in headers {
-            request = request.set(name, value);
-        }
-        let result = match body {
-            Some(body) => request
-                .set("Content-Type", "application/json")
-                .send_string(&body.to_string()),
-            None => request.call(),
+        let (body, content_type) = match body {
+            Some(body) => (body.to_string().into_bytes(), Some("application/json")),
+            None => (Vec::new(), None),
         };
-        let response = match result {
-            Ok(response) => response,
-            Err(ureq::Error::Status(_, response)) => response,
-            Err(error) => return Err(error.to_string()),
-        };
-        let status = response.status();
-        let mut response_headers = HashMap::new();
-        for name in response.headers_names() {
-            if let Some(value) = response.header(&name) {
-                response_headers.insert(name.to_ascii_lowercase(), value.to_string());
-            }
-        }
-        let body = response.into_string().map_err(|e| e.to_string())?;
+        let mut response = send(
+            method,
+            url,
+            headers,
+            content_type,
+            body,
+            Duration::from_secs(30),
+        )?;
+        let status = response.status().as_u16();
+        let response_headers = response_headers(&response);
+        let body = response
+            .body_mut()
+            .read_to_string()
+            .map_err(|e| e.to_string())?;
         Ok(HttpResponse {
             status,
             headers: response_headers,
@@ -393,30 +388,23 @@ impl GitHubTransport for UreqGitHubTransport {
         body: Option<RawBody<'_>>,
     ) -> Result<BinaryResponse, String> {
         use std::io::Read;
-        let mut request = ureq::request(method, url).timeout(std::time::Duration::from_secs(300));
-        for (name, value) in headers {
-            request = request.set(name, value);
-        }
-        let result = match body {
-            Some(body) => request
-                .set("Content-Type", body.content_type)
-                .send_bytes(body.bytes),
-            None => request.call(),
+        let (bytes, content_type) = match body {
+            Some(body) => (body.bytes.to_vec(), Some(body.content_type)),
+            None => (Vec::new(), None),
         };
-        let response = match result {
-            Ok(response) => response,
-            Err(ureq::Error::Status(_, response)) => response,
-            Err(error) => return Err(error.to_string()),
-        };
-        let status = response.status();
-        let mut response_headers = HashMap::new();
-        for name in response.headers_names() {
-            if let Some(value) = response.header(&name) {
-                response_headers.insert(name.to_ascii_lowercase(), value.to_string());
-            }
-        }
+        let response = send(
+            method,
+            url,
+            headers,
+            content_type,
+            bytes,
+            Duration::from_secs(300),
+        )?;
+        let status = response.status().as_u16();
+        let response_headers = response_headers(&response);
         let mut bytes = Vec::new();
         response
+            .into_body()
             .into_reader()
             .take(MAX_PROVIDER_ATTACHMENT_BYTES as u64 + 1)
             .read_to_end(&mut bytes)
@@ -432,6 +420,52 @@ impl GitHubTransport for UreqGitHubTransport {
             body: bytes,
         })
     }
+}
+
+/// One GitHub request over the hotsheet-http baseline (HS2-9ABVDW). An error status is a
+/// response the provider reads, so it is not turned into an error here. A body is sent
+/// only when there is one, as the ureq 2 transport did.
+fn send(
+    method: &str,
+    url: &str,
+    headers: &[(&str, String)],
+    content_type: Option<&str>,
+    body: Vec<u8>,
+    timeout: Duration,
+) -> Result<ureq::http::Response<ureq::Body>, String> {
+    let agent = hotsheet_http::build(
+        hotsheet_http::config()
+            .http_status_as_error(false)
+            .timeout_global(Some(timeout)),
+    );
+    let mut request = ureq::http::Request::builder().method(method).uri(url);
+    for (name, value) in headers {
+        request = request.header(*name, value);
+    }
+    if let Some(content_type) = content_type {
+        request = request.header("Content-Type", content_type);
+    }
+    let result = if content_type.is_some() {
+        request.body(body).map(|request| agent.run(request))
+    } else {
+        request.body(()).map(|request| agent.run(request))
+    };
+    result
+        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())
+}
+
+/// Response headers by lowercase name; the first value of a repeated header.
+fn response_headers(response: &ureq::http::Response<ureq::Body>) -> HashMap<String, String> {
+    let mut headers = HashMap::new();
+    for name in response.headers().keys() {
+        if let Some(value) = hotsheet_http::header(response, name.as_str()) {
+            headers
+                .entry(name.as_str().to_ascii_lowercase())
+                .or_insert_with(|| value.to_string());
+        }
+    }
+    headers
 }
 
 #[derive(Clone)]

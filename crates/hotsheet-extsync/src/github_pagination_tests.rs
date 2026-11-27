@@ -534,3 +534,108 @@ fn hs2_tag2zp_real_ureq_device_flow_never_contacts_foreign_loopback() {
         std::io::ErrorKind::WouldBlock
     );
 }
+
+/// HS2-9ABVDW: a loopback server answering each request by path, reporting the raw head
+/// and body it read. `/moved` redirects to `/asset`.
+fn real_transport_server(requests: usize) -> (String, std::thread::JoinHandle<Vec<String>>) {
+    use std::io::{BufRead, BufReader, Read, Write};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let origin = format!("http://{}", listener.local_addr().unwrap());
+    let server = std::thread::spawn(move || {
+        let mut seen = Vec::new();
+        for _ in 0..requests {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut reader = BufReader::new(stream.try_clone().unwrap());
+            let mut head = String::new();
+            loop {
+                let mut line = String::new();
+                reader.read_line(&mut line).unwrap();
+                head.push_str(&line);
+                if line == "\r\n" {
+                    break;
+                }
+            }
+            let lower = head.to_ascii_lowercase();
+            let length = lower
+                .lines()
+                .find_map(|l| l.strip_prefix("content-length:"))
+                .map_or(0, |v| v.trim().parse::<usize>().unwrap());
+            let mut body = vec![0; length];
+            reader.read_exact(&mut body).unwrap();
+            let reply = if lower.starts_with("get /moved ") {
+                "HTTP/1.1 302 Found\r\nConnection: close\r\nLocation: /asset\r\nContent-Length: 0\r\n\r\n"
+            } else if lower.starts_with("get /asset ") {
+                "HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: 5\r\nX-Asset: Synthetic\r\n\r\nbytes"
+            } else {
+                "HTTP/1.1 422 Unprocessable Entity\r\nConnection: close\r\nX-RateLimit-Remaining: 41\r\nContent-Length: 18\r\n\r\n{\"message\":\"nope\"}"
+            };
+            stream.write_all(reply.as_bytes()).unwrap();
+            seen.push(head + &String::from_utf8(body).unwrap());
+        }
+        seen
+    });
+    (origin, server)
+}
+
+/// HS2-9ABVDW: the real transport hands an error status back as a response with its
+/// headers (lowercased) and body, sends the JSON body with its content type, and a raw
+/// download follows a redirect without carrying the token to the next location.
+#[test]
+fn hs2_9abvdw_real_transport_reads_error_statuses_and_follows_download_redirects() {
+    let (origin, server) = real_transport_server(3);
+    let transport = UreqGitHubTransport;
+    let response = transport
+        .request(
+            "PATCH",
+            &format!("{origin}/repos/synthetic/repo/issues/1"),
+            &[("Authorization", "Bearer synthetic-token".into())],
+            Some(&json!({ "state": "closed" })),
+        )
+        .unwrap();
+    assert_eq!(response.status, 422);
+    assert_eq!(response.body, "{\"message\":\"nope\"}");
+    assert_eq!(
+        response
+            .headers
+            .get("x-ratelimit-remaining")
+            .map(String::as_str),
+        Some("41")
+    );
+    let download = transport
+        .request_raw(
+            "GET",
+            &format!("{origin}/moved"),
+            &[("Authorization", "Bearer synthetic-token".into())],
+            None,
+        )
+        .unwrap();
+    assert_eq!(download.status, 200);
+    assert_eq!(download.body, b"bytes");
+    assert_eq!(
+        download.headers.get("x-asset").map(String::as_str),
+        Some("Synthetic")
+    );
+    let seen = server.join().unwrap();
+    let patch = seen[0].to_ascii_lowercase();
+    assert!(
+        patch.starts_with("patch /repos/synthetic/repo/issues/1 "),
+        "{patch}"
+    );
+    assert!(
+        patch.contains("authorization: bearer synthetic-token\r\n"),
+        "{patch}"
+    );
+    assert!(
+        patch.contains("content-type: application/json\r\n"),
+        "{patch}"
+    );
+    assert!(patch.ends_with("{\"state\":\"closed\"}"), "{patch}");
+    assert!(
+        seen[1]
+            .to_ascii_lowercase()
+            .contains("authorization: bearer synthetic-token")
+    );
+    let followed = seen[2].to_ascii_lowercase();
+    assert!(followed.starts_with("get /asset "), "{followed}");
+    assert!(!followed.contains("authorization"), "{followed}");
+}
