@@ -668,7 +668,7 @@ test('labels converted demo specimens through Kerf CatalogExample, not app-owned
     ['terminal-visibility-dialog', 1],
     ['ai-conversation', 1],
     ['project-tab', 1],
-    ['project-tabs', 6],
+    ['project-tabs', 8], // HS2-B0RJBY adds the folded-dashboards examples.
     ['resizable-region', 2],
     ['connection-state-banner', 5],
     ['app-shell', 1],
@@ -8221,6 +8221,44 @@ test('resizes ResizableRegion demos through Kerf wireResizableRegions pointer an
   await page.mouse.up();
   await expect(restored).toHaveAttribute('aria-valuenow', '320');
   await expect(demo.getByText('320px')).toBeVisible();
+});
+
+// HS2-B0RJBY: the folded Global Dashboards menu offers every dashboard, checks the current one, and
+// switches the shell like the buttons it replaces.
+test('HS2-B0RJBY folds the project strip dashboards into one menu', async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await page.goto('/ux-demo?component=project-tabs');
+  const folded = page.locator('[data-catalog-example] .project-tab-bar').filter({
+      has: page.getByRole('navigation', { name: 'Open Projects with Folded Dashboards', exact: true }),
+    }),
+    menu = folded.locator('[data-dashboard-menu]'),
+    choice = (mode: string) => folded.locator(`[data-action="set-shell-mode"][data-shell-mode="${mode}"]`);
+  await expect(menu).toHaveAttribute('data-dashboard-menu', 'project');
+  await expect(folded.getByRole('button', { name: 'Systems', exact: true })).toHaveCount(0);
+  await expect(folded.locator('[data-component="quick-ticket-composer-launcher"]')).toHaveText('New ticket…');
+  for (const mode of ['systems', 'terminals', 'stats']) {
+    await menu.getByRole('button', { name: 'Global Dashboards' }).click();
+    await expect(choice('terminals')).toContainText('Workspace Grid');
+    await expect(choice('systems')).toContainText('Systems');
+    await expect(choice('stats')).toContainText('Cross-Project Stats');
+    await choice(mode).click();
+    await expect(menu).toHaveAttribute('data-dashboard-menu', mode);
+  }
+  await menu.getByRole('button', { name: 'Global Dashboards' }).click();
+  await expect(choice('stats')).toHaveAttribute('aria-checked', 'true');
+  await expect(choice('systems')).toHaveAttribute('aria-checked', 'false');
+  await page.keyboard.press('Escape');
+  await expect(
+    page
+      .locator('[data-catalog-example] .project-tab-bar')
+      .filter({
+        has: page.getByRole('navigation', {
+          name: 'Open Projects with Folded Dashboards and a Compact Launcher',
+          exact: true,
+        }),
+      })
+      .locator('[data-component="quick-ticket-composer-launcher"]'),
+  ).toHaveText('Ticket…');
 });
 
 test('reorders demo project tabs through Kerf wireTabBars by keyboard and drag (HS2-KB5PJQ)', async ({ page }) => {

@@ -1,7 +1,7 @@
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PopupMenu, type PopupMenuItem } from '@kerfjs/ui/popup-menu';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
-import { ChartNoAxesCombined, Folder, Grid3X3, ListChevronsUpDown, Plus, Server } from 'lucide';
+import { ChartNoAxesCombined, Folder, Grid3X3, LayoutDashboard, ListChevronsUpDown, Plus, Server } from 'lucide';
 
 import { featureOn } from '../feature-areas';
 import { NAVIGATION_AND_TABS_ACTIONS } from '../interaction-attrs/navigation-and-tabs';
@@ -21,14 +21,68 @@ export type ProjectStripMode = 'project' | 'terminals' | 'stats' | 'systems';
 export function ProjectDashboardModes({
   mode,
   projectStats = false,
+  folded = false,
 }: {
   mode: ProjectStripMode;
   projectStats?: boolean;
+  /** The desktop strip's tabs overflow: fold the buttons into one menu (HS2-B0RJBY). */
+  folded?: boolean;
 }) {
   // Each dashboard belongs to a feature area and leaves the strip while it is off (HS2-3GJZGG). Systems
   // is core: it holds the machine facts the core orchestration inspector used to show (HS2-DR0ZSQ).
   const grid = featureOn('workspace-grid'),
     stats = featureOn('cross-project-stats');
+  // Folding a lone Systems button into a one-item menu frees no room, so it stays a button.
+  if (folded && (grid || stats)) {
+    const choice = (shellMode: ProjectStripMode, label: string, icon: PopupMenuItem['icon'], checked: boolean) => ({
+      label,
+      icon,
+      checked,
+      action: NAVIGATION_AND_TABS_ACTIONS.setShellMode.value,
+      attributes: { 'data-shell-mode': shellMode },
+    });
+    return (
+      <ToolbarControlGroup
+        label="Global Dashboards"
+        single
+        nestedDropdown
+        menuInset="default"
+        appearance="borderless"
+        size="compact"
+        content="icon"
+      >
+        <PopupMenu
+          label="Global Dashboards"
+          icon={<LucideIcon size="s" icon={LayoutDashboard} name="layout-dashboard" />}
+          caret={false}
+          rootAttributes={{ 'data-dashboard-menu': mode }}
+          items={[
+            ...(grid
+              ? [
+                  choice(
+                    'terminals',
+                    'Workspace Grid',
+                    <LucideIcon icon={Grid3X3} name="grid-3x3" />,
+                    mode === 'terminals',
+                  ),
+                ]
+              : []),
+            choice('systems', 'Systems', <LucideIcon icon={Server} name="server" />, mode === 'systems'),
+            ...(stats
+              ? [
+                  choice(
+                    'stats',
+                    'Cross-Project Stats',
+                    <LucideIcon icon={ChartNoAxesCombined} name="chart-no-axes-combined" />,
+                    mode === 'stats' && !projectStats,
+                  ),
+                ]
+              : []),
+          ]}
+        />
+      </ToolbarControlGroup>
+    );
+  }
   return (
     <ToolbarControlGroup
       label="Global Dashboards"

@@ -57,6 +57,8 @@ export interface AppShellProps {
   workspaceSearchOpen?: boolean;
   /** The current ticket view's primary action, rendered in the project strip's far-edge zone (HS2-PNCDAE). */
   projectTabAction?: TicketViewActionSpec;
+  /** The project strip's Global Dashboards buttons fold into one menu while its tabs overflow (HS2-B0RJBY). */
+  dashboardsFolded?: boolean;
   pageHeader?: SafeHtml;
   /** On a phone, a compact view-switcher page header that replaces `pageHeader`. */
   mobileView?: AppShellMobileView;
@@ -132,6 +134,7 @@ export function AppShell({
   announcer,
   workspaceSearchOpen = false,
   projectTabAction,
+  dashboardsFolded = false,
   pageHeader,
   mobileView,
   workspace,
@@ -364,6 +367,7 @@ export function AppShell({
               mode={mode}
               projectStats={projectStats}
               workspaceAction={projectTabAction}
+              dashboardsFolded={dashboardsFolded}
               mobile={mobile}
               surface="default"
               divider={mode === 'terminals'}

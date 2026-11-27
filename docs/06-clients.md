@@ -604,11 +604,15 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   its full name as the tab's title on hover (HS2-08P0V5, Kerf KF-0M3ZPT).
   Add project stays immediately after the last project tab;
   only when the tabs overflow and the strip shrinks and scrolls does it end up beside the
-  ticket-view action (HS2-NE8JBS). While the project tabs overflow the strip (for example one
-  project with its attention badge at 1024px with the inspector open), the far-edge New ticket
+  ticket-view action (HS2-NE8JBS). While the project tabs overflow the strip, the strip first folds
+  its Global Dashboards buttons (Workspace Grid, Systems, Cross-Project Stats) into one Global
+  Dashboards menu whose choices switch the shell exactly like the buttons, the current one checked; a
+  lone Systems button, with both dashboard features off, stays a button (HS2-B0RJBY). If the tabs
+  still overflow (for example several projects at 1024px), the far-edge New ticket
   launcher shortens to the terminal rail's compact `Ticket…` label so the tabs fit; it returns to
   `New ticket…` once the strip has room for the full label again, so it never alternates at the
-  boundary (HS2-RNR35H). Settings → Commands' `Add group…` and `Add command…` pills shorten to their
+  boundary (HS2-RNR35H); the dashboard buttons return after it, once the strip has room for them
+  (HS2-B0RJBY). One project at 1024px with the inspector open keeps the full `New ticket…` label. Settings → Commands' `Add group…` and `Add command…` pills shorten to their
   compact `Group…` and `Command…` form under the same rule, so at medium widths such as 1100px with
   both rails open the project tab keeps its label (HS2-MQPY61). The overflow, the launcher's width, and the bar's spare room (`endFree`) come only from
   Kerf's public `wireTabBars` `onFitChange` report, never from TabBar's private parts or the app's own
