@@ -87,8 +87,11 @@ function TemplateDetail({ state, template }: { state: OrchestrationTemplateDialo
   const numbers = stepNumbers(preview?.steps ?? template.steps);
   return (
     <List gap="m" rootAttributes={{ 'data-template-detail': template.template_id }}>
-      {problems.length > 0 ? (
-        <List controlInsets="trl">
+      {/* HS2-DTP7QR: both banner slots are always present (hidden when empty), so a preview answer that adds or
+          removes a problem never shifts the inputs below: a shift rebuilt or moved them and closed an open select
+          (WebKit has no state-preserving moveBefore()). */}
+      <List controlInsets="trl" hidden={problems.length === 0}>
+        {problems.length > 0 ? (
           <StateBanner
             copyLayout="stacked"
             tone="danger"
@@ -99,13 +102,13 @@ function TemplateDetail({ state, template }: { state: OrchestrationTemplateDialo
             }
             detail={problems.map((problem) => problemText(template, problem, preview)).join(' ')}
           />
-        </List>
-      ) : undefined}
-      {state.failure ? (
-        <List controlInsets="trl">
+        ) : undefined}
+      </List>
+      <List controlInsets="trl" hidden={!state.failure}>
+        {state.failure ? (
           <StateBanner copyLayout="stacked" tone="danger" urgency="alert" title="Apply Failed" detail={state.failure} />
-        </List>
-      ) : undefined}
+        ) : undefined}
+      </List>
       {template.inputs.length > 0 ? (
         <OrchestrationInspectorSection label="Inputs">
           <List gap="m" controlInsets="rl">

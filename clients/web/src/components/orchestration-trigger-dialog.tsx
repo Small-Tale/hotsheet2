@@ -409,13 +409,16 @@ function SetupDetail({ state }: { state: OrchestrationTriggerDialogState }) {
     local = formProblem(form);
   return (
     <List gap="m" rootAttributes={{ 'data-trigger-setup': state.editing ?? 'new' }}>
-      {state.failure ? (
-        <List controlInsets="trl">
+      {/* HS2-CJYD5A: both banner slots are always present (hidden when empty), so a banner a review answer adds or
+          removes never shifts the columns below. A shift moved or rebuilt them, which closed a select a person had
+          open (WebKit has no state-preserving moveBefore()). */}
+      <List controlInsets="trl" hidden={!state.failure}>
+        {state.failure ? (
           <StateBanner copyLayout="stacked" tone="danger" urgency="alert" title="Save Failed" detail={state.failure} />
-        </List>
-      ) : undefined}
-      {problems.length > 0 && !local ? (
-        <List controlInsets="trl">
+        ) : undefined}
+      </List>
+      <List controlInsets="trl" hidden={problems.length === 0 || Boolean(local)}>
+        {problems.length > 0 && !local ? (
           <StateBanner
             copyLayout="stacked"
             tone="danger"
@@ -424,8 +427,8 @@ function SetupDetail({ state }: { state: OrchestrationTriggerDialogState }) {
             }
             detail={problems.map(triggerProblemText).join(' ')}
           />
-        </List>
-      ) : undefined}
+        ) : undefined}
+      </List>
       <Grid minColumnWidth={px(320)} gap="m">
         <List gap="m">
           <OrchestrationInspectorSection label="When">
