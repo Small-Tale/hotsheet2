@@ -164,7 +164,18 @@ test('clears the halted terminal example from its menu at wide and phone widths 
     await page.goto('/ux-demo?component=terminal-dashboard');
     const tile = page.locator('[data-component="terminal-tile"][data-terminal-key="demo:halted"]');
     await expect(tile).toHaveAttribute('data-halted', 'true');
+    // HS2-C4WMX1: the catalog loads its UX Review link after the first render, and at phone width that
+    // link wraps the pane header onto another row, moving the stage 47px down. Under load it arrived
+    // after the click, leaving the menu at the old point. Wait for the settled chrome, then put the tile
+    // mid-pane: a trigger left at the pane's bottom edge has no room below, so the menu correctly opens
+    // above it instead.
+    await expect(page.getByRole('link', { name: /in UX Review$/ })).toHaveCount(1);
     const trigger = tile.getByRole('button', { name: 'More Actions' });
+    await trigger.evaluate((node) => {
+      node.scrollIntoView({ block: 'center' });
+    });
+    const resting = (await trigger.boundingBox())!;
+    expect(844 - (resting.y + resting.height), 'room below the trigger for the menu').toBeGreaterThan(240);
     await trigger.click();
     const clear = page.getByRole('menuitem', { name: 'Clear stopped state' });
     // The example frame is the containing block of the menu's fixed anchor; the menu must still open at its
