@@ -7819,8 +7819,9 @@ and in the No Plan Yet empty state beside Propose Plan. It opens a Kerf
 - a danger banner counts the problems that keep **Apply Template** disabled: a required
   input left empty (checked locally) and the preview's own problems.
 
-Typing changes only the dialog; leaving a field or changing a select or checkbox reads
-the preview again (nothing polls). **Apply Template** applies under one operation id
+Typing changes only the dialog at once; a 400 ms pause in typing, leaving a field, or
+changing a select or checkbox reads the preview again (keystroke coalescing; nothing
+polls), and the same inputs are never read twice in a row. **Apply Template** applies under one operation id
 kept while the same apply is repeated: the result says the planner is adapting the
 template (or that it waits for the planner, with **Apply Again**), and **Open <goal>**
 opens the new goal ticket. The planner's tool is the one Propose Plan would choose. On a

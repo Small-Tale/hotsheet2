@@ -1117,10 +1117,19 @@ describe('Use Template… through the view (HS2-A4RVYA)', () => {
     expect(state().inputs).toEqual({ feature: '', flag: false });
     expect(state().goals.map((goal) => goal.slug)).toEqual(['LCH-1']);
     expect(state().projects.length).toBeGreaterThan(0);
-    // Typing changes the input only; the change event reads the summary again.
+    // Typing changes the input at once; a pause in typing, or the change event, reads the summary again.
+    t.controller.editTemplateInput('feature', 'Sea', false);
     t.controller.editTemplateInput('feature', 'Search', false);
     expect(t.calls.filter(([operation]) => operation === 'preview')).toHaveLength(1);
     expect(state().changed).toEqual(['feature']);
+    await vi.waitFor(() => {
+      expect(t.calls.filter(([operation]) => operation === 'preview')).toHaveLength(2);
+    });
+    expect(t.calls.filter(([operation]) => operation === 'preview')[1][1].inputs).toEqual({
+      feature: 'Search',
+      flag: false,
+    });
+    // The change after the pause asks nothing new: the same inputs were just read.
     t.controller.editTemplateInput('feature', 'Search', true);
     await vi.waitFor(() => {
       expect(state().preview?.goal_title).toBe('Search');

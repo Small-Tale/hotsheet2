@@ -322,6 +322,9 @@ export interface OrchestrationViewDependencies {
   readonly delay?: BackoffDelay;
 }
 
+/** HS2-A4RVYA: how long typing in a template input pauses before the summary is read again. */
+export const TEMPLATE_PREVIEW_PAUSE_MS = 400;
+
 const message = (reason: unknown) => (reason instanceof Error ? reason.message : String(reason));
 
 /** The selected run's records as the inspector shows them; an unread record leaves its part absent. */
@@ -454,6 +457,8 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     templatePreviews = 0,
     /** The inputs and choices of the last preview asked for. */
     lastPreview = '',
+    /** A pause in typing reads the summary again (keystroke coalescing, no polling). */
+    previewTimer: ReturnType<typeof setTimeout> | undefined,
     /** The operation id of the apply on screen, kept so Apply Again repeats the same apply. */
     applyOperation: string | undefined;
   /** HS2-9XJEZC: Run Validation requests waiting on a person, by `<step id>:<validation step id>`. */
@@ -1331,14 +1336,23 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
   function editTemplateInput(key: string, value: unknown, commit: boolean) {
     const state = templateDialog.value;
     if (!state || state.mode !== 'template') return;
-    applyOperation = undefined;
+    // A different value is a different apply; leaving a field unchanged keeps the one on screen.
+    if (state.inputs[key] !== value) applyOperation = undefined;
     templateDialog.value = {
       ...state,
       inputs: { ...state.inputs, [key]: value },
-      changed: state.changed.includes(key) ? state.changed : [...state.changed, key],
+      // Only a different value waits for the next summary; committing the same value changes nothing.
+      changed: state.changed.includes(key) || state.inputs[key] === value ? state.changed : [...state.changed, key],
       failure: undefined,
     };
+    if (previewTimer !== undefined) clearTimeout(previewTimer);
+    previewTimer = undefined;
     if (commit) void previewTemplate();
+    else
+      previewTimer = setTimeout(() => {
+        previewTimer = undefined;
+        void previewTemplate();
+      }, TEMPLATE_PREVIEW_PAUSE_MS);
   }
 
   /** A step switched between searching first and always creating a new ticket. */
@@ -1646,6 +1660,8 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
       if (state) templateDialog.value = { ...state, detailActive: false };
     },
     closeTemplates: () => {
+      if (previewTimer !== undefined) clearTimeout(previewTimer);
+      previewTimer = undefined;
       templateDialog.value = undefined;
       applyOperation = undefined;
     },
@@ -1667,6 +1683,7 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     },
     placeTimeline,
     dispose() {
+      if (previewTimer !== undefined) clearTimeout(previewTimer);
       follows.abort();
       streamStop?.();
       eventsStop?.();

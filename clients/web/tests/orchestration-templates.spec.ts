@@ -152,9 +152,9 @@ test('HS2-A4RVYA Use Template… previews a template, applies it once and hands 
 
     const feature = dialog.getByLabel('Feature', { exact: true });
     await feature.fill('Rate limits');
-    // Typing alone reads nothing; the change reads the summary again.
+    // Apply is enabled at once; a pause in typing reads the summary again, and leaving the field asks
+    // nothing more.
     await expect(apply).toBeEnabled();
-    await feature.blur();
     await expect(dialog.locator('[data-template-step="build"]')).toContainText(
       'Find or create “Build Rate limits” · high priority',
     );
@@ -182,6 +182,8 @@ test('HS2-A4RVYA Use Template… previews a template, applies it once and hands 
     // Selecting the template again starts from its defaults.
     await expect(dialog.getByLabel('Feature', { exact: true })).toHaveValue('');
     await dialog.getByLabel('Feature', { exact: true }).fill('Rate limits');
+    await expect(dialog.locator('[data-template-step="build"]')).toContainText('“Build Rate limits”');
+    await dialog.getByLabel('Feature', { exact: true }).blur();
     await capture(page, 'use-390-light');
     await page.emulateMedia({ colorScheme: 'dark' });
     await capture(page, 'use-390-dark');
