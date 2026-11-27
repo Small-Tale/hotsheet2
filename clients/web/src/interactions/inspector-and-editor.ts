@@ -48,10 +48,11 @@ import { ATTACHMENTS_AND_GALLERY_TARGETS } from '../interaction-attrs/attachment
 import { INSPECTOR_AND_EDITOR_ACTIONS, INSPECTOR_AND_EDITOR_TARGETS } from '../interaction-attrs/inspector-and-editor';
 import { isPopupMenuOpen } from '../popup-menu-state';
 import { manuallyResizedTicketEditorHeight, saveTicketEditorSize, ticketEditorKind } from '../ticket-editor-size';
-import { noteEditPatch, type TicketFieldConflict } from '../ticket-field-reconciliation';
+import { noteEditPatch, resolvedConflictPatch, type TicketFieldConflict } from '../ticket-field-reconciliation';
 import { type TicketPatch } from '../ticket-operations';
 import {
   clearFrameFeedbackReply,
+  editReaderFieldConflict,
   reconcileTicketReaderFrame,
   startedPhasePatch,
   ticketEditTarget,
@@ -119,6 +120,7 @@ export interface InspectorAndEditorInteractionsDependencies {
   ) => { draft: string; base: string } | undefined;
   /** Drop a field's recovery copy once its conflict card is resolved (HS2-7D3MPP). */
   readonly clearConflictRecoveryCopy: (conflict: TicketFieldConflict) => void;
+  readonly resolveLinkedReaderConflict: (frameId: string, choice: 'theirs' | 'merged') => Promise<boolean>;
   readonly beginDetailsFinish: (reader?: boolean) => DetailsFinishTask;
   readonly finishDetailsEdit: (reader?: boolean) => Promise<boolean>;
   readonly readerEditingNoteId: Signal<string | undefined>;
@@ -216,6 +218,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     readerDetailsAutosave,
     restoreTicketDraft,
     clearConflictRecoveryCopy,
+    resolveLinkedReaderConflict,
     detailsAutosave,
     beginDetailsFinish,
     finishDetailsEdit,
@@ -280,8 +283,10 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     if (linked) replaceLinkedReaderFrame(linked.id, (frame) => ({ ...frame, ticket }));
     else selectedTicket.value = ticket;
   }
-  const conflictResolutionInput = createCoalescedInput<string>((value) => {
-    fieldConflictResolution.value = value;
+  // A linked reader frame's card keeps its merge text on the frame (HS2-JT2AFG); the inspector's in its signal.
+  const conflictResolutionInput = createCoalescedInput<{ frameId?: string; value: string }>(({ frameId, value }) => {
+    if (frameId) replaceLinkedReaderFrame(frameId, (frame) => editReaderFieldConflict(frame, value));
+    else fieldConflictResolution.value = value;
   });
   lifetime.add(() => {
     conflictResolutionInput.cancel();
@@ -488,19 +493,10 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
   function isReaderSurface(target: Element) {
     return Boolean(target.closest('[data-component="ticket-reader"]'));
   }
-  function resolvedConflictPatch(conflict: TicketFieldConflict, value: string): TicketPatch {
-    if (conflict.field === 'note')
-      return noteEditPatch(selectedTicket.value, conflict.key.slice('note:'.length), value);
-    if (conflict.field === 'tags')
-      return {
-        tags: value
-          .split(',')
-          .map((item) => item.trim())
-          .filter(Boolean),
-      };
-    if (conflict.field === 'up_next') return { up_next: value.toLocaleLowerCase() === 'true' };
-    if (conflict.field === 'blocked_reason') return { blocked_reason: value.trim() || null };
-    return { [conflict.field]: value };
+  /** The linked reader frame whose own conflict card contains `target`, or undefined (HS2-JT2AFG). */
+  function conflictFrame(target: Element) {
+    const frame = linkedReaderFrame(target);
+    return frame?.fieldConflict ? frame : undefined;
   }
   lifetime.add(
     delegate(
@@ -509,7 +505,10 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
       INSPECTOR_AND_EDITOR_TARGETS.ticketConflictResolutionField.selector,
       (_event, target) => {
         // The textarea keeps the live merge draft; the inspector re-renders per typing pause (HS2-9CWDSB).
-        conflictResolutionInput.schedule((target as HTMLTextAreaElement).value);
+        conflictResolutionInput.schedule({
+          frameId: conflictFrame(target)?.id,
+          value: (target as HTMLTextAreaElement).value,
+        });
       },
     ),
   );
@@ -519,19 +518,34 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.acceptRemoteTicketField.selector, () => {
-      conflictResolutionInput.cancel();
-      const conflict = fieldConflict.value;
-      if (!conflict) return;
-      updateConflictDraft(conflict.field, conflict.theirs);
-      fieldConflict.value = undefined;
-      fieldConflictResolution.value = '';
-      clearConflictRecoveryCopy(conflict);
-    }),
+    delegate(
+      document.body,
+      'click',
+      INSPECTOR_AND_EDITOR_ACTIONS.acceptRemoteTicketField.selector,
+      (_event, target) => {
+        conflictResolutionInput.cancel();
+        const frame = conflictFrame(target);
+        if (frame) {
+          void resolveLinkedReaderConflict(frame.id, 'theirs');
+          return;
+        }
+        const conflict = fieldConflict.value;
+        if (!conflict) return;
+        updateConflictDraft(conflict.field, conflict.theirs);
+        fieldConflict.value = undefined;
+        fieldConflictResolution.value = '';
+        clearConflictRecoveryCopy(conflict);
+      },
+    ),
   );
   lifetime.add(
-    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.applyTicketFieldMerge.selector, () => {
+    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.applyTicketFieldMerge.selector, (_event, target) => {
       conflictResolutionInput.flush();
+      const frame = conflictFrame(target);
+      if (frame) {
+        void resolveLinkedReaderConflict(frame.id, 'merged');
+        return;
+      }
       const conflict = fieldConflict.value;
       if (!conflict) return;
       const value = fieldConflictResolution.value;
@@ -543,7 +557,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
       fieldConflict.value = undefined;
       fieldConflictResolution.value = '';
       // The copy stays until the chosen text is saved, so a failed save can still be recovered.
-      void updateSelectedTracked(resolvedConflictPatch(conflict, value)).then((saved) => {
+      void updateSelectedTracked(resolvedConflictPatch(conflict, value, selectedTicket.value)).then((saved) => {
         if (saved) clearConflictRecoveryCopy(conflict);
       });
     }),
@@ -699,6 +713,9 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
         flushDraftInputs();
         const frame = linkedReaderFrame(field);
         if (frame) {
+          // Focus moving into the frame's own conflict card keeps the editor open, as the inspector's does,
+          // so the card never shifts under the pointer before its action lands (HS2-3TSEAX, HS2-JT2AFG).
+          if (next instanceof Element && next.closest('[data-component="ticket-field-conflict"]')) return;
           const saves = linkedReaderSaves(frame.id);
           if (frame.edit.detailsMode === 'write') saves.details.retryFailedSave(frame.edit.detailsDraft);
           void saves.details.flush().then((saved) => {

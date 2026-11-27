@@ -668,7 +668,7 @@ test('labels converted demo specimens through Kerf CatalogExample, not app-owned
     ['terminal-visibility-dialog', 1],
     ['ai-conversation', 1],
     ['project-tab', 1],
-    ['project-tabs', 6],
+    ['project-tabs', 8], // HS2-B0RJBY adds the folded-dashboards examples.
     ['resizable-region', 2],
     ['connection-state-banner', 5],
     ['app-shell', 1],
@@ -4107,6 +4107,35 @@ test('opens the TicketReader dialog when its entry is chosen from the catalog si
   const reader = page.getByRole('dialog', { name: 'Read and edit HS2-H892P1' });
   await expect(reader).toBeVisible();
   await expect(reader).toHaveJSProperty('open', true);
+});
+
+test('shows a linked reader overlap as the conflict card beneath its field in the TicketReader demo (HS2-JT2AFG)', async ({
+  page,
+}) => {
+  const reader = page.locator('[data-component="ticket-reader"]'),
+    card = reader.locator('.ticket-info-panel [data-component="ticket-field-conflict"]'),
+    details = reader.locator('.ticket-info-panel__details-surface').first();
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    // The plain demo link has no conflict.
+    await page.goto('/ux-demo?component=ticket-reader');
+    await expect(reader).toBeVisible();
+    await expect(card).toHaveCount(0);
+    // Details: the linked reader (2 of 2) shows the card beneath Details; Use Theirs settles it.
+    await page.goto('/ux-demo?component=ticket-reader&field-conflict=details');
+    await expect(card).toHaveAttribute('data-conflict-field', 'details');
+    await expect(reader).toContainText('Reader 2 of 2');
+    const detailsBox = await details.boundingBox(),
+      cardBox = await card.boundingBox();
+    expect(cardBox!.y).toBeGreaterThan(detailsBox!.y);
+    await card.getByRole('button', { name: 'Use Theirs' }).click();
+    await expect(card).toHaveCount(0);
+    // Note: the card sits beneath that note; Apply Merged Value settles it.
+    await page.goto('/ux-demo?component=ticket-reader&field-conflict=note');
+    await expect(card).toHaveAttribute('data-conflict-field', 'note:reader-note');
+    await card.getByRole('button', { name: 'Apply Merged Value' }).click();
+    await expect(card).toHaveCount(0);
+  }
 });
 
 test('closes the TicketReader modal when leaving its demo', async ({ page }) => {
@@ -8221,6 +8250,44 @@ test('resizes ResizableRegion demos through Kerf wireResizableRegions pointer an
   await page.mouse.up();
   await expect(restored).toHaveAttribute('aria-valuenow', '320');
   await expect(demo.getByText('320px')).toBeVisible();
+});
+
+// HS2-B0RJBY: the folded Global Dashboards menu offers every dashboard, checks the current one, and
+// switches the shell like the buttons it replaces.
+test('HS2-B0RJBY folds the project strip dashboards into one menu', async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await page.goto('/ux-demo?component=project-tabs');
+  const folded = page.locator('[data-catalog-example] .project-tab-bar').filter({
+      has: page.getByRole('navigation', { name: 'Open Projects with Folded Dashboards', exact: true }),
+    }),
+    menu = folded.locator('[data-dashboard-menu]'),
+    choice = (mode: string) => folded.locator(`[data-action="set-shell-mode"][data-shell-mode="${mode}"]`);
+  await expect(menu).toHaveAttribute('data-dashboard-menu', 'project');
+  await expect(folded.getByRole('button', { name: 'Systems', exact: true })).toHaveCount(0);
+  await expect(folded.locator('[data-component="quick-ticket-composer-launcher"]')).toHaveText('New ticket…');
+  for (const mode of ['systems', 'terminals', 'stats']) {
+    await menu.getByRole('button', { name: 'Global Dashboards' }).click();
+    await expect(choice('terminals')).toContainText('Workspace Grid');
+    await expect(choice('systems')).toContainText('Systems');
+    await expect(choice('stats')).toContainText('Cross-Project Stats');
+    await choice(mode).click();
+    await expect(menu).toHaveAttribute('data-dashboard-menu', mode);
+  }
+  await menu.getByRole('button', { name: 'Global Dashboards' }).click();
+  await expect(choice('stats')).toHaveAttribute('aria-checked', 'true');
+  await expect(choice('systems')).toHaveAttribute('aria-checked', 'false');
+  await page.keyboard.press('Escape');
+  await expect(
+    page
+      .locator('[data-catalog-example] .project-tab-bar')
+      .filter({
+        has: page.getByRole('navigation', {
+          name: 'Open Projects with Folded Dashboards and a Compact Launcher',
+          exact: true,
+        }),
+      })
+      .locator('[data-component="quick-ticket-composer-launcher"]'),
+  ).toHaveText('Ticket…');
 });
 
 test('reorders demo project tabs through Kerf wireTabBars by keyboard and drag (HS2-KB5PJQ)', async ({ page }) => {

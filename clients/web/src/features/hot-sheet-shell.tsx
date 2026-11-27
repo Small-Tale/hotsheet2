@@ -252,6 +252,9 @@ export interface HotSheetShellDependencies {
    * (HS2-RNR35H) and Settings → Commands its compact "Group…"/"Command…" pills (HS2-MQPY61);
    * `projectTabActionFit` decides it from Kerf's fit report. */
   projectTabActionCompact: Signal<boolean>;
+  /** The project strip's tabs still overflow, so its Global Dashboards buttons fold into one menu before
+   * the launcher compacts (HS2-B0RJBY); `projectTabActionFit` decides it from Kerf's fit report. */
+  projectDashboardsFolded: Signal<boolean>;
   workspaceSearchModel: SearchFieldModel;
   guidanceSearchModel: SearchFieldModel;
   workspaceSurfaceProps: () => WorkspaceSurfaceProps;
@@ -356,6 +359,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
     viewMode,
     viewportMobile,
     projectTabActionCompact,
+    projectDashboardsFolded,
     workspaceSearchModel,
     guidanceSearchModel,
     workspaceSurfaceProps,
@@ -505,6 +509,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
       const systemsView = shellMode.value === 'systems' ? systems?.view() : undefined;
       return (
         <MainShell
+          dashboardsFolded={projectDashboardsFolded.value}
           tabs={tabs}
           minimizedProjects={minimizedProjects}
           announcerTrigger={announcerTrigger()}
@@ -599,6 +604,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
         );
       return (
         <MainShell
+          dashboardsFolded={projectDashboardsFolded.value}
           tabs={tabs}
           minimizedProjects={minimizedProjects}
           announcerTrigger={announcerTrigger()}
@@ -652,6 +658,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
     if (tabs.length === 0 && minimizedProjects.length > 0)
       return (
         <MainShell
+          dashboardsFolded={projectDashboardsFolded.value}
           tabs={tabs}
           minimizedProjects={minimizedProjects}
           announcerTrigger={announcerTrigger()}
@@ -789,6 +796,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
     const minimizedTicketList = minimizedTickets();
     return (
       <MainShell
+        dashboardsFolded={projectDashboardsFolded.value}
         tabs={tabs}
         minimizedProjects={minimizedProjects}
         announcerTrigger={announcerTrigger()}

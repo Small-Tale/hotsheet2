@@ -10,10 +10,19 @@ import WebSocket from 'ws';
 
 import { withoutGitRepositoryEnv } from '../scripts/repository-env.mjs';
 import type { ConversationMessage } from '../src/ai-conversation';
-import type { AdvisoryClaimStatus, ChangeEvent, FullTicket, MediaAnnotation, Note, TicketRow } from '../src/api';
+import type {
+  AdvisoryClaimStatus,
+  ChangeEvent,
+  FullTicket,
+  MediaAnnotation,
+  Note,
+  PermissionRequest,
+  TicketRow,
+} from '../src/api';
 import type { ConversationExportPayload } from '../src/conversation-export';
 import { createConversationExportBridge } from '../src/conversation-export-bridge';
 import { isFeedbackNeeded } from '../src/feedback-needed';
+import type { PermissionDecision, PermissionScope } from '../src/permission-notifications';
 import { projectScopedServerPath } from '../src/project-bridge';
 import { hostHealthFixture } from '../src/ux-demo/host-health-fixtures';
 import { glanceScenario } from '../src/ux-demo/live-state-fixtures';
@@ -30,12 +39,61 @@ import { ticketsJson } from './ticket-page-fixture';
 import { editLongTitleThroughWrappingEditor } from './title-editor-geometry';
 
 /**
+ * The mocked project's permission identity: `ask_project` (`crates/hotsheet-server/src/routes/permissions.rs`)
+ * names a registered checkout's ask `checkout:<id>` (HS2-K7CZR2, HS2-GM6A8W).
+ */
+const DEMO_PERMISSION_PROJECT = 'checkout:demo-checkout';
+
+/**
  * The server's `permission_asked` nudge (`crates/hotsheet-server/src/lib.rs`): `store` is the asking
  * project's identity (`checkout:<id>` for a registered checkout), `slug` is the tool, and `message`
  * is omitted rather than null (HS2-K7CZR2).
  */
-const permissionAskedEvent = (id: string, tool = 'Bash') =>
-  ({ store: 'checkout:demo-checkout', kind: 'permission_asked', id, slug: tool }) satisfies ChangeEvent;
+const permissionAskedEvent = (id: string, tool = 'Bash', store = DEMO_PERMISSION_PROJECT) =>
+  ({ store, kind: 'permission_asked', id, slug: tool }) satisfies ChangeEvent;
+
+/**
+ * The server's `permission_resolved` nudge for an answered request (`routes/terminals/signals.rs`):
+ * `store` is the request's project, `slug` is empty, and `message` is `<decision>:<scope>` (HS2-GM6A8W).
+ */
+const permissionAnsweredEvent = (
+  id: string,
+  answer: `${PermissionDecision}:${PermissionScope}`,
+  store = DEMO_PERMISSION_PROJECT,
+) => ({ store, kind: 'permission_resolved', id, slug: '', message: answer }) satisfies ChangeEvent;
+
+/**
+ * The server's `permission_resolved` nudge for a request removed without an answer from this
+ * client's routes (timeout, withdrawn ask; `set_on_removed` in `crates/hotsheet-server/src/lib.rs`):
+ * `store` is the request's project, `slug` is the tool, and `message` is omitted (HS2-GM6A8W).
+ */
+const permissionRemovedEvent = (id: string, tool = 'Bash', store = DEMO_PERMISSION_PROJECT) =>
+  ({ store, kind: 'permission_resolved', id, slug: tool }) satisfies ChangeEvent;
+
+/**
+ * One `GET /permissions` entry as the server's `PermissionInfo` (`routes/permissions.rs`) serializes it:
+ * `project`, `always_allow_supported` and `suggestions` are always present; `agent`, `requester` and
+ * `orchestrator` are omitted when absent (HS2-GM6A8W).
+ */
+type ServerPermissionInfo = { [Key in keyof PermissionRequest]: PermissionRequest[Key] } & Required<
+  Pick<PermissionRequest, 'project' | 'always_allow_supported' | 'suggestions'>
+>;
+const pendingPermission = <Request extends Pick<PermissionRequest, 'id' | 'connection' | 'tool' | 'action'>>(
+  request: Request & Partial<ServerPermissionInfo>,
+): ServerPermissionInfo & Request => ({
+  project: DEMO_PERMISSION_PROJECT,
+  always_allow_supported: false,
+  suggestions: [],
+  ...request,
+});
+
+/**
+ * The server's terminal nudges (`emit_terminal_question` / `emit_terminal_halted` in
+ * `routes/terminals/signals.rs`) are not store-scoped: `store` and `slug` are empty, and only a
+ * detected halt carries its message (HS2-GM6A8W).
+ */
+const terminalEvent = (kind: 'terminal_question' | 'terminal_halted', id: string, message?: string) =>
+  ({ store: '', kind, id, slug: '', ...(message === undefined ? {} : { message }) }) satisfies ChangeEvent;
 
 test('routes live server notices into the project inbox and bell (HS2-ZP869N)', async ({ page }, testInfo) => {
   test.setTimeout(120_000);
@@ -1337,7 +1395,7 @@ async function haltedSessionFixture(page: Page) {
           }>;
         }
       | undefined,
-    pending: Array<{ id: number; connection: string; project: string; tool: string; action: string }> = [],
+    pending: ServerPermissionInfo[] = [],
     failing = false,
     cursor = 0;
   const questionAnswers: Array<{
@@ -1348,7 +1406,7 @@ async function haltedSessionFixture(page: Page) {
   }> = [];
   const sockets: import('@playwright/test').WebSocketRoute[] = [];
   const terminalGets: string[] = [];
-  const events: Array<{ cursor: number; store: string; kind: string; id: string; slug: string }> = [];
+  const events: Array<ChangeEvent & { cursor: number }> = [];
   await page.route('**/terminals', (route) => {
     if (route.request().method() !== 'GET') return route.fallback();
     terminalGets.push(new URL(route.request().url()).pathname);
@@ -1373,7 +1431,7 @@ async function haltedSessionFixture(page: Page) {
     questionAnswers.push(body);
     await route.fulfill({ status: 204 });
     question = undefined;
-    await emit('terminal_question');
+    await emit(terminalEvent('terminal_question', 'halt-worker'));
   });
   await page.route('**/ws/poll*', (route) => {
     const since = Number(new URL(route.request().url()).searchParams.get('since') ?? cursor);
@@ -1389,10 +1447,10 @@ async function haltedSessionFixture(page: Page) {
   await page.routeWebSocket(/\/terminals\/[^/?]+\/attach(?:\?.*)?$/, (route) => {
     void route.close();
   });
-  const emit = async (kind: string, id = 'halt-worker') => {
+  const emit = async (shape: ChangeEvent) => {
     await expect.poll(() => sockets.length).toBeGreaterThan(0);
     cursor += 1;
-    const event = { cursor, store: '', kind, id, slug: '' };
+    const event = { ...shape, cursor };
     events.push(event);
     for (const socket of sockets) socket.send(JSON.stringify(event));
   };
@@ -1406,25 +1464,25 @@ async function haltedSessionFixture(page: Page) {
     },
     halt: async (at?: string) => {
       halt = at ? { at, message: `Selected model is at capacity (${at}).`, error_type: 'overloaded' } : undefined;
-      await emit('terminal_halted');
+      await emit(terminalEvent('terminal_halted', 'halt-worker', halt?.message));
     },
     question: async (toolUseId?: string, questions?: NonNullable<typeof question>['questions']) => {
       question = toolUseId
         ? { at: 'now', question: 'Which direction should I take?', tool_use_id: toolUseId, questions }
         : undefined;
-      await emit('terminal_question');
+      await emit(terminalEvent('terminal_question', 'halt-worker'));
     },
     permission: async (connection = 'claude-worker') => {
-      pending = [{ id: 99, connection, project: '/work/demo', tool: 'Bash', action: 'cargo test' }];
-      await emit('permission_asked', '99');
+      pending = [pendingPermission({ id: 99, connection, project: '/work/demo', tool: 'Bash', action: 'cargo test' })];
+      await emit(permissionAskedEvent('99', 'Bash', '/work/demo'));
     },
     failRefresh: async () => {
       failing = true;
-      await emit('terminal_halted');
+      await emit(terminalEvent('terminal_halted', 'halt-worker'));
     },
     recover: async () => {
       failing = false;
-      await emit('terminal_halted');
+      await emit(terminalEvent('terminal_halted', 'halt-worker'));
     },
   };
 }
@@ -1512,14 +1570,14 @@ for (const width of [1280, 390]) {
     await page.route('**/permissions', (route) =>
       route.fulfill({
         json: [
-          {
+          pendingPermission({
             id: 81,
             project: `checkout:${project.id}`,
             connection: 'chat',
             tool: 'Bash',
             action: 'npm test',
             always_allow_supported: true,
-          },
+          }),
         ],
       }),
     );
@@ -2287,17 +2345,12 @@ async function mockProject(
   let mockServerSkewMs: number | undefined;
   let toolConnections: MockToolConnection[] = [],
     driveCursor = 0,
-    drivePermissions: Array<{
-      id: number;
-      connection: string;
-      tool: string;
-      action: string;
-      always_allow_supported: boolean;
-    }> = [];
+    drivePermissions: ServerPermissionInfo[] = [];
   const driveEvents: MockDriveEvent[] = [];
   // Long polls held open until an event arrives, as the real server holds them (HS2-6H4M85).
   const drivePollWaiters = new Set<() => void>();
-  const pushDriveEvent = (event: Omit<MockDriveEvent, 'cursor' | 'store'>) => {
+  // Permission nudges carry the asking project's identity; other drive events the primary store.
+  const pushDriveEvent = (event: Omit<MockDriveEvent, 'cursor' | 'store'> & { store?: string }) => {
     driveCursor += 1;
     driveEvents.push({ cursor: driveCursor, store: '/work/demo.hs2', ...event });
     for (const wake of [...drivePollWaiters]) wake();
@@ -2758,15 +2811,10 @@ async function mockProject(
     const drivePermission = path.match(/\/permissions\/(\d+)$/);
     if (drivePermission && request.method() === 'POST') {
       const id = Number(drivePermission[1]),
-        body = request.postDataJSON(),
+        body = request.postDataJSON() as { decision: PermissionDecision; scope: PermissionScope },
         item = drivePermissions.find((value) => value.id === id);
       drivePermissions = drivePermissions.filter((value) => value.id !== id);
-      pushDriveEvent({
-        kind: 'permission_resolved',
-        id: String(id),
-        slug: item?.tool ?? 'tool',
-        message: `${body.decision}:${body.scope}`,
-      });
+      pushDriveEvent(permissionAnsweredEvent(String(id), `${body.decision}:${body.scope}`));
       if (item?.action === 'date ordering check') {
         const current = toolConnections.find((value) => value.id === item.connection)!;
         turnEvent(current, {
@@ -3041,12 +3089,16 @@ async function mockProject(
           },
         });
         drivePermissions = [
-          { id: 73, connection: id, tool: 'Bash', action: 'date ordering check', always_allow_supported: true },
+          pendingPermission({
+            id: 73,
+            connection: id,
+            tool: 'Bash',
+            action: 'date ordering check',
+            always_allow_supported: true,
+          }),
         ];
         pushDriveEvent({
-          kind: 'permission_asked',
-          id: '73',
-          slug: 'Bash',
+          ...permissionAskedEvent('73'),
           turn: { connection_id: id, event: { type: 'permission_asked', tool: 'Bash', summary: 'Run date' } },
         });
         return route.fulfill({ status: 202, json: running });
@@ -3086,12 +3138,16 @@ async function mockProject(
           },
         });
         drivePermissions = [
-          { id: 42, connection: id, tool: 'Bash', action: 'npm run test', always_allow_supported: true },
+          pendingPermission({
+            id: 42,
+            connection: id,
+            tool: 'Bash',
+            action: 'npm run test',
+            always_allow_supported: true,
+          }),
         ];
         pushDriveEvent({
-          kind: 'permission_asked',
-          id: '42',
-          slug: 'Bash',
+          ...permissionAskedEvent('42'),
           turn: {
             connection_id: id,
             event: { type: 'permission_asked', tool: 'Bash', summary: 'Run the focused test' },
@@ -19144,7 +19200,9 @@ for (const width of [1280, 390]) {
       popup = page.locator('[data-component="permission-request-popup"][data-layer="top"]');
     await title.fill('Writing a ticket');
     await expect(title).toBeFocused();
-    pending = [{ id: 64, connection: 'codex-session', tool: 'Bash', action: 'cargo test', agent: 'codex' }];
+    pending = [
+      pendingPermission({ id: 64, connection: 'codex-session', tool: 'Bash', action: 'cargo test', agent: 'codex' }),
+    ];
     await expect.poll(() => polls.length).toBeGreaterThan(0);
     cursor += 1;
     await polls.shift()!.fulfill({
@@ -19198,7 +19256,9 @@ for (const width of [1280, 390]) {
         (window as unknown as { detailsBlurs: number }).detailsBlurs += 1;
       });
     });
-    pending = [{ id: 65, connection: 'codex-session', tool: 'Bash', action: 'cargo test', agent: 'codex' }];
+    pending = [
+      pendingPermission({ id: 65, connection: 'codex-session', tool: 'Bash', action: 'cargo test', agent: 'codex' }),
+    ];
     await expect.poll(() => polls.length).toBeGreaterThan(0);
     cursor += 1;
     await polls.shift()!.fulfill({
@@ -19414,15 +19474,16 @@ test('answers identical permission requests for this chat and revokes the rememb
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);
   const secretAction = 'API_TOKEN=example-private-value npm test';
-  const ask = (id: number) => ({
-    id,
-    project: '/work/demo.hs2',
-    connection: 'hotsheet-drawer-chat-1',
-    tool: 'Bash',
-    action: secretAction,
-    agent: 'claude',
-    always_allow_supported: true,
-  });
+  const ask = (id: number) =>
+    pendingPermission({
+      id,
+      project: '/work/demo.hs2',
+      connection: 'hotsheet-drawer-chat-1',
+      tool: 'Bash',
+      action: secretAction,
+      agent: 'claude',
+      always_allow_supported: true,
+    });
   let pending = [ask(81), ask(82)],
     rules: Array<Record<string, unknown>> = [];
   const answers: Array<{ id: string; body: Record<string, unknown> }> = [],
@@ -19653,7 +19714,7 @@ for (const width of [1280, 390]) {
     await page.route('**/permissions', (route) =>
       route.fulfill({
         json: [
-          {
+          pendingPermission({
             id: 908,
             project: `checkout:${project.id}`,
             connection: 'damaged-checkout-chat',
@@ -19661,7 +19722,7 @@ for (const width of [1280, 390]) {
             action: 'npm test',
             agent: 'claude',
             always_allow_supported: false,
-          },
+          }),
         ],
       }),
     );
@@ -19947,7 +20008,7 @@ test('reapproves a legacy Bash answer after reviewing the exact command again (H
   await expect(remembered).toContainText('No Remembered Answers');
 
   pending = [
-    {
+    pendingPermission({
       id: 81,
       project: '/work/demo.hs2',
       connection: 'chat',
@@ -19955,7 +20016,7 @@ test('reapproves a legacy Bash answer after reviewing the exact command again (H
       action,
       agent: 'claude',
       always_allow_supported: true,
-    },
+    }),
   ];
   await page.reload();
   const popup = page.locator('[data-component="permission-request-popup"]');
@@ -20560,7 +20621,7 @@ test('reviews a placeholder grant and edits its saved match in Settings (HS2-JCS
   await mockProject(page);
   const action = "curl -H 'Bearer private' https://site.test";
   let pending: Array<Record<string, unknown>> = [
-    {
+    pendingPermission({
       id: 92,
       project: '/work/demo.hs2',
       connection: 'chat',
@@ -20568,7 +20629,7 @@ test('reviews a placeholder grant and edits its saved match in Settings (HS2-JCS
       action,
       agent: 'claude',
       always_allow_supported: true,
-    },
+    }),
   ];
   let rules: Array<Record<string, unknown>> = [];
   const answers: Array<Record<string, unknown>> = [],
@@ -20660,7 +20721,7 @@ test('offers secret spans without changing the exact default and lets each be re
   await mockProject(page);
   const action = 'API_TOKEN=abc123 npm test --token=def456';
   let pending: Array<Record<string, unknown>> = [
-    {
+    pendingPermission({
       id: 93,
       project: '/work/demo.hs2',
       connection: 'chat',
@@ -20672,7 +20733,7 @@ test('offers secret spans without changing the exact default and lets each be re
         { start: 10, end: 16, label: 'Secret assignment', placeholder: 'token' },
         { start: 34, end: 40, label: 'Secret assignment', placeholder: 'token' },
       ],
-    },
+    }),
   ];
   const answers: Array<Record<string, unknown>> = [];
   await page.route('**/permissions', (route) => route.fulfill({ json: pending }));
@@ -21633,14 +21694,14 @@ for (const width of [1280, 390]) {
     expect(before[1]).toBeGreaterThan(0);
     await expect.poll(() => polls.length).toBeGreaterThan(0);
     pending = [
-      {
+      pendingPermission({
         id: 61,
         connection: 'codex-session',
         tool: 'Bash',
         action: 'cargo test',
         agent: 'codex',
         always_allow_supported: true,
-      },
+      }),
     ];
     cursor += 1;
     await polls.shift()!.fulfill({
@@ -21659,7 +21720,11 @@ for (const width of [1280, 390]) {
     await expect.poll(() => polls.length).toBeGreaterThan(0);
     cursor += 1;
     await polls.shift()!.fulfill({
-      json: { cursor, events: [{ store: '', kind: 'permission_resolved', id: '61', slug: 'Bash' }], overflow: false },
+      json: {
+        cursor,
+        events: [permissionAnsweredEvent('61', width === 1280 ? 'allow:always' : 'allow:once')],
+        overflow: false,
+      },
     });
     await page.waitForTimeout(1_200);
     await expect.poll(() => columns.evaluateAll((nodes) => nodes.map((node) => node.scrollTop))).toEqual(before);
@@ -21697,14 +21762,14 @@ test('renders exactly once when the long poll announces a permission request', a
   await resetRenderMetrics(page);
   expect(await renderMetrics(page)).toEqual({ passes: 0, mutations: 0 });
   pending = [
-    {
+    pendingPermission({
       id: 77,
       connection: 'codex-session',
       tool: 'Bash',
       action: 'cargo test',
       agent: 'codex',
       always_allow_supported: true,
-    },
+    }),
   ];
   cursor += 1;
   await polls.shift()!.fulfill({
@@ -21783,14 +21848,14 @@ for (const viewport of [
     await page.setViewportSize(viewport);
     await mockProject(page);
     let pending = [
-      {
+      pendingPermission({
         id: 61,
         connection: 'codex-session',
         tool: 'Bash',
         action: 'cargo test --workspace',
         agent: 'codex',
         always_allow_supported: true,
-      },
+      }),
     ];
     await page.route('**/permissions', (route) => route.fulfill({ json: pending }));
     let resolved: unknown;
@@ -21857,14 +21922,16 @@ for (const viewport of [
   }) => {
     await page.setViewportSize(viewport);
     await mockProject(page);
-    let pending = [61, 62, 63].map((id) => ({
-      id,
-      connection: 'codex-session',
-      tool: 'Bash',
-      action: `npx playwright test request-${id}`,
-      agent: 'codex',
-      always_allow_supported: true,
-    }));
+    let pending = [61, 62, 63].map((id) =>
+      pendingPermission({
+        id,
+        connection: 'codex-session',
+        tool: 'Bash',
+        action: `npx playwright test request-${id}`,
+        agent: 'codex',
+        always_allow_supported: true,
+      }),
+    );
     await page.route('**/permissions', (route) => route.fulfill({ json: pending }));
     const resolved: unknown[] = [];
     await page.route(/\/permissions\/6[1-3]$/, async (route) => {
@@ -21968,7 +22035,9 @@ for (const viewport of [
 test('hides a permission popup when its server disconnects and restores only live requests', async ({ page }) => {
   await mockProject(page);
   let offline = false;
-  let pending = [{ id: 91, connection: 'codex-session', tool: 'Bash', action: 'cargo test', agent: 'codex' }];
+  let pending = [
+    pendingPermission({ id: 91, connection: 'codex-session', tool: 'Bash', action: 'cargo test', agent: 'codex' }),
+  ];
   await page.route('**/permissions', (route) =>
     offline ? route.fulfill({ status: 503, json: { error: 'offline' } }) : route.fulfill({ json: pending }),
   );
@@ -21998,7 +22067,9 @@ test('hides a permission popup when its server disconnects and restores only liv
   await announce(91);
   await expect(popup).toHaveCount(0);
   offline = false;
-  pending = [{ id: 92, connection: 'codex-session', tool: 'Edit', action: 'live.ts', agent: 'codex' }];
+  pending = [
+    pendingPermission({ id: 92, connection: 'codex-session', tool: 'Edit', action: 'live.ts', agent: 'codex' }),
+  ];
   await announce(92);
   await expect(popup).toContainText('live.ts');
   pending = [];
@@ -22009,7 +22080,13 @@ test('hides a permission popup when its server disconnects and restores only liv
 test('records externally resolved empty-action permissions in notification history', async ({ page }) => {
   await mockProject(page);
   let pending = [
-      { id: 81, connection: 'claude-tool-search', tool: 'ToolSearch', action: '', always_allow_supported: true },
+      pendingPermission({
+        id: 81,
+        connection: 'claude-tool-search',
+        tool: 'ToolSearch',
+        action: '',
+        always_allow_supported: true,
+      }),
     ],
     cursor = 0;
   const polls: Array<import('@playwright/test').Route> = [];
@@ -22025,13 +22102,14 @@ test('records externally resolved empty-action permissions in notification histo
   await expect(popup).toContainText('Wants permission to use ToolSearch');
   await expect(popup.locator('.notification-card__details')).toHaveCount(0);
   pending = [];
-  // An empty collection may arrive before the server's resolved event under load.
+  // The terminal answered it: the server withdraws the ask and emits an unanswered removal. An
+  // empty collection may arrive before that event under load.
   await expect.poll(() => polls.length).toBeGreaterThan(0);
   cursor += 1;
   await polls.shift()!.fulfill({
     json: {
       cursor,
-      events: [permissionAskedEvent('81', 'ToolSearch')],
+      events: [permissionRemovedEvent('81', 'ToolSearch')],
       overflow: false,
     },
   });
@@ -22049,7 +22127,7 @@ test('records externally resolved empty-action permissions in notification histo
   await polls.shift()!.fulfill({
     json: {
       cursor,
-      events: [{ store: '', kind: 'permission_resolved', id: '81', slug: '', message: 'allow:once' }],
+      events: [permissionAnsweredEvent('81', 'allow:once')],
       overflow: false,
     },
   });
@@ -22983,14 +23061,14 @@ test('keeps primary 138-ticket interactions within the painted UI budget @quaran
       json: new URL(route.request().url()).pathname.includes('/other-checkout/')
         ? []
         : [
-            {
+            pendingPermission({
               id: 91,
               project: '/work/demo',
               connection: 'perf-session',
               tool: 'Bash',
               action: 'profile command',
               always_allow_supported: true,
-            },
+            }),
           ],
     }),
   );
@@ -25155,7 +25233,13 @@ for (const viewport of [
     await page.route('**/permissions', (route) =>
       route.fulfill({
         json: [
-          { id: 42, connection: 'codex-session', tool: 'Bash', action: 'npm run test', always_allow_supported: true },
+          pendingPermission({
+            id: 42,
+            connection: 'codex-session',
+            tool: 'Bash',
+            action: 'npm run test',
+            always_allow_supported: true,
+          }),
         ],
       }),
     );
@@ -25215,7 +25299,13 @@ for (const viewport of [
     await page.route('**/permissions', (route) =>
       route.fulfill({
         json: [
-          { id: 42, connection: 'codex-session', tool: 'Bash', action: longCommand, always_allow_supported: true },
+          pendingPermission({
+            id: 42,
+            connection: 'codex-session',
+            tool: 'Bash',
+            action: longCommand,
+            always_allow_supported: true,
+          }),
         ],
       }),
     );
@@ -25262,7 +25352,13 @@ test('clears a foreground permission from its authoritative event while the Allo
 }) => {
   await mockProject(page);
   let pending = [
-      { id: 42, connection: 'codex-session', tool: 'Bash', action: 'npm run test', always_allow_supported: true },
+      pendingPermission({
+        id: 42,
+        connection: 'codex-session',
+        tool: 'Bash',
+        action: 'npm run test',
+        always_allow_supported: true,
+      }),
     ],
     answerRequests = 0,
     cursor = 0,
@@ -25301,7 +25397,7 @@ test('clears a foreground permission from its authoritative event while the Allo
   await polls.shift()!.fulfill({
     json: {
       cursor,
-      events: [{ store: '', kind: 'permission_resolved', id: '42', slug: 'Bash', message: 'allow:once' }],
+      events: [permissionAnsweredEvent('42', 'allow:once')],
       overflow: false,
     },
   });
@@ -25345,7 +25441,13 @@ test('clears a foreground permission from its authoritative event while the Allo
 test('restores an optimistically dismissed permission only when communication fails', async ({ page }) => {
   await mockProject(page);
   const pending = [
-    { id: 43, connection: 'codex-session', tool: 'Bash', action: 'npm run test', always_allow_supported: true },
+    pendingPermission({
+      id: 43,
+      connection: 'codex-session',
+      tool: 'Bash',
+      action: 'npm run test',
+      always_allow_supported: true,
+    }),
   ];
   let releaseAnswer!: () => void;
   const answerGate = new Promise<void>((resolve) => {
@@ -25385,7 +25487,13 @@ test('restores an optimistically dismissed permission only when communication fa
 test('does not reopen a permission popup after the server reports that approval is gone', async ({ page }) => {
   await mockProject(page);
   let pending = [
-    { id: 44, connection: 'codex-session', tool: 'Bash', action: 'npm run test', always_allow_supported: true },
+    pendingPermission({
+      id: 44,
+      connection: 'codex-session',
+      tool: 'Bash',
+      action: 'npm run test',
+      always_allow_supported: true,
+    }),
   ];
   await page.route('**/permissions', (route) => route.fulfill({ json: pending }));
   await page.route('**/permissions/44', (route) => {
@@ -35962,13 +36070,13 @@ test('preserves attachments and atomically undoes and redoes cut-paste', async (
 test('shows and resolves cross-project permission notifications with badges and history', async ({ page }) => {
   await mockProject(page);
   let pending = [
-      {
+      pendingPermission({
         id: 7,
         connection: 'claude-session',
         tool: 'Edit',
         action: '/work/demo/src/main.ts',
         always_allow_supported: true,
-      },
+      }),
     ],
     answer: unknown;
   await page.route('**/connections', (route) =>
@@ -36147,14 +36255,14 @@ test('scopes the notification center, navigation counts, and header badge to the
       projectRoot = other ? '/work/other' : '/work/demo';
     return route.fulfill({
       json: [
-        {
+        pendingPermission({
           id,
           project: projectRoot,
           connection: `${other ? 'other-checkout' : 'demo-checkout'}-session`,
           tool: 'Bash',
           action: `${other ? 'other' : 'demo'} pending action`,
           always_allow_supported: true,
-        },
+        }),
       ],
     });
   });
@@ -36224,13 +36332,13 @@ test('counts permission automation only while its popup is visible', async ({ pa
   await page.clock.install();
   await mockProject(page);
   let pending = [
-      {
+      pendingPermission({
         id: 8,
         connection: 'codex-session',
         tool: 'item/commandExecution/requestApproval',
         action: 'npm test',
         always_allow_supported: true,
-      },
+      }),
     ],
     answers = 0;
   await page.route('**/connections', (route) =>
@@ -36329,13 +36437,13 @@ test('keeps the Permissions settings controls reachable by pointer while a reque
   await page.route('**/permissions', (route) =>
     route.fulfill({
       json: [
-        {
+        pendingPermission({
           id: 8,
           connection: 'codex-session',
           tool: 'item/commandExecution/requestApproval',
           action: 'npm test',
           always_allow_supported: true,
-        },
+        }),
       ],
     }),
   );
@@ -36537,8 +36645,8 @@ test('auto-allows during an Always review, then remembers the rule before showin
   await page.clock.install();
   await mockProject(page);
   let pending = [
-    { id: 1, connection: 'chat-a', tool: 'Bash', action: 'npm test', always_allow_supported: true },
-    { id: 2, connection: 'chat-b', tool: 'Edit', action: 'next.ts', always_allow_supported: true },
+    pendingPermission({ id: 1, connection: 'chat-a', tool: 'Bash', action: 'npm test', always_allow_supported: true }),
+    pendingPermission({ id: 2, connection: 'chat-b', tool: 'Edit', action: 'next.ts', always_allow_supported: true }),
   ];
   const answers: Array<Record<string, unknown>> = [];
   let remembered = 0;
@@ -36597,13 +36705,13 @@ test('pauses and resumes notifications app-wide from the popup, sidebar, and ban
   await mockProject(page);
   let answers = 0;
   const pending = [
-    {
+    pendingPermission({
       id: 9,
       connection: 'codex-session',
       tool: 'item/commandExecution/requestApproval',
       action: 'npm test',
       always_allow_supported: true,
-    },
+    }),
   ];
   await page.route('**/connections', (route) =>
     route.fulfill({
@@ -36709,13 +36817,13 @@ test('auto-allows immediately at 0 seconds without ever presenting the popup (HS
   await mockProject(page);
   const bodies: unknown[] = [];
   let pending = [
-    {
+    pendingPermission({
       id: 9,
       connection: 'codex-session',
       tool: 'item/commandExecution/requestApproval',
       action: 'npm run lint',
       always_allow_supported: true,
-    },
+    }),
   ];
   await page.route('**/connections', (route) =>
     route.fulfill({
@@ -40573,7 +40681,15 @@ test('reconciles permissions from the change stream with no polling timer, backi
   await expect(page.locator('[data-component="permission-request-popup"]')).toHaveCount(0);
 
   // A permission event is the trigger: exactly one reconciliation shows the popup.
-  pending = [{ id: 31, connection: 'codex-session', tool: 'Bash', action: 'cargo test', project: '/work/demo' }];
+  pending = [
+    pendingPermission({
+      id: 31,
+      connection: 'codex-session',
+      tool: 'Bash',
+      action: 'cargo test',
+      project: '/work/demo',
+    }),
+  ];
   cursor += 1;
   await polls.shift()!.fulfill({
     json: { cursor, events: [permissionAskedEvent('31')], overflow: false },

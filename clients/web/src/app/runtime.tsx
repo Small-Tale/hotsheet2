@@ -3858,6 +3858,8 @@ export async function startHotSheetWebClient() {
   const viewportMobile = signal(isMobileViewport(window.innerWidth)),
     // Decided by projectTabActionFit from Kerf's fit report: the project tabs overflow the strip (HS2-RNR35H).
     projectTabActionCompact = signal(false),
+    // Decided by the same fit report: the Global Dashboards buttons fold into one menu first (HS2-B0RJBY).
+    projectDashboardsFolded = signal(false),
     sidebarCollapsed = signal(viewportMobile.value || !sidebarVisible.value),
     inspectorCollapsed = signal(viewportMobile.value || !inspectorVisible.value);
   /**
@@ -5211,6 +5213,7 @@ export async function startHotSheetWebClient() {
     attachmentEpochs,
     restoreTicketDraft,
     clearConflictRecoveryCopy,
+    resolveLinkedReaderConflict,
     flushTicketDrafts,
     flushSelectedTicketEdits,
     captureTicketDraftRecovery,
@@ -7018,6 +7021,7 @@ export async function startHotSheetWebClient() {
     viewMode,
     viewportMobile,
     projectTabActionCompact,
+    projectDashboardsFolded,
     workspaceSearchModel,
     guidanceSearchModel,
     workspaceSurfaceProps,
@@ -7288,8 +7292,9 @@ export async function startHotSheetWebClient() {
     cancelMerge: ticketGroupSettings.cancelMerge,
   });
   const disposeRailToolbarVisibility = wireTicketRailToolbarVisibility(appRoot);
-  const projectTabFit = projectTabActionFit((compact) => {
-    projectTabActionCompact.value = compact;
+  const projectTabFit = projectTabActionFit((fit) => {
+    projectDashboardsFolded.value = fit.dashboardsFolded;
+    projectTabActionCompact.value = fit.actionCompact;
   });
   // The desktop project strip unmounts on mobile; the next one starts from the full label (HS2-YATB6S).
   const disposeProjectTabFitReset = effect(() => {
@@ -7786,6 +7791,7 @@ export async function startHotSheetWebClient() {
     deleteSavedView,
     restoreTicketDraft,
     clearConflictRecoveryCopy,
+    resolveLinkedReaderConflict,
     savedViewHelpOpen,
     closeSavedViewDelete,
     savedViewDeleteBusy,

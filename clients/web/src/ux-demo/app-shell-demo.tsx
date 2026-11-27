@@ -447,6 +447,33 @@ export function ProjectTabBarDemo() {
           workspaceAction={{ kind: 'new-ticket' }}
         />
       </CatalogExample>
+      {/* While the tabs overflow, the Global Dashboards buttons fold into one menu before the launcher
+          compacts, and the compact "Ticket…" launcher follows if they still overflow (HS2-B0RJBY). */}
+      <CatalogExample
+        label="Folded Dashboards"
+        note="Open Global Dashboards: Workspace Grid, Systems, and Cross-Project Stats, the current one checked."
+        viewport={{ width: 'full', frame: 'solid', overflow: 'hidden' }}
+      >
+        <ProjectTabBar
+          tabs={projectTabs.value}
+          label="Open Projects with Folded Dashboards"
+          mode={shellMode.value}
+          workspaceAction={{ kind: 'new-ticket' }}
+          dashboardsFolded
+        />
+      </CatalogExample>
+      <CatalogExample
+        label="Folded Dashboards and Compact Launcher"
+        viewport={{ width: 'full', frame: 'solid', overflow: 'hidden' }}
+      >
+        <ProjectTabBar
+          tabs={projectTabs.value}
+          label="Open Projects with Folded Dashboards and a Compact Launcher"
+          mode={shellMode.value}
+          workspaceAction={{ kind: 'new-ticket', label: 'Ticket…', size: 'compact' }}
+          dashboardsFolded
+        />
+      </CatalogExample>
       {/* The Trash view swaps the far-edge action for the outlined danger Empty Trash button (HS2-PNCDAE). */}
       <CatalogExample label="Trash View Action" viewport={{ width: 'full', frame: 'solid', overflow: 'hidden' }}>
         <ProjectTabBar

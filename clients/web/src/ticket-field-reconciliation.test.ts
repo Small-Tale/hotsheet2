@@ -11,6 +11,7 @@ import {
   reconcileActiveDraft,
   reconcileReaderNoteDraft,
   reconcileTicketPatch,
+  resolvedConflictPatch,
   TICKET_CHANGED_CODE,
   ticketFieldText,
   WRITE_BEHIND_UNAVAILABLE_CODE,
@@ -91,6 +92,41 @@ describe('field-aware ticket reconciliation', () => {
         note: 'Mine',
       }).conflicts[0],
     ).toMatchObject({ key: 'note:N1', mine: 'Mine', theirs: 'Theirs' });
+  });
+
+  it('builds the patch that saves a conflict card choice to the card owner ticket (HS2-JT2AFG)', () => {
+    const conflict = (field: string, key = field) => ({ key, field, label: field, base: '', mine: '', theirs: '' });
+    expect(resolvedConflictPatch(conflict('details'), 'Merged', ticket())).toEqual({ details: 'Merged' });
+    expect(resolvedConflictPatch(conflict('title'), 'Title', null)).toEqual({ title: 'Title' });
+    expect(resolvedConflictPatch(conflict('blocked_reason'), '  ', ticket())).toEqual({ blocked_reason: null });
+    expect(resolvedConflictPatch(conflict('blocked_reason'), ' Waiting ', ticket())).toEqual({
+      blocked_reason: 'Waiting',
+    });
+    expect(resolvedConflictPatch(conflict('tags'), 'ui, , web ', ticket())).toEqual({ tags: ['ui', 'web'] });
+    expect(resolvedConflictPatch(conflict('up_next'), 'True', ticket())).toEqual({ up_next: true });
+    expect(resolvedConflictPatch(conflict('up_next'), 'false', ticket())).toEqual({ up_next: false });
+    expect(resolvedConflictPatch(conflict('note', 'note:N1'), 'Mine', ticket())).toEqual({
+      note_id: 'N1',
+      note: 'Mine',
+    });
+    // An explicitly opened prompt keeps its flag only for the ticket that holds that prompt.
+    const withPrompt = ticket({
+      notes: [{ ...ticket().notes[0], id: 'P1', kind: 'feedback_needed', text: 'Which token?' }],
+    });
+    beginFeedbackPromptEdit('P1');
+    try {
+      expect(resolvedConflictPatch(conflict('note', 'note:P1'), 'Mine', withPrompt)).toEqual({
+        note_id: 'P1',
+        note: 'Mine',
+        edit_feedback_prompt: true,
+      });
+      expect(resolvedConflictPatch(conflict('note', 'note:P1'), 'Mine', ticket())).toEqual({
+        note_id: 'P1',
+        note: 'Mine',
+      });
+    } finally {
+      endFeedbackPromptEdit('P1');
+    }
   });
 
   it('marks only an explicitly opened FEEDBACK NEEDED prompt edit and keeps the mark on retry (HS2-ZXGEFE)', () => {

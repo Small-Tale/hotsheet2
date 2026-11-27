@@ -604,11 +604,15 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   its full name as the tab's title on hover (HS2-08P0V5, Kerf KF-0M3ZPT).
   Add project stays immediately after the last project tab;
   only when the tabs overflow and the strip shrinks and scrolls does it end up beside the
-  ticket-view action (HS2-NE8JBS). While the project tabs overflow the strip (for example one
-  project with its attention badge at 1024px with the inspector open), the far-edge New ticket
+  ticket-view action (HS2-NE8JBS). While the project tabs overflow the strip, the strip first folds
+  its Global Dashboards buttons (Workspace Grid, Systems, Cross-Project Stats) into one Global
+  Dashboards menu whose choices switch the shell exactly like the buttons, the current one checked; a
+  lone Systems button, with both dashboard features off, stays a button (HS2-B0RJBY). If the tabs
+  still overflow (for example several projects at 1024px), the far-edge New ticket
   launcher shortens to the terminal rail's compact `Ticket…` label so the tabs fit; it returns to
   `New ticket…` once the strip has room for the full label again, so it never alternates at the
-  boundary (HS2-RNR35H). Settings → Commands' `Add group…` and `Add command…` pills shorten to their
+  boundary (HS2-RNR35H); the dashboard buttons return after it, once the strip has room for them
+  (HS2-B0RJBY). One project at 1024px with the inspector open keeps the full `New ticket…` label. Settings → Commands' `Add group…` and `Add command…` pills shorten to their
   compact `Group…` and `Command…` form under the same rule, so at medium widths such as 1100px with
   both rails open the project tab keeps its label (HS2-MQPY61). The overflow, the launcher's width, and the bar's spare room (`endFree`) come only from
   Kerf's public `wireTabBars` `onFitChange` report, never from TabBar's private parts or the app's own
@@ -1057,10 +1061,20 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   save that failed at page hide, whose local copy also stays until the retry commits. The
   focus-loss autosave remembers the failure by its recovery destination (project, ticket,
   field, and note), so the retry never reaches another ticket or note. It never runs while a
-  field conflict owns the edit: the inspector's conflict card, or a linked reader's
-  overlapping-edit error, which waits for new typing instead of resending the draft over the
-  other edit. Once the text matches the ticket again (after Use Theirs or a successful Apply)
+  field conflict owns the edit: the inspector's conflict card, or a linked reader frame's
+  own card. New typing in that field settles the card instead of resending the draft over
+  the other edit. Once the text matches the ticket again (after Use Theirs or a successful Apply)
   it sends nothing (HS2-SJ5TCW, HS2-Y0VRXR).
+  A linked reader's Details, note, blocked-reason, title, or tags save first auto-resolves a
+  concurrent remote edit with the same three-way merge as the inspector. Only a real
+  overlap that cannot merge shows the inspector's `TicketFieldConflict` card. That card is
+  the same component, placed beneath the field it resolves (or under the title) in that
+  frame (HS2-3TSEAX). The frame takes the remote ticket, and the card keeps the user's text
+  as "Your version" with an editable merge. A focus loss closes nothing the card owns and
+  writes nothing. Moving focus from Details into its card keeps the editor open. Use Theirs
+  keeps the remote text without a write. Apply Merged Value saves the merge once to that
+  frame's own ticket. Either choice settles the field's local recovery copy, Apply only
+  after its save commits (HS2-JT2AFG).
   A recently viewed ticket shown from cache and refreshed after an edit began is
   reconciled like a live refresh, so the blur save uses the refreshed token and an editor
   with nothing typed adopts the refreshed text (HS2-7D3MPP). Sometimes a list refresh would deselect the ticket being edited,

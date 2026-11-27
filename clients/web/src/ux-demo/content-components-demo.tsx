@@ -26,10 +26,11 @@ import {
   wireTicketTitleEditor,
 } from '../components/ticket-field-editor-interactions';
 import type { InspectorTab } from '../components/ticket-inspector';
-import { TicketReader } from '../components/ticket-reader';
+import { TicketReader, type TicketReaderProps } from '../components/ticket-reader';
 import { addTicketTag, openTicketTagSurface, removeTicketTag } from '../components/ticket-tag-editor';
 import { parseFeedbackChoices, updateFeedbackChoiceDocumentSelection } from '../feedback-choices';
 import { beginFeedbackPromptEdit } from '../feedback-prompt-edits';
+import { INSPECTOR_AND_EDITOR_ACTIONS } from '../interaction-attrs/inspector-and-editor';
 import { DemoEvent } from './components/demo-event';
 import { selectDemo, selectedId } from './components/demo-state';
 import { DEMO_ACTIONS } from './demo-actions';
@@ -348,10 +349,55 @@ export const inspectorBlockedReason = signal('');
 export const inspectorBlockedReasonDraft = signal(inspectorBlockedReason.value);
 export const inspectorBlockedReasonEditing = signal(false);
 
+/**
+ * Whether the reader demo shows a linked reader whose save met an overlapping remote edit (HS2-JT2AFG):
+ * the reader opens as the second, linked frame with the inspector's conflict card beneath the field.
+ */
+export const readerFieldConflict = signal<'none' | 'details' | 'note'>('none');
+function demoReaderConflictProps(): Partial<TicketReaderProps> {
+  const linked = { projectName: 'Kerf', stackPosition: 2, stackSize: 2 };
+  if (readerFieldConflict.value === 'details')
+    return {
+      ...linked,
+      fieldConflict: {
+        key: 'details',
+        field: 'details',
+        label: 'Details',
+        base: 'The reader keeps source and preview in one surface.',
+        mine: 'The reader keeps source and preview in one predictable surface, with drafts kept while switching modes.',
+        theirs: 'The reader keeps source and preview in one surface, covered by browser tests.',
+      },
+    };
+  if (readerFieldConflict.value === 'note')
+    return {
+      ...linked,
+      fieldConflict: {
+        key: 'note:reader-note',
+        field: 'note',
+        label: 'Note',
+        base: 'The reader should preserve a comfortable line length.',
+        mine: 'The reader should preserve a comfortable line length while the history stays easy to scan.',
+        theirs: 'The reader should keep a comfortable line length on every width.',
+      },
+    };
+  return {};
+}
+
+/**
+ * The reader demo's conflict state from its link, `?component=ticket-reader&field-conflict=details|note`.
+ * The modal reader covers the catalog's settings rail, so a link (as the gallery's `annotation-shapes`
+ * showcase uses) is the reachable way to open this state (HS2-JT2AFG).
+ */
+export function readerFieldConflictFromSearch(search: string): 'none' | 'details' | 'note' {
+  const value = new URLSearchParams(search).get('field-conflict');
+  return value === 'details' || value === 'note' ? value : 'none';
+}
+
 export function TicketReaderDemo() {
   return (
     <CatalogExample label="Interactive" note="The reader opens as a dialog over the catalog.">
       <TicketReader
+        {...demoReaderConflictProps()}
         frameId="ux-demo-ticket-reader"
         open={readerDialogOpen.value}
         slug="HS2-H892P1"
@@ -592,6 +638,20 @@ function wireContentComponentsDemo(root: HTMLElement): () => void {
       if (selection === 'ticket-reader' && previousReaderDemoSelection !== selection) readerDialogOpen.value = true;
       previousReaderDemoSelection = selection;
     }),
+  );
+  readerFieldConflict.value = readerFieldConflictFromSearch(window.location.search);
+  // The demo card's resolutions settle the fixture conflict; the shipped reader saves the choice (HS2-JT2AFG).
+  demoListeners.add(
+    delegate(
+      document.body,
+      'click',
+      `[data-reader-frame-id="ux-demo-ticket-reader"] :is(${INSPECTOR_AND_EDITOR_ACTIONS.acceptRemoteTicketField.selector}, ${INSPECTOR_AND_EDITOR_ACTIONS.applyTicketFieldMerge.selector})`,
+      (_event, target) => {
+        const theirs = target.matches(INSPECTOR_AND_EDITOR_ACTIONS.acceptRemoteTicketField.selector);
+        readerFieldConflict.value = 'none';
+        recordCollectionEvent(theirs ? 'Kept their version' : 'Applied merged value');
+      },
+    ),
   );
   demoListeners.add(
     delegate(root, 'change', '[data-settings="markdown-editor"] [name="markdown-appearance"]', (_event, target) => {

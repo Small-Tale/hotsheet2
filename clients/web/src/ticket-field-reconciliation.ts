@@ -193,6 +193,28 @@ export function noteEditPatch(ticket: FullTicket | null | undefined, noteId: str
   return prompt ? { note_id: noteId, note, edit_feedback_prompt: true } : { note_id: noteId, note };
 }
 
+/**
+ * The patch that saves a conflict card's chosen value to `ticket`, the ticket the card belongs to: the
+ * selected ticket's for the inspector, a linked reader frame's for its own card (HS2-JT2AFG).
+ */
+export function resolvedConflictPatch(
+  conflict: TicketFieldConflict,
+  value: string,
+  ticket: FullTicket | null | undefined,
+): TicketPatch {
+  if (conflict.field === 'note') return noteEditPatch(ticket, conflict.key.slice('note:'.length), value);
+  if (conflict.field === 'tags')
+    return {
+      tags: value
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean),
+    };
+  if (conflict.field === 'up_next') return { up_next: value.toLocaleLowerCase() === 'true' };
+  if (conflict.field === 'blocked_reason') return { blocked_reason: value.trim() || null };
+  return { [conflict.field]: value };
+}
+
 /** The draft-backed text value of `field` (a note's text for `note`), as the editors hold it. */
 export function ticketFieldText(ticket: FullTicket, field: string, noteId?: string): string {
   const value = ticketField(ticket, field, noteId);

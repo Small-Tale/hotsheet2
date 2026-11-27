@@ -598,7 +598,7 @@ describe('a role session held by a signed-out AI tool names the tool and machine
   const unknown = {
     ...timeline,
     targets: timeline.targets.map((target) =>
-      target.target_id === 'api' ? { ...target, location: undefined, machine_label: undefined } : target,
+      target.target_id === 'api' ? { ...target, location: 'unbound' as const, machine_label: undefined } : target,
     ),
   };
   const held = (role: string, reason: string, detail?: string): RoleStandingView => ({

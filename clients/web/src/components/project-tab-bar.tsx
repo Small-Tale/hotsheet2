@@ -32,6 +32,9 @@ export interface ProjectTabBarProps {
   /** The current ticket view's primary action, pinned in TabBar's far-edge `end` zone. It is data, not
    * markup, so the zone renders literal JSX that Kerf's composition rule checks (HS2-PNCDAE). */
   workspaceAction?: TicketViewActionSpec;
+  /** The desktop strip's tabs overflow, so the Global Dashboards buttons fold into one menu before the
+   * `end` action compacts (HS2-B0RJBY). The shell decides it from Kerf's fit report. */
+  dashboardsFolded?: boolean;
   /** Mobile: the horizontal tab strip does not fit a single narrow column, so the project tabs are
    * replaced with a project Select while the dashboard mode switcher and Add-project action remain
    * (HS2-4C5RM7). */
@@ -55,6 +58,7 @@ export function ProjectTabBar({
   mode = 'project',
   projectStats = false,
   workspaceAction,
+  dashboardsFolded = false,
   mobile = false,
   surface = 'lowered',
   divider = true,
@@ -215,7 +219,7 @@ export function ProjectTabBar({
         // Add project sits beside the last tab in every shell mode, dashboards included (HS2-HV52WR,
         // HS2-YFKQT1); a project view's workspace action uses the far-edge `end` zone.
         trailingPlacement="adjacent"
-        leading={<ProjectDashboardModes mode={mode} projectStats={projectStats} />}
+        leading={<ProjectDashboardModes mode={mode} projectStats={projectStats} folded={dashboardsFolded} />}
         trailing={<AddProjectAction minimizedProjects={minimizedProjects} />}
         end={workspaceAction && <TicketViewAction action={workspaceAction} />}
       >

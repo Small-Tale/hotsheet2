@@ -667,6 +667,24 @@ describe('web ESLint policy', () => {
     expect(unworded).toEqual([]);
   });
 
+  it('hs2_gm6a8w_permission_events_use_typed_builders in providers.spec.ts', () => {
+    // Permission nudges and the pending list mirror the server's ChangeEvent and PermissionInfo
+    // shapes only through the typed builders; a hand-written literal drifts (empty store, no project).
+    const spec = readFileSync(new URL('../tests/providers.spec.ts', import.meta.url), 'utf8');
+    const literals = spec
+      .split('\n')
+      .filter((line) =>
+        /[{,]\s*kind: '(?:permission_asked|permission_resolved|terminal_question|terminal_halted)'/.test(line),
+      );
+    expect(literals).toHaveLength(3);
+    for (const line of literals)
+      expect(line).toMatch(/^\s*(?:\)\s*=>\s*)?\(\{ store, kind: 'permission_\w+', id, slug/);
+    expect(spec).toMatch(/const terminalEvent = \([^)]*\) =>\s*\(\{ store: '', kind, id, slug: ''/);
+    expect(spec).toContain('): ServerPermissionInfo & Request => ({');
+    // Every terminal or permission nudge in the halted-session fixture goes through a builder.
+    expect(spec).not.toMatch(/emit\('(?:terminal_|permission_)/);
+  });
+
   it('keeps the bootstrap and application runtime on the shared typed-rule baseline', () => {
     const config = readFileSync(new URL('../eslint.config.mjs', import.meta.url), 'utf8');
     expect(config).not.toContain("files: ['src/main.tsx']");
