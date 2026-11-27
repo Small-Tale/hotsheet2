@@ -31,8 +31,7 @@ serde = { workspace = true }
 serde_json.workspace = true
 # Compact byte payloads on the broker wire (HS2-9R751Y).
 base64.workspace = true
-# HS2-9ABVDW: still on ureq 2 until this crate moves to hotsheet-http.
-ureq = "2.12"
+hotsheet-http.workspace = true
 libc.workspace = true
 sha2.workspace = true
 

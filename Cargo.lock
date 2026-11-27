@@ -1392,6 +1392,7 @@ name = "hotsheet-terminals"
 version = "0.0.0"
 dependencies = [
  "base64 0.22.1",
+ "hotsheet-http",
  "hotsheet-process-journal",
  "hotsheet-sync",
  "libc",
@@ -1402,7 +1403,6 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.20",
  "tokio",
- "ureq 2.12.1",
 ]
 
 [[package]]

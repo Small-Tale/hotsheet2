@@ -484,11 +484,13 @@ fn ask_permission(tool: &str, action: &str) -> Result<String, Box<dyn std::error
         "action": action,
     })
     .to_string();
-    let text = ureq::post(&format!("{}/permissions/ask", url.trim_end_matches('/')))
-        .set("X-Hotsheet-Secret", &secret)
-        .set("Content-Type", "application/json")
-        .send_string(&body)?
-        .into_string()?;
+    let text = hotsheet_http::agent()
+        .post(&format!("{}/permissions/ask", url.trim_end_matches('/')))
+        .header("X-Hotsheet-Secret", &secret)
+        .header("Content-Type", "application/json")
+        .send(&body)?
+        .body_mut()
+        .read_to_string()?;
     let response: serde_json::Value = serde_json::from_str(&text)?;
     response["decision"]
         .as_str()
