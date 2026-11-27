@@ -16,7 +16,7 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::io::{BufRead, BufReader, Read, Write};
-use std::net::{TcpListener, TcpStream};
+use std::net::{Shutdown, TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::mpsc::{Sender, channel};
 use std::sync::{Arc, Mutex};
@@ -65,6 +65,9 @@ pub struct Fake {
     pub log: Mutex<Vec<String>>,
     /// Every EVAL's KEYS and ARGV, for what crossed the wire.
     pub evals: Mutex<Vec<Value>>,
+    /// HS2-VDF7VS: the channel of each stream the client closed, in order. A stream the
+    /// fake ends itself is not listed.
+    pub client_closed: Mutex<Vec<String>>,
     pub url: String,
     stop: AtomicBool,
 }
@@ -78,6 +81,7 @@ impl Fake {
             faults: Faults::default(),
             log: Mutex::default(),
             evals: Mutex::default(),
+            client_closed: Mutex::default(),
             url: format!("http://127.0.0.1:{port}"),
             stop: AtomicBool::new(false),
         });
@@ -116,6 +120,11 @@ impl Fake {
         self.faults
             .clock_offset_ms
             .fetch_add(u64::try_from(by.as_millis()).unwrap(), Ordering::SeqCst);
+    }
+
+    /// Streams the client has closed so far (HS2-VDF7VS).
+    pub fn closed_by_client(&self) -> usize {
+        self.client_closed.lock().unwrap().len()
     }
 
     pub fn requests(&self) -> usize {
@@ -270,15 +279,35 @@ impl Fake {
             return;
         }
         let _ = out.flush();
-        if take(&self.faults.close_after_confirm) {
-            return;
+        // HS2-VDF7VS: watch for the client closing the stream while the fake waits for a
+        // message to send. A stream the fake ends itself is marked first, so only the
+        // client's closes are recorded.
+        let ended_here = Arc::new(AtomicBool::new(false));
+        if let Ok(mut probe) = out.try_clone() {
+            let (fake, channel_name, ended_here) = (
+                Arc::clone(self),
+                channel_name.to_owned(),
+                ended_here.clone(),
+            );
+            std::thread::spawn(move || {
+                let mut buffer = [0u8; 256];
+                while matches!(probe.read(&mut buffer), Ok(read) if read > 0) {}
+                if !ended_here.load(Ordering::SeqCst) {
+                    fake.client_closed.lock().unwrap().push(channel_name);
+                }
+            });
         }
-        while let Ok(payload) = rx.recv() {
-            let line = format!("data: message,{channel_name},{payload}\n\n");
-            if out.write_all(line.as_bytes()).is_err() || out.flush().is_err() {
-                return;
+        if !take(&self.faults.close_after_confirm) {
+            while let Ok(payload) = rx.recv() {
+                let line = format!("data: message,{channel_name},{payload}\n\n");
+                if out.write_all(line.as_bytes()).is_err() || out.flush().is_err() {
+                    break;
+                }
             }
         }
+        // The probe holds a clone of the socket, so close it explicitly rather than by drop.
+        ended_here.store(true, Ordering::SeqCst);
+        let _ = out.shutdown(Shutdown::Both);
     }
 
     // ---- commands ------------------------------------------------------------------
@@ -314,6 +343,19 @@ impl Fake {
         };
         match name.as_str() {
             "PING" => Ok(json!("PONG")),
+            // HS2-4XC2Y3: Redis's PUBLISH, answering with the subscribers reached.
+            "PUBLISH" => {
+                let (channel, payload) = (text(1)?, text(2)?);
+                let mut store = self.store.lock().unwrap();
+                publish(&mut store, &channel, &payload);
+                Ok(json!(
+                    store
+                        .subscribers
+                        .iter()
+                        .filter(|(name, _)| *name == channel)
+                        .count()
+                ))
+            }
             "SMEMBERS" => {
                 let key = text(1)?;
                 let now = self.now_ms();

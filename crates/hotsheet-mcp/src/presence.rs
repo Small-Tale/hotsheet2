@@ -162,18 +162,19 @@ pub struct HttpPresence {
 impl Default for HttpPresence {
     fn default() -> Self {
         Self {
-            agent: ureq::AgentBuilder::new()
-                .redirects(0)
-                .timeout(Duration::from_secs(5))
-                .build(),
+            agent: hotsheet_http::build(
+                hotsheet_http::config()
+                    .max_redirects(0)
+                    .timeout_global(Some(Duration::from_secs(5))),
+            ),
         }
     }
 }
 
 // HS2-081PXN: classify headers only. A no-follow 3xx is still Ok in ureq, but
 // cannot establish a lease or successful cleanup and its body has no authority.
-fn request_succeeded(result: Result<ureq::Response, ureq::Error>) -> bool {
-    result.is_ok_and(|response| !(300..400).contains(&response.status()))
+fn request_succeeded<B>(result: Result<ureq::http::Response<B>, ureq::Error>) -> bool {
+    result.is_ok_and(|response| !response.status().is_redirection())
 }
 
 impl PresenceTransport for HttpPresence {
@@ -181,9 +182,9 @@ impl PresenceTransport for HttpPresence {
         request_succeeded(
             self.agent
                 .post(&format!("{}/mcp-presence", target.base))
-                .set("X-Hotsheet-Secret", target.secret.expose())
-                .set("Content-Type", "application/json")
-                .send_string(&target.body.to_string()),
+                .header("X-Hotsheet-Secret", target.secret.expose())
+                .header("Content-Type", "application/json")
+                .send(target.body.to_string()),
         )
     }
 
@@ -191,7 +192,7 @@ impl PresenceTransport for HttpPresence {
         let _ = request_succeeded(
             self.agent
                 .delete(&format!("{}/mcp-presence/{}", target.base, target.lease_id))
-                .set("X-Hotsheet-Secret", target.secret.expose())
+                .header("X-Hotsheet-Secret", target.secret.expose())
                 .call(),
         );
     }

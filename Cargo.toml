@@ -17,6 +17,7 @@ members = [
     "crates/hotsheet-notify",
     "crates/hotsheet-resource-claims",
     "crates/hotsheet-jobs",
+    "crates/hotsheet-http",
 ]
 
 [workspace.package]
@@ -50,7 +51,8 @@ tokio-tungstenite = "0.29"
 futures-util = "0.3"
 tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
-ureq = "2"
+# HS2-9ABVDW: 3.5.2 (released 2026-11-12); hotsheet-http holds the shared baseline.
+ureq = "3.5.2"
 url = "2"
 rpassword = "7.5"
 regex = "1"
@@ -106,3 +108,4 @@ hotsheet-process-journal = { path = "crates/hotsheet-process-journal" }
 hotsheet-notify = { path = "crates/hotsheet-notify" }
 hotsheet-resource-claims = { path = "crates/hotsheet-resource-claims" }
 hotsheet-jobs = { path = "crates/hotsheet-jobs" }
+hotsheet-http = { path = "crates/hotsheet-http" }

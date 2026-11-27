@@ -6,7 +6,7 @@
 //! Blocking list pops (`BLPOP`, `BRPOP`…) are not available over REST, so a wait cannot use
 //! them; it holds one `subscribe` stream open instead.
 
-use std::io::{BufRead, BufReader, ErrorKind};
+use std::io::{BufRead, BufReader};
 use std::time::Duration;
 
 use serde_json::Value;
@@ -43,8 +43,17 @@ pub enum Event {
     Closed,
 }
 
+/// HS2-VDF7VS: ends one open stream from another thread; its reader then sees it close.
+pub type StreamCloser = Box<dyn Fn() + Send + Sync>;
+
 pub trait Subscription: Send {
     fn next(&mut self) -> Result<Event, RestError>;
+
+    /// A handle that closes this stream at once from another thread, when the transport
+    /// can give one. `None` leaves the stream to end at its next event or its lifetime.
+    fn closer(&self) -> Option<StreamCloser> {
+        None
+    }
 }
 
 /// The three calls the backend makes. Injected so a fake can stand in for the service.
@@ -107,56 +116,72 @@ impl UreqTransport {
         Self {
             base: url.trim_end_matches('/').to_owned(),
             token: token.into(),
-            agent: ureq::AgentBuilder::new()
-                .timeout_connect(Duration::from_secs(10))
-                .timeout(Duration::from_secs(30))
-                .build(),
+            // HS2-9ABVDW: statuses are mapped here, from their headers and body.
+            agent: hotsheet_http::build(
+                hotsheet_http::config()
+                    .http_status_as_error(false)
+                    .timeout_connect(Some(Duration::from_secs(10)))
+                    .timeout_global(Some(Duration::from_secs(30))),
+            ),
         }
     }
 
-    fn post(&self, path: &str) -> ureq::Request {
-        self.agent
-            .post(&format!("{}{path}", self.base))
-            .set("Authorization", &format!("Bearer {}", self.token.expose()))
+    fn post(&self, path: &str) -> ureq::RequestBuilder<ureq::typestate::WithBody> {
+        self.post_on(&self.agent, path)
     }
 
-    fn map(error: ureq::Error) -> RestError {
-        match error {
-            ureq::Error::Status(401, _) => RestError::Unauthorized,
-            ureq::Error::Status(429, response) => RestError::RateLimited {
-                retry_after: response
-                    .header("Retry-After")
+    fn post_on(
+        &self,
+        agent: &ureq::Agent,
+        path: &str,
+    ) -> ureq::RequestBuilder<ureq::typestate::WithBody> {
+        agent
+            .post(&format!("{}{path}", self.base))
+            .header("Authorization", &format!("Bearer {}", self.token.expose()))
+    }
+
+    /// A transport failure, or an answer whose status is not a success.
+    fn checked(
+        result: Result<ureq::http::Response<ureq::Body>, ureq::Error>,
+    ) -> Result<ureq::http::Response<ureq::Body>, RestError> {
+        // The transport error names the host and the failure, never a header.
+        let mut response = result.map_err(|e| RestError::Unreachable(e.to_string()))?;
+        match response.status().as_u16() {
+            200..=399 => Ok(response),
+            401 => Err(RestError::Unauthorized),
+            429 => Err(RestError::RateLimited {
+                retry_after: hotsheet_http::header(&response, "Retry-After")
                     .and_then(|v| v.trim().parse::<u64>().ok())
                     .map(Duration::from_secs),
-            },
-            ureq::Error::Status(400, response) => {
+            }),
+            400 => {
                 let body: Value = response
-                    .into_string()
+                    .body_mut()
+                    .read_to_string()
                     .ok()
                     .and_then(|text| serde_json::from_str(&text).ok())
                     .unwrap_or(Value::Null);
-                RestError::Command(
+                Err(RestError::Command(
                     body.get("error")
                         .and_then(Value::as_str)
                         .unwrap_or("the command was refused")
                         .to_owned(),
-                )
+                ))
             }
-            ureq::Error::Status(code, _) => RestError::Unreachable(format!("HTTP {code}")),
-            // The transport error names the host and the failure, never a header.
-            ureq::Error::Transport(t) => RestError::Unreachable(t.to_string()),
+            code => Err(RestError::Unreachable(format!("HTTP {code}"))),
         }
     }
 
     /// POST a JSON body and read the JSON reply.
     fn send(&self, path: &str, body: &Value) -> Result<Value, RestError> {
-        let text = self
-            .post(path)
-            .set("Content-Type", "application/json")
-            .send_string(&body.to_string())
-            .map_err(Self::map)?
-            .into_string()
-            .map_err(|e| RestError::Unreachable(e.to_string()))?;
+        let text = Self::checked(
+            self.post(path)
+                .header("Content-Type", "application/json")
+                .send(body.to_string()),
+        )?
+        .body_mut()
+        .read_to_string()
+        .map_err(|e| RestError::Unreachable(e.to_string()))?;
         serde_json::from_str(&text).map_err(|e| RestError::Protocol(e.to_string()))
     }
 
@@ -195,22 +220,35 @@ impl RestTransport for UreqTransport {
         channel: &str,
         lifetime: Duration,
     ) -> Result<Box<dyn Subscription>, RestError> {
+        // HS2-VDF7VS: each stream has its own agent, so shutting that agent down closes
+        // exactly this stream's connection (and interrupts a read blocked on it in another
+        // thread) and nothing else.
+        let agent = hotsheet_http::build(
+            hotsheet_http::config()
+                .http_status_as_error(false)
+                .timeout_connect(Some(Duration::from_secs(10))),
+        );
         // The overall timeout bounds connecting and reading, so it is the stream's lifetime:
         // when it passes mid-read the reader reports `Timeout`.
-        let response = self
-            .post(&format!("/subscribe/{channel}"))
-            .set("Accept", "text/event-stream")
-            .timeout(lifetime.max(Duration::from_millis(50)))
-            .send_string("")
-            .map_err(Self::map)?;
+        let response = Self::checked(
+            self.post_on(&agent, &format!("/subscribe/{channel}"))
+                .header("Accept", "text/event-stream")
+                .config()
+                .timeout_global(Some(lifetime.max(Duration::from_millis(50))))
+                .build()
+                .send(""),
+        )?;
         Ok(Box::new(SseStream {
-            reader: BufReader::new(response.into_reader()),
+            reader: BufReader::new(response.into_body().into_reader()),
+            agent,
         }))
     }
 }
 
 struct SseStream {
-    reader: BufReader<Box<dyn std::io::Read + Send + Sync + 'static>>,
+    reader: BufReader<ureq::BodyReader<'static>>,
+    /// The stream's own agent (HS2-VDF7VS), whose shutdown closes the stream.
+    agent: ureq::Agent,
 }
 
 /// One `data:` payload of the stream. `subscribe,<channel>,<count>` confirms the
@@ -237,11 +275,16 @@ impl Subscription for SseStream {
                         return Ok(event);
                     }
                 }
-                Err(e) if matches!(e.kind(), ErrorKind::TimedOut | ErrorKind::WouldBlock) => {
-                    return Ok(Event::Timeout);
-                }
+                Err(e) if hotsheet_http::is_timeout(&e) => return Ok(Event::Timeout),
                 Err(e) => return Err(RestError::Unreachable(e.to_string())),
             }
         }
+    }
+
+    fn closer(&self) -> Option<StreamCloser> {
+        let agent = self.agent.clone();
+        // Clones share one pool, so shutting down a clone closes the stream; a second
+        // shutdown finds nothing left to close.
+        Some(Box::new(move || agent.clone().shutdown()))
     }
 }

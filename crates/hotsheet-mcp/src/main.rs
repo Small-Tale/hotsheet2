@@ -209,17 +209,18 @@ fn main() -> Result<()> {
 
 fn open_project(root: &Path, url: &str, secret: &str) -> Result<String> {
     // HS2-081PXN: project identity and the custom bearer stay on the selected origin.
-    let response = ureq::AgentBuilder::new()
-        .redirects(0)
-        .build()
+    let mut response = hotsheet_http::build(hotsheet_http::config().max_redirects(0))
         .post(&format!("{url}/projects/open"))
-        .set("X-Hotsheet-Secret", secret)
-        .set("Content-Type", "application/json")
-        .send_string(&serde_json::json!({"root":root}).to_string())?;
-    if (300..400).contains(&response.status()) {
-        bail!("project-open redirect refused (HTTP {})", response.status());
+        .header("X-Hotsheet-Secret", secret)
+        .header("Content-Type", "application/json")
+        .send(serde_json::json!({"root":root}).to_string())?;
+    if response.status().is_redirection() {
+        bail!(
+            "project-open redirect refused (HTTP {})",
+            response.status().as_u16()
+        );
     }
-    let response: serde_json::Value = serde_json::from_str(&response.into_string()?)?;
+    let response: serde_json::Value = serde_json::from_str(&response.body_mut().read_to_string()?)?;
     response["checkout"]["id"]
         .as_str()
         .map(str::to_owned)

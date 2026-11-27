@@ -56,6 +56,7 @@ sha2.workspace = true
 getrandom.workspace = true
 tempfile.workspace = true
 ureq.workspace = true
+hotsheet-http.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 libc.workspace = true

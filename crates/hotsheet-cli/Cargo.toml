@@ -43,6 +43,7 @@ toml.workspace = true
 time.workspace = true
 tempfile.workspace = true
 ureq.workspace = true
+hotsheet-http.workspace = true
 rustls.workspace = true
 rustls-pemfile.workspace = true
 webpki-roots.workspace = true

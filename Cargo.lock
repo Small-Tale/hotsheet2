@@ -1077,6 +1077,7 @@ dependencies = [
  "base64 0.22.1",
  "futures-util",
  "getrandom 0.3.4",
+ "hotsheet-http",
  "hotsheet-jobs",
  "hotsheet-plugins",
  "hotsheet-process-journal",
@@ -1109,6 +1110,7 @@ dependencies = [
  "clap",
  "hotsheet-aitools",
  "hotsheet-extsync",
+ "hotsheet-http",
  "hotsheet-index",
  "hotsheet-jobs",
  "hotsheet-model",
@@ -1135,7 +1137,7 @@ dependencies = [
  "tracing",
  "ulid",
  "ureq",
- "webpki-roots 1.0.9",
+ "webpki-roots 1.0.12",
  "windows-sys 0.61.2",
 ]
 
@@ -1144,6 +1146,7 @@ name = "hotsheet-extsync"
 version = "0.0.0"
 dependencies = [
  "base64 0.22.1",
+ "hotsheet-http",
  "hotsheet-model",
  "hotsheet-sync",
  "hotsheet-ticketing",
@@ -1154,6 +1157,15 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.20",
  "time",
+ "ureq",
+]
+
+[[package]]
+name = "hotsheet-http"
+version = "0.0.0"
+dependencies = [
+ "rcgen",
+ "rustls",
  "ureq",
 ]
 
@@ -1201,6 +1213,7 @@ dependencies = [
  "clap",
  "hotsheet-cli",
  "hotsheet-extsync",
+ "hotsheet-http",
  "hotsheet-model",
  "hotsheet-plugins",
  "hotsheet-resource-claims",
@@ -1233,6 +1246,7 @@ name = "hotsheet-notify"
 version = "0.0.0"
 dependencies = [
  "base64 0.22.1",
+ "hotsheet-http",
  "hotsheet-sync",
  "hotsheet-ticketing",
  "jiff",
@@ -1251,7 +1265,7 @@ dependencies = [
  "tungstenite",
  "ulid",
  "ureq",
- "webpki-roots 1.0.9",
+ "webpki-roots 1.0.12",
 ]
 
 [[package]]
@@ -1294,6 +1308,7 @@ name = "hotsheet-resource-claims"
 version = "0.0.0"
 dependencies = [
  "base64 0.22.1",
+ "hotsheet-http",
  "hotsheet-process-journal",
  "hotsheet-sync",
  "hotsheet-ticketing",
@@ -1305,6 +1320,8 @@ dependencies = [
  "thiserror 2.0.20",
  "time",
  "toml 0.8.23",
+ "tracing",
+ "tracing-subscriber",
  "ulid",
  "ureq",
 ]
@@ -1323,6 +1340,7 @@ dependencies = [
  "hotsheet-aitools",
  "hotsheet-cli",
  "hotsheet-extsync",
+ "hotsheet-http",
  "hotsheet-index",
  "hotsheet-jobs",
  "hotsheet-mcp",
@@ -1380,6 +1398,7 @@ name = "hotsheet-terminals"
 version = "0.0.0"
 dependencies = [
  "base64 0.22.1",
+ "hotsheet-http",
  "hotsheet-process-journal",
  "hotsheet-sync",
  "libc",
@@ -1390,7 +1409,6 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.20",
  "tokio",
- "ureq",
 ]
 
 [[package]]
@@ -1888,7 +1906,7 @@ dependencies = [
  "socket2",
  "tokio",
  "url",
- "webpki-roots 1.0.9",
+ "webpki-roots 1.0.12",
 ]
 
 [[package]]
@@ -2895,9 +2913,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.23.43"
+version = "0.23.46"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0283386ce02abc0151e1761d08802dfe86c173b0b494af5cbc086574e453da06"
+checksum = "48e13bd8c0e9365c43cfa5c9e8f9ad49d3c8444926c9aac819e0e4dc503c8fdf"
 dependencies = [
  "aws-lc-rs",
  "log",
@@ -3743,18 +3761,31 @@ checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
 
 [[package]]
 name = "ureq"
-version = "2.12.1"
+version = "3.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "02d1a66277ed75f640d608235660df48c8e3c19f3b4edb6a263315626cc3c01d"
+checksum = "3ac5cecf619ca81f66a96482db09687c9f7465af65f4300a8c30cca05bd5a59d"
 dependencies = [
- "base64 0.22.1",
+ "base64 0.23.1",
  "flate2",
  "log",
- "once_cell",
+ "percent-encoding",
  "rustls",
  "rustls-pki-types",
- "url",
- "webpki-roots 0.26.11",
+ "ureq-proto",
+ "utf8-zero",
+ "webpki-roots 1.0.12",
+]
+
+[[package]]
+name = "ureq-proto"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "622dce33c252115466d83f63e9744a18f12b4406aae51a01c15ad8fcf1185eb3"
+dependencies = [
+ "base64 0.23.1",
+ "http",
+ "httparse",
+ "log",
 ]
 
 [[package]]
@@ -3768,6 +3799,12 @@ dependencies = [
  "percent-encoding",
  "serde",
 ]
+
+[[package]]
+name = "utf8-zero"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b8c0a043c9540bae7c578c88f91dda8bd82e59ae27c21baca69c8b191aaf5a6e"
 
 [[package]]
 name = "utf8_iter"
@@ -3915,14 +3952,14 @@ version = "0.26.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "521bc38abb08001b01866da9f51eb7c5d647a19260e00054a8c7fd5f9e57f7a9"
 dependencies = [
- "webpki-roots 1.0.9",
+ "webpki-roots 1.0.12",
 ]
 
 [[package]]
 name = "webpki-roots"
-version = "1.0.9"
+version = "1.0.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7dcd9d09a39985f5344844e66b0c530a33843579125f23e21e9f0f220850f22a"
+checksum = "7265c9301c16a8711c992c2d8da90ee77ef54b1ed51482d6dfeb00dc756b1297"
 dependencies = [
  "rustls-pki-types",
 ]

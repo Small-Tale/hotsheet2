@@ -16,19 +16,20 @@ async fn request(base: &str, method: &str, path: &str, body: Option<Value>) -> (
     let method = method.to_owned();
     let path = path.to_owned();
     tokio::task::spawn_blocking(move || {
-        let request = ureq::request(&method, &format!("{base}{path}"))
-            .set("x-hotsheet-secret", SECRET)
-            .set("content-type", "application/json");
-        let response = match body {
-            Some(body) => request.send_string(&body.to_string()),
-            None => request.call(),
-        };
-        let response = match response {
-            Ok(response) | Err(ureq::Error::Status(_, response)) => response,
-            Err(error) => panic!("fixture request failed: {error}"),
-        };
-        let status = response.status();
-        let text = response.into_string().unwrap();
+        let body = body.map(|body| body.to_string());
+        let mut response = hotsheet_http::run(
+            &hotsheet_http::build(hotsheet_http::config().http_status_as_error(false)),
+            &method,
+            &format!("{base}{path}"),
+            &[
+                ("x-hotsheet-secret", SECRET),
+                ("content-type", "application/json"),
+            ],
+            body.as_deref().map(str::as_bytes),
+        )
+        .unwrap_or_else(|error| panic!("fixture request failed: {error}"));
+        let status = response.status().as_u16();
+        let text = response.body_mut().read_to_string().unwrap();
         let body = if text.is_empty() {
             Value::Null
         } else {

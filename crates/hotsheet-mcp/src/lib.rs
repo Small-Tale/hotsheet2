@@ -4633,7 +4633,12 @@ impl HttpBackend {
             base: base.into().trim_end_matches('/').to_string(),
             secret: hotsheet_sync::secret::SecretString::new(secret),
             // HS2-0BTSX8: ureq's standard auth filtering does not cover our custom bearer.
-            agent: ureq::AgentBuilder::new().redirects(0).build(),
+            // HS2-9ABVDW: error statuses are read here, with their bodies.
+            agent: hotsheet_http::build(
+                hotsheet_http::config()
+                    .max_redirects(0)
+                    .http_status_as_error(false),
+            ),
         }
     }
 }
@@ -4647,7 +4652,7 @@ impl Backend for HttpBackend {
         let agent = self.remote_registry_agent(path);
         let mut req = agent
             .get(&format!("{}{path}", self.base))
-            .set("X-Hotsheet-Secret", self.secret.expose());
+            .header("X-Hotsheet-Secret", self.secret.expose());
         for (k, v) in query {
             req = req.query(k, v);
         }
@@ -4657,12 +4662,15 @@ impl Backend for HttpBackend {
     fn send(&self, method: &str, path: &str, body: &Value) -> Result<Value, BackendError> {
         self.guard_registry_origin(path)?;
         let agent = self.remote_registry_agent(path);
-        let req = agent
-            .request(method, &format!("{}{path}", self.base))
-            .set("X-Hotsheet-Secret", self.secret.expose())
-            .set("Content-Type", "application/json");
         let payload = serde_json::to_string(body).unwrap_or_else(|_| "{}".to_string());
-        self.exec(path, req.send_string(&payload))
+        let req = ureq::http::Request::builder()
+            .method(method)
+            .uri(format!("{}{path}", self.base))
+            .header("X-Hotsheet-Secret", self.secret.expose())
+            .header("Content-Type", "application/json")
+            .body(payload)
+            .map_err(ureq::Error::from);
+        self.exec(path, req.and_then(|req| agent.run(req)))
     }
 }
 
@@ -4688,10 +4696,12 @@ impl HttpBackend {
             || hotsheet_cli::orchestration::is_machine_path(path)
         {
             // HS2-1Y45MZ: enrollment must not leave its explicitly selected local service.
-            ureq::AgentBuilder::new()
-                .redirects(0)
-                .timeout(std::time::Duration::from_secs(60))
-                .build()
+            hotsheet_http::build(
+                hotsheet_http::config()
+                    .max_redirects(0)
+                    .http_status_as_error(false)
+                    .timeout_global(Some(std::time::Duration::from_secs(60))),
+            )
         } else {
             self.agent.clone()
         }
@@ -4699,17 +4709,18 @@ impl HttpBackend {
     fn exec(
         &self,
         path: &str,
-        res: Result<ureq::Response, ureq::Error>,
+        res: Result<ureq::http::Response<ureq::Body>, ureq::Error>,
     ) -> Result<Value, BackendError> {
         match res {
-            Ok(resp) if (300..400).contains(&resp.status()) => Err(BackendError {
-                status: Some(resp.status()),
+            Ok(resp) if resp.status().is_redirection() => Err(BackendError {
+                status: Some(resp.status().as_u16()),
                 message: "Hot Sheet server returned a redirect; configure --server with its trusted final address".into(),
             }),
-            Ok(resp) => {
-                let partial = resp.header("x-hotsheet-partial") == Some("true");
-                let truncated = resp.header("x-hotsheet-truncated") == Some("true");
-                let text = resp.into_string().unwrap_or_default();
+            Ok(mut resp) if resp.status().as_u16() < 400 => {
+                let partial = hotsheet_http::header(&resp, "x-hotsheet-partial") == Some("true");
+                let truncated =
+                    hotsheet_http::header(&resp, "x-hotsheet-truncated") == Some("true");
+                let text = resp.body_mut().read_to_string().unwrap_or_default();
                 let value = serde_json::from_str(&text).unwrap_or(Value::Null);
                 if path.starts_with("/checkouts/") && path.ends_with("/tickets") {
                     Ok(checkout_array_result(value, partial, truncated))
@@ -4717,8 +4728,9 @@ impl HttpBackend {
                     Ok(value)
                 }
             }
-            Err(ureq::Error::Status(code, resp)) => {
-                let text = resp.into_string().unwrap_or_default();
+            Ok(mut resp) => {
+                let code = resp.status().as_u16();
+                let text = resp.body_mut().read_to_string().unwrap_or_default();
                 let body = serde_json::from_str::<Value>(&text).ok();
                 // HS2-APSPVP: a coded 403 (`permission_required` with its `request_id`,
                 // `decision_required`, `policy_denied`) is a refusal the caller acts on,
@@ -4739,8 +4751,8 @@ impl HttpBackend {
                         .get(&format!("{}/health", self.base))
                         .call()
                         .ok()
-                        .filter(|response| (200..300).contains(&response.status()))
-                        .and_then(|r| r.into_string().ok())
+                        .filter(|response| response.status().is_success())
+                        .and_then(|mut r| r.body_mut().read_to_string().ok())
                         .and_then(|text| serde_json::from_str::<Value>(&text).ok());
                     auth_mismatch_message(&self.base, health.as_ref(), &fallback)
                 } else if code == 404

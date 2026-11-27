@@ -3939,21 +3939,25 @@ fn hs2_s0fdkr_a_journal_entry_that_cannot_be_written_is_counted_and_reported() {
 /// terminal the host now lists.
 #[test]
 fn hs2_ywn8jt_a_launch_the_host_took_is_never_read_as_no_host() {
-    use ureq::ErrorKind;
+    use hotsheet_http::FailureKind;
     for kind in [
-        ErrorKind::ConnectionFailed,
-        ErrorKind::Dns,
-        ErrorKind::InvalidUrl,
+        FailureKind::ConnectionFailed,
+        FailureKind::Dns,
+        FailureKind::InvalidUrl,
     ] {
         assert_eq!(classify_transport(kind), HostCall::Unreached, "{kind:?}");
     }
     for kind in [
-        ErrorKind::Io,
-        ErrorKind::BadStatus,
-        ErrorKind::TooManyRedirects,
+        FailureKind::Io,
+        FailureKind::Protocol,
+        FailureKind::TooManyRedirects,
     ] {
         assert_eq!(classify_transport(kind), HostCall::Unanswered, "{kind:?}");
     }
+    assert_eq!(
+        classify_transport(FailureKind::Status(409)),
+        HostCall::Status(409)
+    );
     // No server listened: nothing launched, whatever a listing would say.
     for listed in [false, true] {
         assert_eq!(

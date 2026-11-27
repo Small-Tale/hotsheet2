@@ -71,19 +71,23 @@ async fn request(
     body: Option<Value>,
 ) -> (u16, String) {
     tokio::task::spawn_blocking(move || {
-        let request =
-            ureq::request(method, &format!("http://{addr}{path}")).set("x-hotsheet-secret", SECRET);
-        let result = match body {
-            Some(body) => request
-                .set("content-type", "application/json")
-                .send_string(&body.to_string()),
-            None => request.call(),
-        };
-        match result {
-            Ok(response) => (response.status(), response.into_string().unwrap()),
-            Err(ureq::Error::Status(code, response)) => (code, response.into_string().unwrap()),
-            Err(other) => panic!("request failed: {other}"),
+        let body = body.map(|body| body.to_string());
+        let mut headers = vec![("x-hotsheet-secret", SECRET)];
+        if body.is_some() {
+            headers.push(("content-type", "application/json"));
         }
+        let mut response = hotsheet_http::run(
+            &hotsheet_http::build(hotsheet_http::config().http_status_as_error(false)),
+            method,
+            &format!("http://{addr}{path}"),
+            &headers,
+            body.as_deref().map(str::as_bytes),
+        )
+        .unwrap_or_else(|other| panic!("request failed: {other}"));
+        (
+            response.status().as_u16(),
+            response.body_mut().read_to_string().unwrap(),
+        )
     })
     .await
     .unwrap()

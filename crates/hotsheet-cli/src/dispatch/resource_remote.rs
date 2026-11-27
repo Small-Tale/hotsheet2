@@ -116,28 +116,33 @@ pub(crate) fn call(
     {
         bail!("invalid: the token is for {}, not {target}", parsed.target);
     }
-    let mut builder = ureq::AgentBuilder::new()
-        .redirects(0)
-        .timeout_connect(Duration::from_secs(10))
-        .timeout(Duration::from_secs(30));
-    if base.starts_with("https://") {
-        builder = builder.tls_config(Arc::new(tls_config(ca_cert)?));
-    }
+    // HS2-9ABVDW: an error status is read here, for the server's own code and message.
+    let settings = hotsheet_http::config()
+        .max_redirects(0)
+        .http_status_as_error(false)
+        .timeout_connect(Some(Duration::from_secs(10)))
+        .timeout_global(Some(Duration::from_secs(30)));
+    let agent = if base.starts_with("https://") {
+        hotsheet_http::build_with_tls(settings, Arc::new(tls_config(ca_cert)?))
+    } else {
+        hotsheet_http::build(settings)
+    };
     let url = format!("{base}{TOKEN_ROUTE_PREFIX}/{action}");
-    let request = builder
-        .build()
-        .post(&url)
-        .set("Authorization", &format!("Bearer {token}"))
-        .set("Content-Type", "application/json");
     let body = duration_ms.map_or_else(
         || "{}".to_owned(),
         |ms| json!({ "duration_ms": ms }).to_string(),
     );
-    let response = match request.send_string(&body) {
-        Ok(response) => response,
-        Err(ureq::Error::Status(status, response)) => {
+    let sent = agent
+        .post(&url)
+        .header("Authorization", &format!("Bearer {token}"))
+        .header("Content-Type", "application/json")
+        .send(&body);
+    let mut response = match sent {
+        Ok(response) if response.status().as_u16() >= 400 => {
+            let status = response.status().as_u16();
             let reply: Value = response
-                .into_string()
+                .into_body()
+                .read_to_string()
                 .ok()
                 .and_then(|text| serde_json::from_str(&text).ok())
                 .unwrap_or(Value::Null);
@@ -165,7 +170,8 @@ pub(crate) fn call(
             );
             bail!("{code}: {message}");
         }
-        Err(ureq::Error::Transport(error)) => {
+        Ok(response) => response,
+        Err(error) => {
             let text = clean(&error.to_string(), token);
             let hint = if text.to_ascii_lowercase().contains("certificate") {
                 "; if the server uses its own certificate, pass --ca-cert <the CA certificate PEM> (hotsheet-cli cert init writes it)"
@@ -176,7 +182,8 @@ pub(crate) fn call(
         }
     };
     let text = response
-        .into_string()
+        .body_mut()
+        .read_to_string()
         .context("reading the server's reply")?;
     let reply: Value = serde_json::from_str(&text)
         .map_err(|_| anyhow!("backend_unreachable: the server's reply was not JSON"))?;

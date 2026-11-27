@@ -55,13 +55,16 @@ impl CapacityProbe for LocalServerCapacity {
                     server.url.trim_end_matches('/'),
                     checkout.id
                 );
-                let response = ureq::get(&url)
-                    .set("X-Hotsheet-Secret", server.secret.expose())
-                    .timeout(std::time::Duration::from_secs(10))
+                let response = hotsheet_http::agent()
+                    .get(&url)
+                    .header("X-Hotsheet-Secret", server.secret.expose())
+                    .config()
+                    .timeout_global(Some(std::time::Duration::from_secs(10)))
+                    .build()
                     .call()
                     .ok()?;
                 let snapshot: CapacitySnapshot =
-                    serde_json::from_reader(response.into_reader()).ok()?;
+                    serde_json::from_reader(response.into_body().into_reader()).ok()?;
                 Some(snapshot.into_host())
             })
             .unwrap_or_default()

@@ -10,9 +10,11 @@
 //!
 //! HS2-P234BH: a cancellable wait reads its stream on a helper thread and blocks on a
 //! channel that the [`WaitCancel`] waker also feeds, so a cancel ends the wait at once.
-//! `ureq` exposes no handle to close a response's socket from another thread, so the
-//! abandoned stream ends on its own: after its next event or at its lifetime, whichever
-//! comes first, without reading state or subscribing again.
+//! The abandoned stream reads no state and subscribes to nothing after the cancel.
+//!
+//! HS2-VDF7VS: the cancel also closes that stream at once
+//! ([`transport::Subscription::closer`]): each stream has its own `ureq` agent, and
+//! shutting it down interrupts the helper thread's blocked read on every platform.
 
 pub mod scripts;
 pub mod transport;
@@ -537,7 +539,7 @@ impl UpstashBackend {
             // expiry is one timeout rather than a series of looks.
             let lifetime = remaining.min(left + EXPIRY_SLACK);
             let outcome = match cancel {
-                None => self.watch_stream(&channel, target, lifetime, None),
+                None => self.watch_stream(&channel, target, lifetime),
                 Some(cancel) => {
                     generation += 1;
                     self.spawn_watch(&channel, target, lifetime, cancel, generation, &signals);
@@ -568,16 +570,30 @@ impl UpstashBackend {
     }
 
     /// Subscribe and watch one stream that lasts `lifetime`.
-    fn watch_stream(
+    fn watch_stream(&self, channel: &str, target: &ResourceRef, lifetime: Duration) -> Watched {
+        let ends = Instant::now() + lifetime;
+        let mut stream = self.transport.subscribe(channel, lifetime)?;
+        self.watch(&mut *stream, target, ends, None)
+    }
+
+    /// [`Self::watch_stream`] for a cancellable wait: the cancel closes the stream at once
+    /// where the transport can (HS2-VDF7VS). The flag is read after the closer is
+    /// registered, so a cancel that landed before it is not missed either.
+    fn watch_closable(
         &self,
         channel: &str,
         target: &ResourceRef,
         lifetime: Duration,
-        cancel: Option<&WaitCancel>,
+        cancel: &WaitCancel,
     ) -> Watched {
         let ends = Instant::now() + lifetime;
         let mut stream = self.transport.subscribe(channel, lifetime)?;
-        self.watch(&mut *stream, target, ends, cancel)
+        let _closing = stream.closer().map(|close| cancel.register(close));
+        if cancel.is_cancelled() {
+            // Dropping the stream closes it.
+            return Ok(None);
+        }
+        self.watch(&mut *stream, target, ends, Some(cancel))
     }
 
     /// Watch one stream on a helper thread that reports to `signals` once and ends.
@@ -601,7 +617,7 @@ impl UpstashBackend {
         let spawned = std::thread::Builder::new()
             .name("upstash-claim-wait".into())
             .spawn(move || {
-                let watched = backend.watch_stream(&channel, &target, lifetime, Some(&cancel));
+                let watched = backend.watch_closable(&channel, &target, lifetime, &cancel);
                 // A cancelled wait has stopped listening; its answer is dropped unread.
                 let _ = signals.send(Signal::Stream(generation, watched));
             });

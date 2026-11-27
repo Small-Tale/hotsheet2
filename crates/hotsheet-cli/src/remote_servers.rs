@@ -372,36 +372,28 @@ impl hotsheet_ticketing::remote_servers::RemoteCheckoutTransport for MtlsRemoteT
             return Err(TargetFailure::InvalidResponse);
         }
         let agent = remote_agent(origin, credentials).map_err(TargetFailure::from)?;
-        let request = remote_auth_request(
-            agent.request(method, &format!("{origin}{path}")),
-            origin,
-            credentials,
-        )
-        .set("Accept", "application/json");
-        let result = match body {
-            Some(body) => request
-                .set("Content-Type", "application/json")
-                .send_bytes(body),
-            None => request.call(),
-        };
-        let response = match result {
+        let mut headers = remote_auth_headers(method, origin, credentials);
+        headers.push(("Accept", "application/json".into()));
+        if body.is_some() {
+            headers.push(("Content-Type", "application/json".into()));
+        }
+        let response = match send(&agent, method, &format!("{origin}{path}"), &headers, body) {
             Ok(response) => response,
-            Err(ureq::Error::Status(300..=399, _)) => return Err(TargetFailure::Redirect),
-            Err(ureq::Error::Status(_, response)) => response,
-            Err(ureq::Error::Transport(error)) => {
-                return Err(if error.kind() == ureq::ErrorKind::ConnectionFailed {
+            Err(error) => {
+                return Err(if connection_failed(&error) {
                     TargetFailure::Unreachable
                 } else {
                     TargetFailure::TrustFailed
                 });
             }
         };
-        let status = response.status();
+        let status = response.status().as_u16();
         if (300..400).contains(&status) {
             return Err(TargetFailure::Redirect);
         }
         let mut bytes = Vec::new();
         response
+            .into_body()
             .into_reader()
             .take((MAX_TARGET_REPLY_BYTES + 1) as u64)
             .read_to_end(&mut bytes)
@@ -447,16 +439,9 @@ pub fn peer_session_request(
             "/remote-auth/me"
         }
     );
-    let mut request = remote_auth_request(
-        if renew {
-            agent.post(&url)
-        } else {
-            agent.get(&url)
-        },
-        origin,
-        credentials,
-    )
-    .set("Accept", "application/json");
+    let method = if renew { "POST" } else { "GET" };
+    let mut headers = remote_auth_headers(method, origin, credentials);
+    headers.push(("Accept", "application/json".into()));
     if renew {
         let (Some(paired_origin), Some(csrf)) = (
             credentials.session_origin.as_deref(),
@@ -467,29 +452,17 @@ pub fn peer_session_request(
         ) else {
             return Err(RemoteFailure::MissingCredentials);
         };
-        request = request
-            .set("Origin", paired_origin)
-            .set("X-Hotsheet-Csrf", csrf);
+        headers.retain(|(name, _)| !matches!(*name, "Origin" | "X-Hotsheet-Csrf"));
+        headers.push(("Origin", paired_origin.into()));
+        headers.push(("X-Hotsheet-Csrf", csrf.into()));
     }
-    let response = match request.call() {
-        Ok(response) => response,
-        Err(ureq::Error::Status(401 | 403, response)) => return Err(auth_failure(response)),
-        Err(ureq::Error::Status(404, _)) => return Err(RemoteFailure::Unsupported),
-        Err(ureq::Error::Status(300..=399, _)) => return Err(RemoteFailure::Redirect),
-        Err(ureq::Error::Status(_, _)) => return Err(RemoteFailure::InvalidResponse),
-        Err(ureq::Error::Transport(error)) => {
-            return Err(if error.kind() == ureq::ErrorKind::ConnectionFailed {
-                RemoteFailure::Unreachable
-            } else {
-                RemoteFailure::TrustFailed
-            });
-        }
-    };
-    if !matches!(response.status(), 200 | 202) {
+    let response = refuse_error_statuses(send(&agent, method, &url, &headers, None))?;
+    if !matches!(response.status().as_u16(), 200 | 202) {
         return Err(RemoteFailure::InvalidResponse);
     }
     let mut bytes = Vec::new();
     response
+        .into_body()
         .into_reader()
         .take(64 * 1024 + 1)
         .read_to_end(&mut bytes)
@@ -519,16 +492,19 @@ fn remote_agent(
     credentials
         .trust_fingerprint(origin)
         .map_err(|_| RemoteFailure::TrustFailed)?;
-    let mut builder = ureq::AgentBuilder::new()
-        .redirects(0)
-        .timeout_connect(Duration::from_secs(5))
-        .timeout_read(Duration::from_secs(10))
-        .timeout_write(Duration::from_secs(5))
-        .timeout(Duration::from_secs(15));
-    if origin.starts_with("https://") {
-        builder = builder.tls_config(Arc::new(client_config(credentials)?));
-    }
-    Ok(builder.build())
+    // HS2-9ABVDW: error statuses are read here, for the peer's own refusal code.
+    let settings = hotsheet_http::config()
+        .max_redirects(0)
+        .http_status_as_error(false)
+        .timeout_connect(Some(Duration::from_secs(5)))
+        .timeout_per_read(Some(Duration::from_secs(10)))
+        .timeout_per_write(Some(Duration::from_secs(5)))
+        .timeout_global(Some(Duration::from_secs(15)));
+    Ok(if origin.starts_with("https://") {
+        hotsheet_http::build_with_tls(settings, Arc::new(client_config(credentials)?))
+    } else {
+        hotsheet_http::build(settings)
+    })
 }
 
 /// A reviewed CA pins the peer to exactly that authority; without one the peer must present a
@@ -594,37 +570,29 @@ fn get_limited<T: DeserializeOwned>(
     credentials: &RemoteCredentials,
     limit: usize,
 ) -> Result<T, RemoteFailure> {
-    let request = remote_auth_request(agent.get(&format!("{origin}{path}")), origin, credentials);
-    let result = request.set("Accept", "application/json").call();
-    let response = match result {
-        Ok(response) => response,
-        // HS2-4B0KSD: an expired or revoked paired session is its own failure, so the desktop
-        // offers renewal instead of retrying; the peer's code says which.
-        Err(ureq::Error::Status(401 | 403, response)) => return Err(auth_failure(response)),
-        Err(ureq::Error::Status(404, _)) => return Err(RemoteFailure::Unsupported),
-        Err(ureq::Error::Status(300..=399, _)) => return Err(RemoteFailure::Redirect),
-        Err(ureq::Error::Status(_, _)) => return Err(RemoteFailure::InvalidResponse),
-        Err(ureq::Error::Transport(error)) => {
-            return Err(if error.kind() == ureq::ErrorKind::ConnectionFailed {
-                RemoteFailure::Unreachable
-            } else {
-                RemoteFailure::TrustFailed
-            });
-        }
-    };
-    if (300..400).contains(&response.status()) {
+    let mut headers = remote_auth_headers("GET", origin, credentials);
+    headers.push(("Accept", "application/json".into()));
+    let response = refuse_error_statuses(send(
+        agent,
+        "GET",
+        &format!("{origin}{path}"),
+        &headers,
+        None,
+    ))?;
+    if response.status().is_redirection() {
         return Err(RemoteFailure::Redirect);
     }
-    if response.status() != 200 {
+    if response.status().as_u16() != 200 {
         return Err(RemoteFailure::InvalidResponse);
     }
-    if response.header("x-hotsheet-truncated") == Some("true")
-        || response.header("x-hotsheet-partial") == Some("true")
+    if hotsheet_http::header(&response, "x-hotsheet-truncated") == Some("true")
+        || hotsheet_http::header(&response, "x-hotsheet-partial") == Some("true")
     {
         return Err(RemoteFailure::ResponseLimit);
     }
     let mut bytes = Vec::new();
     response
+        .into_body()
         .into_reader()
         .take((limit + 1) as u64)
         .read_to_end(&mut bytes)
@@ -635,11 +603,66 @@ fn get_limited<T: DeserializeOwned>(
     serde_json::from_slice(&bytes).map_err(|_| RemoteFailure::InvalidResponse)
 }
 
+/// One request to a peer with these headers. An error status comes back as a response
+/// (the remote agent reads them), so callers see the peer's own code (HS2-9ABVDW).
+fn send(
+    agent: &ureq::Agent,
+    method: &str,
+    url: &str,
+    headers: &[(&'static str, String)],
+    body: Option<&[u8]>,
+) -> Result<ureq::http::Response<ureq::Body>, ureq::Error> {
+    let headers: Vec<(&str, &str)> = headers
+        .iter()
+        .map(|(name, value)| (*name, value.as_str()))
+        .collect();
+    hotsheet_http::run(agent, method, url, &headers, body)
+}
+
+/// Whether no connection to the peer was made (refused, unreachable, a connect timeout or a
+/// failed TLS handshake). Anything else after the request left is a trust failure.
+fn connection_failed(error: &ureq::Error) -> bool {
+    hotsheet_http::failure_kind(error) == hotsheet_http::FailureKind::ConnectionFailed
+}
+
+/// A peer answer with its error statuses mapped: 401/403 by the peer's code, 404
+/// unsupported, any other 4xx/5xx an invalid response.
+fn refuse_error_statuses(
+    result: Result<ureq::http::Response<ureq::Body>, ureq::Error>,
+) -> Result<ureq::http::Response<ureq::Body>, RemoteFailure> {
+    let response = match result {
+        Ok(response) => response,
+        // An agent that reports statuses as errors gives no body to read the code from.
+        Err(ureq::Error::StatusCode(401 | 403)) => return Err(RemoteFailure::Unauthorized),
+        Err(ureq::Error::StatusCode(404)) => return Err(RemoteFailure::Unsupported),
+        Err(ureq::Error::StatusCode(_)) => return Err(RemoteFailure::InvalidResponse),
+        Err(error) => {
+            return Err(if connection_failed(&error) {
+                RemoteFailure::Unreachable
+            } else {
+                RemoteFailure::TrustFailed
+            });
+        }
+    };
+    match response.status().as_u16() {
+        // HS2-4B0KSD: an expired or revoked paired session is its own failure, so the desktop
+        // offers renewal instead of retrying; the peer's code says which.
+        401 | 403 => Err(auth_failure(response)),
+        404 => Err(RemoteFailure::Unsupported),
+        400.. => Err(RemoteFailure::InvalidResponse),
+        _ => Ok(response),
+    }
+}
+
 /// The peer's auth refusal by its stable `code` (HS2-4B0KSD). Only the code is read; the
 /// peer's message never reaches the caller.
-fn auth_failure(response: ureq::Response) -> RemoteFailure {
+fn auth_failure(response: ureq::http::Response<ureq::Body>) -> RemoteFailure {
     let mut bytes = Vec::new();
-    let _ = response.into_reader().take(4096).read_to_end(&mut bytes);
+    let _ = response
+        .into_body()
+        .into_reader()
+        .take(4096)
+        .read_to_end(&mut bytes);
     let code = serde_json::from_slice::<serde_json::Value>(&bytes)
         .ok()
         .and_then(|body| body.get("code")?.as_str().map(str::to_owned));
@@ -650,21 +673,22 @@ fn auth_failure(response: ureq::Response) -> RemoteFailure {
     }
 }
 
-fn remote_auth_request(
-    mut request: ureq::Request,
+/// The credential headers for one request to a peer.
+fn remote_auth_headers(
+    method: &str,
     origin: &str,
     credentials: &RemoteCredentials,
-) -> ureq::Request {
+) -> Vec<(&'static str, String)> {
+    let mut headers = Vec::new();
     if let Some(token) = credentials.session_token() {
         // HS2-AW2AKF: a server-to-server call presents the paired credential as a bearer,
         // which the peer accepts for writes without browser Origin and CSRF proof. The
         // cookie stays for a peer that predates bearer sessions; for its writes, send the
         // paired origin and CSRF proof stored at pairing. Reads never send the CSRF proof,
         // so a stale one cannot refuse them.
-        request = request
-            .set("Authorization", &format!("Bearer {token}"))
-            .set("Cookie", &format!("hs2_remote_session={token}"));
-        if !matches!(request.method(), "GET" | "HEAD")
+        headers.push(("Authorization", format!("Bearer {token}")));
+        headers.push(("Cookie", format!("hs2_remote_session={token}")));
+        if !matches!(method, "GET" | "HEAD")
             && let (Some(paired_origin), Some(csrf)) = (
                 credentials.session_origin.as_deref(),
                 credentials
@@ -673,14 +697,16 @@ fn remote_auth_request(
                     .map(hotsheet_sync::secret::SecretString::expose),
             )
         {
-            request = request
-                .set("Origin", paired_origin)
-                .set("X-Hotsheet-Csrf", csrf);
+            headers.push(("Origin", paired_origin.to_owned()));
+            headers.push(("X-Hotsheet-Csrf", csrf.to_owned()));
         }
     } else if origin.starts_with("http://127.0.0.1:") || origin.starts_with("http://[::1]:") {
-        request = request.set("X-Hotsheet-Secret", credentials.bearer_secret.expose());
+        headers.push((
+            "X-Hotsheet-Secret",
+            credentials.bearer_secret.expose().to_owned(),
+        ));
     }
-    request
+    headers
 }
 
 #[cfg(test)]

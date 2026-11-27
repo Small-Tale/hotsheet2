@@ -1,0 +1,17 @@
+[package]
+name = "hotsheet-http"
+description = "Hot Sheet 2 outbound HTTP baseline: the one ureq agent configuration and failure classification every crate starts from (HS2-9ABVDW)."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+ureq.workspace = true
+# The default agent's TLS provider is pinned to ring, as ureq 2 did (HS2-9ABVDW).
+rustls = { workspace = true, features = ["ring"] }
+
+[dev-dependencies]
+rcgen.workspace = true

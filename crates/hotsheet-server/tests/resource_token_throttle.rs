@@ -65,19 +65,19 @@ struct Reply {
 }
 
 fn renew(base: &str, authorization: Option<&str>) -> Reply {
-    let mut request = ureq::post(&format!("{base}/resource-claim-token/renew"))
-        .set("Content-Type", "application/json");
+    let mut request = hotsheet_http::build(hotsheet_http::config().http_status_as_error(false))
+        .post(&format!("{base}/resource-claim-token/renew"))
+        .header("Content-Type", "application/json");
     if let Some(value) = authorization {
-        request = request.set("Authorization", value);
+        request = request.header("Authorization", value);
     }
-    let response = match request.send_string("{\"duration_ms\": 60000}") {
-        Ok(response) => response,
-        Err(ureq::Error::Status(_, response)) => response,
-        Err(error) => panic!("{error}"),
-    };
-    let status = response.status();
-    let retry_after = response.header("Retry-After").map(str::to_owned);
-    let body = serde_json::from_str(&response.into_string().unwrap()).unwrap_or(Value::Null);
+    let response = request
+        .send("{\"duration_ms\": 60000}")
+        .unwrap_or_else(|error| panic!("{error}"));
+    let status = response.status().as_u16();
+    let retry_after = hotsheet_http::header(&response, "Retry-After").map(str::to_owned);
+    let body = serde_json::from_str(&response.into_body().read_to_string().unwrap())
+        .unwrap_or(Value::Null);
     Reply {
         status,
         retry_after,

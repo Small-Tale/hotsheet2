@@ -617,11 +617,12 @@ pub(crate) const INVENTORY_PROBE_CONNECT: std::time::Duration = std::time::Durat
 pub(crate) const INVENTORY_PROBE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(3);
 
 pub(crate) fn inventory_probe_agent() -> ureq::Agent {
-    ureq::AgentBuilder::new()
-        .user_agent("hotsheet2-server-inventory")
-        .timeout_connect(INVENTORY_PROBE_CONNECT)
-        .timeout(INVENTORY_PROBE_TIMEOUT)
-        .build()
+    hotsheet_http::build(
+        hotsheet_http::config()
+            .user_agent("hotsheet2-server-inventory")
+            .timeout_connect(Some(INVENTORY_PROBE_CONNECT))
+            .timeout_global(Some(INVENTORY_PROBE_TIMEOUT)),
+    )
 }
 
 /// One health probe: `GET /health` answered with `"status": "ok"`.
@@ -630,7 +631,7 @@ pub(crate) fn inventory_health_ok(agent: &ureq::Agent, url: &str) -> bool {
         .get(&format!("{}/health", url.trim_end_matches('/')))
         .call()
         .ok()
-        .and_then(|response| response.into_string().ok())
+        .and_then(|mut response| response.body_mut().read_to_string().ok())
         .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
         .is_some_and(|value| value.get("status").and_then(|status| status.as_str()) == Some("ok"))
 }
@@ -1094,28 +1095,34 @@ pub(crate) fn server_json_with_body(
     body: Option<&serde_json::Value>,
 ) -> Result<serde_json::Value> {
     let endpoint = format!("{}/{}", server.url.trim_end_matches('/'), route);
-    let request = ureq::request(method, &endpoint)
-        .set("X-Hotsheet-Secret", server.secret.expose())
-        .timeout(std::time::Duration::from_secs(10));
-    let result = match body {
-        Some(body) => request
-            .set("Content-Type", "application/json")
-            .send_string(&serde_json::to_string(body)?),
-        None => request.call(),
-    };
-    let response = match result {
-        Ok(response) => response,
-        Err(ureq::Error::Status(status, response)) => {
-            let body = response.into_string().unwrap_or_default();
-            let message = serde_json::from_str::<serde_json::Value>(&body)
-                .ok()
-                .and_then(|body| body["error"].as_str().map(str::to_owned))
-                .unwrap_or_else(|| format!("server returned HTTP {status}"));
-            bail!("Hot Sheet server request failed: {message}");
-        }
-        Err(error) => return Err(error.into()),
-    };
-    let text = response.into_string()?;
+    // HS2-9ABVDW: an error status is read here, for the server's own message.
+    let agent = hotsheet_http::build(
+        hotsheet_http::config()
+            .http_status_as_error(false)
+            .timeout_global(Some(std::time::Duration::from_secs(10))),
+    );
+    let body = body.map(serde_json::to_string).transpose()?;
+    let mut headers = vec![("X-Hotsheet-Secret", server.secret.expose())];
+    if body.is_some() {
+        headers.push(("Content-Type", "application/json"));
+    }
+    let mut response = hotsheet_http::run(
+        &agent,
+        method,
+        &endpoint,
+        &headers,
+        body.as_deref().map(str::as_bytes),
+    )?;
+    let status = response.status().as_u16();
+    if status >= 400 {
+        let body = response.body_mut().read_to_string().unwrap_or_default();
+        let message = serde_json::from_str::<serde_json::Value>(&body)
+            .ok()
+            .and_then(|body| body["error"].as_str().map(str::to_owned))
+            .unwrap_or_else(|| format!("server returned HTTP {status}"));
+        bail!("Hot Sheet server request failed: {message}");
+    }
+    let text = response.body_mut().read_to_string()?;
     Ok(if text.trim().is_empty() {
         serde_json::Value::Null
     } else {

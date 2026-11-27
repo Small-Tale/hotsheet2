@@ -21,6 +21,7 @@ sha2.workspace = true
 ring.workspace = true
 percent-encoding.workspace = true
 ureq.workspace = true
+hotsheet-http.workspace = true
 tempfile.workspace = true
 # HS2-BWJWWX: a blocking WebSocket client for the Ably adapter. TLS is built explicitly
 # with the ring provider (the tree also holds aws-lc-rs, so the default builder would panic).

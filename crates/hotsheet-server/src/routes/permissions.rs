@@ -315,14 +315,18 @@ fn invalidate_peer_legacy_permissions(
             "{}/checkouts/{checkout_id}/permissions/legacy/invalidate",
             url.trim_end_matches('/')
         );
-        let response = ureq::post(&endpoint)
-            .set("X-Hotsheet-Secret", secret)
-            .set("Content-Type", "application/json")
-            .timeout(std::time::Duration::from_secs(10))
-            .send_string(&body)
+        let response = hotsheet_http::agent()
+            .post(&endpoint)
+            .header("X-Hotsheet-Secret", secret)
+            .header("Content-Type", "application/json")
+            .config()
+            .timeout_global(Some(std::time::Duration::from_secs(10)))
+            .build()
+            .send(&body)
             .map_err(|_| peer_discard_unavailable())?;
-        let response: serde_json::Value = serde_json::from_reader(response.into_reader())
-            .map_err(|_| peer_discard_unavailable())?;
+        let response: serde_json::Value =
+            serde_json::from_reader(response.into_body().into_reader())
+                .map_err(|_| peer_discard_unavailable())?;
         if response["hosted"].as_bool() != Some(false) {
             return Err(peer_discard_unavailable());
         }

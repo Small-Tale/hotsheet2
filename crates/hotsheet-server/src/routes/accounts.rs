@@ -626,18 +626,20 @@ mod installation_url_tests {
             let url = url.clone();
             let before = upstream_calls.load(Ordering::SeqCst);
             let (status, body) = tokio::task::spawn_blocking(move || {
-                let agent = ureq::AgentBuilder::new()
-                    .timeout(Duration::from_secs(5))
-                    .build();
-                let response = match agent
+                let agent = hotsheet_http::build(
+                    hotsheet_http::config()
+                        .http_status_as_error(false)
+                        .timeout_global(Some(Duration::from_secs(5))),
+                );
+                let mut response = agent
                     .get(&url)
-                    .set("x-hotsheet-secret", "synthetic-server-token")
+                    .header("x-hotsheet-secret", "synthetic-server-token")
                     .call()
-                {
-                    Ok(response) | Err(ureq::Error::Status(_, response)) => response,
-                    Err(error) => panic!("synthetic HTTP request failed: {error}"),
-                };
-                (response.status(), response.into_string().unwrap())
+                    .unwrap_or_else(|error| panic!("synthetic HTTP request failed: {error}"));
+                (
+                    response.status().as_u16(),
+                    response.body_mut().read_to_string().unwrap(),
+                )
             })
             .await
             .unwrap();
@@ -796,21 +798,22 @@ mod installation_url_tests {
             for path in &paths {
                 let url = format!("{server_origin}{path}");
                 let (status, body) = tokio::task::spawn_blocking(move || {
-                    let agent = ureq::AgentBuilder::new()
-                        .timeout(Duration::from_secs(5))
-                        .build();
-                    let response = match agent
+                    let agent = hotsheet_http::build(
+                        hotsheet_http::config()
+                            .http_status_as_error(false)
+                            .timeout_global(Some(Duration::from_secs(5))),
+                    );
+                    let response = agent
                         .get(&url)
-                        .set("x-hotsheet-secret", "synthetic-server-token")
+                        .header("x-hotsheet-secret", "synthetic-server-token")
                         .call()
-                    {
-                        Ok(response) | Err(ureq::Error::Status(_, response)) => response,
-                        Err(error) => panic!("synthetic HTTP request failed: {error}"),
-                    };
+                        .unwrap_or_else(|error| panic!("synthetic HTTP request failed: {error}"));
                     (
-                        response.status(),
-                        serde_json::from_reader::<_, serde_json::Value>(response.into_reader())
-                            .unwrap(),
+                        response.status().as_u16(),
+                        serde_json::from_reader::<_, serde_json::Value>(
+                            response.into_body().into_reader(),
+                        )
+                        .unwrap(),
                     )
                 })
                 .await

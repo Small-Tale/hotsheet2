@@ -247,12 +247,13 @@ fn server_ticket_writes_ignore_an_inherited_git_repository_environment() {
     assert_sentinel_unchanged(&before, &sentinel, "server startup");
     let server_log = || std::fs::read_to_string(&log).unwrap_or_default();
 
-    let response = ureq::post(&format!("{}/tickets", info.url))
-        .set("x-hotsheet-secret", info.secret.expose())
-        .set("content-type", "application/json")
-        .send_string(r#"{"title":"isolated server ticket"}"#)
+    let response = hotsheet_http::agent()
+        .post(&format!("{}/tickets", info.url))
+        .header("x-hotsheet-secret", info.secret.expose())
+        .header("content-type", "application/json")
+        .send(r#"{"title":"isolated server ticket"}"#)
         .unwrap();
-    assert!(response.status() < 300);
+    assert!(response.status().as_u16() < 300);
     assert_sentinel_unchanged(&before, &sentinel, "ticket creation");
 
     // The committing write lands in the store's own history.
@@ -286,11 +287,13 @@ fn poll_json(
 ) -> serde_json::Value {
     let deadline = Instant::now() + Duration::from_secs(15);
     loop {
-        let body: serde_json::Value = ureq::get(&format!("{}{path}", info.url))
-            .set("x-hotsheet-secret", info.secret.expose())
+        let body: serde_json::Value = hotsheet_http::agent()
+            .get(&format!("{}{path}", info.url))
+            .header("x-hotsheet-secret", info.secret.expose())
             .call()
             .unwrap()
-            .into_string()
+            .into_body()
+            .read_to_string()
             .map(|text| serde_json::from_str(&text).unwrap())
             .unwrap();
         if done(&body) {
@@ -334,19 +337,22 @@ fn launched_commands_and_terminals_drop_an_inherited_git_repository_environment(
         "args": ["-c", probe],
         "cwd": checkout,
     }]);
-    let saved = ureq::put(&format!("{}/commands", info.url))
-        .set("x-hotsheet-secret", info.secret.expose())
-        .set("if-match", "*")
-        .set("content-type", "application/json")
-        .send_string(&definitions.to_string())
+    let saved = hotsheet_http::agent()
+        .put(&format!("{}/commands", info.url))
+        .header("x-hotsheet-secret", info.secret.expose())
+        .header("if-match", "*")
+        .header("content-type", "application/json")
+        .send(&definitions.to_string())
         .unwrap();
-    assert!(saved.status() < 300);
+    assert!(saved.status().as_u16() < 300);
     assert_sentinel_unchanged(&before, &sentinel, "command setup");
-    let run: serde_json::Value = ureq::post(&format!("{}/commands/probe/run", info.url))
-        .set("x-hotsheet-secret", info.secret.expose())
-        .call()
+    let run: serde_json::Value = hotsheet_http::agent()
+        .post(&format!("{}/commands/probe/run", info.url))
+        .header("x-hotsheet-secret", info.secret.expose())
+        .send_empty()
         .unwrap()
-        .into_string()
+        .into_body()
+        .read_to_string()
         .map(|text| serde_json::from_str(&text).unwrap())
         .unwrap();
     let run_id = run["id"].as_str().unwrap().to_owned();
@@ -365,10 +371,11 @@ fn launched_commands_and_terminals_drop_an_inherited_git_repository_environment(
     assert!(output.contains(&expected_top), "command output: {output}");
     assert_sentinel_unchanged(&before, &sentinel, "command run");
 
-    let terminal: serde_json::Value = ureq::post(&format!("{}/terminals", info.url))
-        .set("x-hotsheet-secret", info.secret.expose())
-        .set("content-type", "application/json")
-        .send_string(
+    let terminal: serde_json::Value = hotsheet_http::agent()
+        .post(&format!("{}/terminals", info.url))
+        .header("x-hotsheet-secret", info.secret.expose())
+        .header("content-type", "application/json")
+        .send(
             &serde_json::json!({
                 "command": "/bin/sh",
                 "args": ["-c", format!("{probe}; sleep 30")],
@@ -377,7 +384,8 @@ fn launched_commands_and_terminals_drop_an_inherited_git_repository_environment(
             .to_string(),
         )
         .unwrap()
-        .into_string()
+        .into_body()
+        .read_to_string()
         .map(|text| serde_json::from_str::<serde_json::Value>(&text).unwrap())
         .unwrap();
     let terminal_id = terminal["id"].as_str().unwrap().to_owned();

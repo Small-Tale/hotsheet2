@@ -197,24 +197,33 @@ impl Drop for Machine {
 }
 
 fn get(info: &InstanceInfo, path: &str) -> Value {
-    ureq::get(&format!("{}{path}", info.url))
-        .set("x-hotsheet-secret", info.secret.expose())
+    hotsheet_http::agent()
+        .get(&format!("{}{path}", info.url))
+        .header("x-hotsheet-secret", info.secret.expose())
         .call()
         .unwrap_or_else(|error| panic!("GET {path}: {error}"))
-        .into_string()
+        .into_body()
+        .read_to_string()
         .map(|text| serde_json::from_str(&text).unwrap())
         .unwrap()
 }
 
 fn send(info: &InstanceInfo, method: &str, path: &str, body: &Value) -> Value {
-    ureq::request(method, &format!("{}{path}", info.url))
-        .set("x-hotsheet-secret", info.secret.expose())
-        .set("content-type", "application/json")
-        .send_string(&body.to_string())
-        .unwrap_or_else(|error| panic!("{method} {path}: {error}"))
-        .into_string()
-        .map(|text| serde_json::from_str(&text).unwrap())
-        .unwrap()
+    hotsheet_http::run(
+        &hotsheet_http::agent(),
+        method,
+        &format!("{}{path}", info.url),
+        &[
+            ("x-hotsheet-secret", info.secret.expose()),
+            ("content-type", "application/json"),
+        ],
+        Some(body.to_string().as_bytes()),
+    )
+    .unwrap_or_else(|error| panic!("{method} {path}: {error}"))
+    .into_body()
+    .read_to_string()
+    .map(|text| serde_json::from_str(&text).unwrap())
+    .unwrap()
 }
 
 /// Wait until `read` returns a value; the server answers each read from its own state.
@@ -366,8 +375,9 @@ fn hs2_qpjq7a_local_clients_reach_a_server_that_serves_remote_peers_only_over_mt
         decision["hookSpecificOutput"]["decision"]["behavior"],
         "allow"
     );
-    ureq::delete(&format!("{}/terminals/{terminal_id}", info.url))
-        .set("x-hotsheet-secret", info.secret.expose())
+    hotsheet_http::agent()
+        .delete(&format!("{}/terminals/{terminal_id}", info.url))
+        .header("x-hotsheet-secret", info.secret.expose())
         .call()
         .unwrap();
 }

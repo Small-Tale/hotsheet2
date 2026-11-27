@@ -62,8 +62,11 @@ fn peer_expected(responses: Vec<String>, expected: &str) -> (String, std::thread
                 assert!(bytes.len() < 16_384);
             }
             let request = String::from_utf8(bytes).unwrap();
+            // Header names are case-insensitive; ureq 3 sends them lowercase (HS2-9ABVDW).
             assert!(
-                request.contains(&expected),
+                request
+                    .to_ascii_lowercase()
+                    .contains(&expected.to_ascii_lowercase()),
                 "missing expected credential header"
             );
             if expected.contains("hs2_remote_session=") {
@@ -84,7 +87,11 @@ fn hs2_w4jjje_remote_session_uses_cookie_without_forwarding_machine_bearer() {
     );
     let mut paired = credentials();
     paired.bearer_secret = format!("session:{}", "A".repeat(43)).into();
-    let agent = ureq::AgentBuilder::new().redirects(0).build();
+    let agent = hotsheet_http::build(
+        hotsheet_http::config()
+            .max_redirects(0)
+            .http_status_as_error(false),
+    );
     assert_eq!(
         get::<Value>(&agent, &origin, "/synthetic", &paired).unwrap(),
         json!({})
@@ -94,28 +101,24 @@ fn hs2_w4jjje_remote_session_uses_cookie_without_forwarding_machine_bearer() {
 
 #[test]
 fn hs2_w4jjje_machine_bearer_is_only_attached_to_loopback_http() {
-    let agent = ureq::AgentBuilder::new().build();
     let credentials = credentials();
+    let header = |headers: &[(&'static str, String)], name: &str| {
+        headers
+            .iter()
+            .find(|(n, _)| *n == name)
+            .map(|(_, value)| value.clone())
+    };
     for origin in [
         "http://remote.example.test:1234",
         "https://remote.example.test:1234",
     ] {
-        let request = remote_auth_request(
-            agent.get(&format!("{origin}/synthetic")),
-            origin,
-            &credentials,
-        );
-        assert_eq!(request.header("X-Hotsheet-Secret"), None);
-        assert_eq!(request.header("Cookie"), None);
+        let headers = remote_auth_headers("GET", origin, &credentials);
+        assert_eq!(header(&headers, "X-Hotsheet-Secret"), None);
+        assert_eq!(header(&headers, "Cookie"), None);
     }
-    let origin = "http://127.0.0.1:1234";
-    let request = remote_auth_request(
-        agent.get(&format!("{origin}/synthetic")),
-        origin,
-        &credentials,
-    );
+    let headers = remote_auth_headers("GET", "http://127.0.0.1:1234", &credentials);
     assert_eq!(
-        request.header("X-Hotsheet-Secret"),
+        header(&headers, "X-Hotsheet-Secret").as_deref(),
         Some("synthetic-transport-bearer")
     );
 }
@@ -260,7 +263,11 @@ fn hs2_1y45mz_transport_bounds_responses_and_discards_private_peer_errors() {
         ),
     ] {
         let (origin, worker) = peer(vec![response(status, headers, &body)]);
-        let agent = ureq::AgentBuilder::new().redirects(0).build();
+        let agent = hotsheet_http::build(
+            hotsheet_http::config()
+                .max_redirects(0)
+                .http_status_as_error(false),
+        );
         assert_eq!(
             get::<Value>(&agent, &origin, "/synthetic", &credentials()).unwrap_err(),
             expected

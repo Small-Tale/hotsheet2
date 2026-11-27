@@ -872,11 +872,14 @@ fn report_claude_activity_hook(installed_agent: Option<&str>, input: &serde_json
         url.trim_end_matches('/'),
         urlencoding_component(&terminal)
     );
-    let _ = ureq::post(&endpoint)
-        .set("X-Hotsheet-Secret", &secret)
-        .set("Content-Type", "application/json")
-        .timeout(std::time::Duration::from_secs(2))
-        .send_string(&payload.to_string());
+    let _ = hotsheet_http::agent()
+        .post(&endpoint)
+        .header("X-Hotsheet-Secret", &secret)
+        .header("Content-Type", "application/json")
+        .config()
+        .timeout_global(Some(std::time::Duration::from_secs(2)))
+        .build()
+        .send(payload.to_string());
 }
 
 fn report_claude_turn_hook(
@@ -914,18 +917,22 @@ fn report_claude_turn_hook(
     .to_string();
     // `Some((status, reply))` when the server refused the report.
     let send = || -> Result<Option<(u16, String)>> {
-        match ureq::post(&endpoint)
-            .set("X-Hotsheet-Secret", secret)
-            .set("Content-Type", "application/json")
-            .timeout(std::time::Duration::from_secs(5))
-            .send_string(&body)
-        {
-            Ok(_) => Ok(None),
-            Err(ureq::Error::Status(status, response)) => {
-                Ok(Some((status, response.into_string().unwrap_or_default())))
-            }
-            Err(error) => Err(error.into()),
-        }
+        let mut response = hotsheet_http::build(
+            hotsheet_http::config()
+                .http_status_as_error(false)
+                .timeout_global(Some(std::time::Duration::from_secs(5))),
+        )
+        .post(&endpoint)
+        .header("X-Hotsheet-Secret", secret)
+        .header("Content-Type", "application/json")
+        .send(&body)?;
+        let status = response.status().as_u16();
+        Ok((status >= 400).then(|| {
+            (
+                status,
+                response.body_mut().read_to_string().unwrap_or_default(),
+            )
+        }))
     };
     let Some((status, reply)) = send()? else {
         return Ok(());
@@ -996,11 +1003,12 @@ pub(crate) fn cmd_launch(
     if let Some(store) = selected.as_ref() {
         open_body["stores"] = serde_json::json!([store]);
     }
-    let opened = ureq::post(&format!("{}/projects/open", launch.server.url))
-        .set("X-Hotsheet-Secret", launch.server.secret.expose())
-        .set("Content-Type", "application/json")
-        .send_string(&open_body.to_string())?;
-    let opened: serde_json::Value = serde_json::from_str(&opened.into_string()?)?;
+    let mut opened = hotsheet_http::agent()
+        .post(&format!("{}/projects/open", launch.server.url))
+        .header("X-Hotsheet-Secret", launch.server.secret.expose())
+        .header("Content-Type", "application/json")
+        .send(open_body.to_string())?;
+    let opened: serde_json::Value = serde_json::from_str(&opened.body_mut().read_to_string()?)?;
     let checkout_id = opened["checkout"]["id"]
         .as_str()
         .context("project-open response did not include a checkout id")?;
@@ -1663,10 +1671,13 @@ fn notify_running_servers(path: &str) -> Result<()> {
             continue;
         };
         let endpoint = format!("{}/{path}", server.url.trim_end_matches('/'));
-        if let Err(error) = ureq::post(&endpoint)
-            .set("X-Hotsheet-Secret", server.secret.expose())
-            .timeout(std::time::Duration::from_secs(10))
-            .call()
+        if let Err(error) = hotsheet_http::agent()
+            .post(&endpoint)
+            .header("X-Hotsheet-Secret", server.secret.expose())
+            .config()
+            .timeout_global(Some(std::time::Duration::from_secs(10)))
+            .build()
+            .send_empty()
         {
             failures.push(format!("{endpoint}: {error}"));
         }
@@ -2023,11 +2034,15 @@ pub(crate) fn hook_server_route() -> Option<(String, String)> {
 }
 
 pub(crate) fn hook_get_json(url: &str, secret: &str) -> Result<serde_json::Value> {
-    let body = ureq::get(url)
-        .set("X-Hotsheet-Secret", secret)
-        .timeout(std::time::Duration::from_secs(5))
+    let body = hotsheet_http::agent()
+        .get(url)
+        .header("X-Hotsheet-Secret", secret)
+        .config()
+        .timeout_global(Some(std::time::Duration::from_secs(5)))
+        .build()
         .call()?
-        .into_string()?;
+        .body_mut()
+        .read_to_string()?;
     Ok(serde_json::from_str(&body)?)
 }
 
@@ -2051,11 +2066,14 @@ pub(crate) fn report_terminal_session(
         )
     };
     let post = |route: &str, body: serde_json::Value| -> Result<()> {
-        ureq::post(&endpoint(route))
-            .set("X-Hotsheet-Secret", secret)
-            .set("Content-Type", "application/json")
-            .timeout(std::time::Duration::from_secs(5))
-            .send_string(&body.to_string())?;
+        hotsheet_http::agent()
+            .post(&endpoint(route))
+            .header("X-Hotsheet-Secret", secret)
+            .header("Content-Type", "application/json")
+            .config()
+            .timeout_global(Some(std::time::Duration::from_secs(5)))
+            .build()
+            .send(body.to_string())?;
         Ok(())
     };
     let delete = |route: &str, session_id: Option<&str>| -> Result<()> {
@@ -2067,9 +2085,12 @@ pub(crate) fn report_terminal_session(
             ),
             None => endpoint(route),
         };
-        ureq::delete(&url)
-            .set("X-Hotsheet-Secret", secret)
-            .timeout(std::time::Duration::from_secs(5))
+        hotsheet_http::agent()
+            .delete(&url)
+            .header("X-Hotsheet-Secret", secret)
+            .config()
+            .timeout_global(Some(std::time::Duration::from_secs(5)))
+            .build()
             .call()?;
         Ok(())
     };
@@ -2092,9 +2113,12 @@ pub(crate) fn report_terminal_session(
                 url.push_str("&session_id=");
                 url.push_str(&urlencoding_component(session_id));
             }
-            ureq::delete(&url)
-                .set("X-Hotsheet-Secret", secret)
-                .timeout(std::time::Duration::from_secs(5))
+            hotsheet_http::agent()
+                .delete(&url)
+                .header("X-Hotsheet-Secret", secret)
+                .config()
+                .timeout_global(Some(std::time::Duration::from_secs(5)))
+                .build()
                 .call()?;
             Ok(())
         }
@@ -2173,15 +2197,18 @@ pub(crate) fn wait_for_terminal_question_answer(
     // gets its native prompt if nobody answers or the server disappears.
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(86_400);
     while std::time::Instant::now() < deadline {
-        match ureq::get(&endpoint)
-            .set("X-Hotsheet-Secret", secret)
-            .timeout(std::time::Duration::from_secs(5))
+        match hotsheet_http::agent()
+            .get(&endpoint)
+            .header("X-Hotsheet-Secret", secret)
+            .config()
+            .timeout_global(Some(std::time::Duration::from_secs(5)))
+            .build()
             .call()
         {
-            Ok(response) if response.status() == 204 => {}
-            Ok(response) => {
+            Ok(response) if response.status().as_u16() == 204 => {}
+            Ok(mut response) => {
                 let reply: serde_json::Value =
-                    serde_json::from_str(&response.into_string().ok()?).ok()?;
+                    serde_json::from_str(&response.body_mut().read_to_string().ok()?).ok()?;
                 if reply["native"] == true {
                     return None;
                 }
@@ -2190,9 +2217,12 @@ pub(crate) fn wait_for_terminal_question_answer(
             Err(_) => {
                 // A failed poll returns Claude to its native prompt. Clear the matching notice
                 // when the server is still reachable; a newer session/tool cannot be removed.
-                let _ = ureq::delete(&endpoint)
-                    .set("X-Hotsheet-Secret", secret)
-                    .timeout(std::time::Duration::from_secs(2))
+                let _ = hotsheet_http::agent()
+                    .delete(&endpoint)
+                    .header("X-Hotsheet-Secret", secret)
+                    .config()
+                    .timeout_global(Some(std::time::Duration::from_secs(2)))
+                    .build()
                     .call();
                 return None;
             }
@@ -2208,11 +2238,13 @@ pub(crate) fn ask_server(
     request: &serde_json::Value,
 ) -> Result<serde_json::Value> {
     let endpoint = format!("{}/permissions/ask", url.trim_end_matches('/'));
-    let text = ureq::post(&endpoint)
-        .set("X-Hotsheet-Secret", secret)
-        .set("Content-Type", "application/json")
-        .send_string(&request.to_string())?
-        .into_string()?;
+    let text = hotsheet_http::agent()
+        .post(&endpoint)
+        .header("X-Hotsheet-Secret", secret)
+        .header("Content-Type", "application/json")
+        .send(request.to_string())?
+        .body_mut()
+        .read_to_string()?;
     Ok(serde_json::from_str(&text)?)
 }
 
