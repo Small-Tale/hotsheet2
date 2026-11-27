@@ -3,6 +3,7 @@ import { expect, test } from '@playwright/test';
 import { appRequests } from './app-requests';
 import { routeAllFeaturesOn } from './feature-areas-route';
 import { openMockedProject } from './open-mocked-project';
+import { ticketChangeEvent } from './server-event-fixtures';
 
 const capabilities = {
   create: true,
@@ -299,7 +300,7 @@ test('an obsolete background count snapshot cannot overwrite a project after an 
   await demoPoll!.fulfill({
     json: {
       cursor: 2,
-      events: [{ store: 'git-local', kind: 'changed', id: 'HS2-DEMO', slug: 'HS2-DEMO' }],
+      events: [ticketChangeEvent('changed', { connection_id: 'git-local', native_id: 'HS2-DEMO', slug: 'HS2-DEMO' })],
       overflow: false,
     },
   });

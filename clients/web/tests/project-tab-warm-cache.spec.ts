@@ -3,7 +3,7 @@ import { expect, type Page, type Route, test, type WebSocketRoute } from '@playw
 import type { ChangeEvent } from '../src/api';
 import { PROJECT_WARM_CACHE_CAPACITY } from '../src/project-warm-cache';
 import { appRequests } from './app-requests';
-import { permissionAskedEvent } from './server-event-fixtures';
+import { permissionAskedEvent, ticketChangeEvent } from './server-event-fixtures';
 
 // HS2-AZZ9TF: recently used project tabs stay warm (tickets, commands, AI tool inventory, terminal
 // snapshot) so switching is instant — no loading placeholder, busy bars, or "Loading AI tools" /
@@ -287,16 +287,13 @@ async function installWorkspace(page: Page) {
       page.evaluate(() => {
         (window as unknown as { __busyLog: string[] }).__busyLog.length = 0;
       }),
-    /** Emits a ticket change of `kind`, or a server-shaped nudge from `server-event-fixtures` (HS2-CSPDW8). */
-    emit: async (index: number, change: string | ChangeEvent) => {
+    /** Emits a server-shaped ticket change or nudge from `server-event-fixtures` (HS2-CSPDW8, HS2-Y59J3K). */
+    emit: async (index: number, change: ChangeEvent) => {
       const id = projectId(index);
       await expect.poll(() => sockets.get(id)?.length ?? 0).toBeGreaterThan(0);
       const next = (cursor.get(id) ?? 1) + 1;
       cursor.set(id, next);
-      const event =
-        typeof change === 'string'
-          ? { cursor: next, store: 'git', kind: change, id: 'ticket', slug: `HS2-${projects[index].name}A` }
-          : { ...change, cursor: next };
+      const event = { ...change, cursor: next };
       events.set(id, [...(events.get(id) ?? []), event]);
       sockets.get(id)!.at(-1)!.send(JSON.stringify(event));
     },
@@ -521,7 +518,7 @@ test('live change events keep a cached background project current so its switch 
 
   const before = workspace.requestsFor(1, '/tickets');
   workspace.rows.p1 = [row('P1A'), row('P1LIVE')];
-  await workspace.emit(1, 'created');
+  await workspace.emit(1, ticketChangeEvent('created', row('P1LIVE')));
   await expect.poll(() => workspace.requestsFor(1, '/tickets')).toBeGreaterThan(before);
   await expect(workspace.tab(1).locator('..').locator('.project-tab__work')).toHaveAttribute(
     'aria-label',
@@ -552,7 +549,7 @@ test('replays a background ticket event emitted during the socket catch-up poll 
   workspace.rows.p1 = [row('P1A'), row('P1LIVE')];
   // The socket exists, but its zero-wait replay has not returned. The same event must be
   // delivered by that replay even if the queued socket copy becomes a duplicate.
-  await workspace.emit(1, 'created');
+  await workspace.emit(1, ticketChangeEvent('created', row('P1LIVE')));
   await workspace.releaseCatchup(1);
   await expect.poll(() => workspace.requestsFor(1, '/tickets')).toBeGreaterThan(before);
   await expect(workspace.tab(1).locator('..').locator('.project-tab__work')).toHaveAttribute(

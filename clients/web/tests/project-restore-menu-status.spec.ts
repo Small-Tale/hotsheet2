@@ -2,6 +2,7 @@ import { expect, type Page, test, type WebSocketRoute } from '@playwright/test';
 
 import { appRequests } from './app-requests';
 import { capabilities } from './mobile-project-fixture';
+import { ticketChangeEvent } from './server-event-fixtures';
 
 // HS2-R64JXA: Restore Project rows draw the project tab's own status. The shipped app restores three
 // remembered projects (a selected local one, a local one with active work, and a remote one) and
@@ -124,9 +125,12 @@ async function installProjects(page: Page) {
   /** A live claim event on a background project's stream, as a worker claiming there sends. */
   return async (projectId: string) => {
     await expect.poll(() => sockets.has(projectId)).toBe(true);
-    sockets
-      .get(projectId)!
-      .send(JSON.stringify({ cursor: 2, store: 'git', kind: 'claimed', id: 'BETA01', slug: 'HS2-BETA01' }));
+    sockets.get(projectId)!.send(
+      JSON.stringify({
+        cursor: 2,
+        ...ticketChangeEvent('claimed', { connection_id: 'git', native_id: 'BETA01', slug: 'HS2-BETA01' }),
+      }),
+    );
   };
 }
 

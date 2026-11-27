@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 
 import { appRequests } from './app-requests';
 import { openMockedProject } from './open-mocked-project';
+import { ticketChangeEvent } from './server-event-fixtures';
 
 // HS2-6AXG6Z: with a workspace search active, selecting a matching ticket that is not on the base
 // view's first page and then editing it (whose autosave change event triggers a background refresh)
@@ -175,7 +176,7 @@ test('keeps a search-selected ticket selected through a background refresh (HS2-
   await polls.shift()!.fulfill({
     json: {
       cursor: 2,
-      events: [{ store: 'git-local', kind: 'changed', id: 'HS2-BASE1', slug: 'HS2-BASE1' }],
+      events: [ticketChangeEvent('changed', { connection_id: 'git-local', native_id: 'HS2-BASE1', slug: 'HS2-BASE1' })],
       overflow: false,
     },
   });

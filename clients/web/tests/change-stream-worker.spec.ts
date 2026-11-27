@@ -1,8 +1,10 @@
 import { expect, type Page, test, type WebSocketRoute, type Worker } from '@playwright/test';
 
+import type { ChangeEvent } from '../src/api';
 import { appRequests } from './app-requests';
 import { openMockedProject } from './open-mocked-project';
 import { proxyFetch } from './real-ticket-server';
+import { ticketChangeEvent } from './server-event-fixtures';
 
 /**
  * HS2-SH9179: the shared change-stream worker, opted in through its local setting, follows two
@@ -199,10 +201,10 @@ async function installProjects(page: Page) {
     return sockets.get(projectId)!.at(-1)!;
   };
   /** Publish one change: to a routed (main-thread) socket when there is one, and to long polls. */
-  const emit = (projectId: string, kind: string, slug = 'HS2-X') => {
+  const emit = (projectId: string, event: ChangeEvent) => {
     const next = (cursor.get(projectId) ?? 1) + 1;
     cursor.set(projectId, next);
-    const change = { cursor: next, store: 'git', kind, id: 'ticket', slug };
+    const change = { ...event, cursor: next };
     log.set(projectId, [...(log.get(projectId) ?? []), change]);
     sockets.get(projectId)?.at(-1)?.send(JSON.stringify(change));
     for (const waiting of held.get(projectId) ?? []) waiting.finish();
@@ -252,16 +254,20 @@ test('follows two projects through the shared change-stream worker during switch
   const fixture = await openBothProjectsInWorker(page);
 
   // Sustained activity on both projects, interleaved with switching and searching.
+  // A payload-free stand-in for the server's `activity` event: only its delivery volume matters here.
+  const activity = { store: 'git', kind: 'activity', id: 'activity', slug: '' } satisfies ChangeEvent;
   for (let index = 0; index < 20; index += 1) {
-    fixture.emit(projects.alpha.id, 'activity');
-    fixture.emit(projects.beta.id, 'activity');
+    fixture.emit(projects.alpha.id, activity);
+    fixture.emit(projects.beta.id, activity);
   }
-  fixture.rows[projects.beta.id] = [...fixture.rows[projects.beta.id], row('BETA02', 'Beta second')];
-  fixture.emit(projects.beta.id, 'created', 'HS2-BETA02');
+  const beta02 = row('BETA02', 'Beta second');
+  fixture.rows[projects.beta.id] = [...fixture.rows[projects.beta.id], beta02];
+  fixture.emit(projects.beta.id, ticketChangeEvent('created', beta02));
   await page.getByRole('tab', { name: 'Beta' }).click();
   await expect(page.locator('[data-ticket-slug="HS2-BETA02"]')).toBeVisible();
-  fixture.rows[projects.alpha.id] = [...fixture.rows[projects.alpha.id], row('ALPHA2', 'Alpha second')];
-  fixture.emit(projects.alpha.id, 'created', 'HS2-ALPHA2');
+  const alpha2 = row('ALPHA2', 'Alpha second');
+  fixture.rows[projects.alpha.id] = [...fixture.rows[projects.alpha.id], alpha2];
+  fixture.emit(projects.alpha.id, ticketChangeEvent('created', alpha2));
   await page.getByRole('tab', { name: 'Alpha' }).click();
   await expect(page.locator('[data-ticket-slug="HS2-ALPHA2"]')).toBeVisible();
   await page.getByRole('button', { name: 'Search tickets' }).click();
@@ -269,7 +275,7 @@ test('follows two projects through the shared change-stream worker during switch
   fixture.rows[projects.alpha.id] = fixture.rows[projects.alpha.id].map((ticket) =>
     ticket.id === 'ALPHA2' ? { ...ticket, title: 'Alpha second updated' } : ticket,
   );
-  fixture.emit(projects.alpha.id, 'updated', 'HS2-ALPHA2');
+  fixture.emit(projects.alpha.id, ticketChangeEvent('updated', alpha2));
   await expect(page.locator('[data-ticket-slug="HS2-ALPHA2"]')).toContainText('Alpha second updated');
   await page.getByRole('button', { name: 'Clear search' }).click();
   // The worker owns every change transport: the main thread opened no change socket of its own.
@@ -305,8 +311,9 @@ test('the shared change-stream worker idles on bounded long polls and stops a cl
   await page.getByRole('button', { name: 'Close Project' }).click();
   await expect(page.getByRole('tab', { name: 'Beta' })).toHaveCount(0);
   const afterClose = betaPolls();
-  fixture.rows[projects.alpha.id] = [...fixture.rows[projects.alpha.id], row('ALPHA3', 'Alpha third')];
-  fixture.emit(projects.alpha.id, 'created', 'HS2-ALPHA3');
+  const alpha3 = row('ALPHA3', 'Alpha third');
+  fixture.rows[projects.alpha.id] = [...fixture.rows[projects.alpha.id], alpha3];
+  fixture.emit(projects.alpha.id, ticketChangeEvent('created', alpha3));
   await expect(page.locator('[data-ticket-slug="HS2-ALPHA3"]')).toBeVisible();
   await page.waitForTimeout(1_500);
   expect(betaPolls()).toBe(afterClose);
@@ -322,8 +329,9 @@ test('keeps the main-thread stream when the worker setting is off', async ({ pag
   await page.getByRole('button', { name: 'Add Project' }).click();
   await page.getByRole('button', { name: 'Local Project' }).click();
   await expect(page.locator('[data-ticket-slug="HS2-BETA01"]')).toBeVisible();
-  fixture.rows[projects.beta.id] = [...fixture.rows[projects.beta.id], row('BETA02', 'Beta second')];
-  fixture.emit(projects.beta.id, 'created', 'HS2-BETA02');
+  const beta02 = row('BETA02', 'Beta second');
+  fixture.rows[projects.beta.id] = [...fixture.rows[projects.beta.id], beta02];
+  fixture.emit(projects.beta.id, ticketChangeEvent('created', beta02));
   await expect(page.locator('[data-ticket-slug="HS2-BETA02"]')).toBeVisible();
   expect(workers.filter((url) => url.includes('change-stream'))).toEqual([]);
 });
@@ -366,8 +374,9 @@ for (const mode of ['main-thread', 'worker'] as const)
     // Beta's tickets were read and its stream's handshake is pending: the window is open.
     await expect.poll(handshake.arrived).toBe(true);
     const loadsBefore = fixture.ticketLoads.get(beta) ?? 0;
-    fixture.rows[beta] = [...fixture.rows[beta], row('BETA02', 'Beta second')];
-    fixture.emit(beta, 'created', 'HS2-BETA02');
+    const beta02 = row('BETA02', 'Beta second');
+    fixture.rows[beta] = [...fixture.rows[beta], beta02];
+    fixture.emit(beta, ticketChangeEvent('created', beta02));
     // The handshake answers with the cursor that already includes the change, so the stream never
     // delivers it: the read's stamp (1) is below the handshake (2), and only that gap is replayed.
     handshake.release();
@@ -393,8 +402,9 @@ for (const mode of ['main-thread', 'worker'] as const)
     expect(fixture.ticketLoads).toEqual(idleLoads);
     expect(fixture.polls.length - idlePolls).toBeLessThanOrEqual(8);
     // A later change still arrives exactly once: the reconcile did not disturb the cursor.
-    fixture.rows[beta] = [...fixture.rows[beta], row('BETA03', 'Beta third')];
-    fixture.emit(beta, 'created', 'HS2-BETA03');
+    const beta03 = row('BETA03', 'Beta third');
+    fixture.rows[beta] = [...fixture.rows[beta], beta03];
+    fixture.emit(beta, ticketChangeEvent('created', beta03));
     await expect(page.locator('[data-ticket-slug="HS2-BETA03"]')).toBeVisible();
     await expect(page.locator('[data-ticket-slug="HS2-BETA02"]')).toHaveCount(1);
   });
@@ -417,8 +427,9 @@ test('a crashed worker restarts and replays from the last applied cursor without
   await expect
     .poll(() => [projects.alpha.id, projects.beta.id].every((id) => sinceOf(id).some((since) => since !== null)))
     .toBe(true);
-  fixture.rows[projects.alpha.id] = [...fixture.rows[projects.alpha.id], row('ALPHA2', 'Alpha second')];
-  fixture.emit(projects.alpha.id, 'created', 'HS2-ALPHA2');
+  const alpha2 = row('ALPHA2', 'Alpha second');
+  fixture.rows[projects.alpha.id] = [...fixture.rows[projects.alpha.id], alpha2];
+  fixture.emit(projects.alpha.id, ticketChangeEvent('created', alpha2));
   await expect(page.locator('[data-ticket-slug="HS2-ALPHA2"]')).toBeVisible();
   const applied = { alpha: fixture.cursor.get(projects.alpha.id)!, beta: fixture.cursor.get(projects.beta.id)! };
   // The scenario needs a worker that became ready: one that misses the host's ready timeout falls back to
@@ -427,8 +438,9 @@ test('a crashed worker restarts and replays from the last applied cursor without
 
   await crashWorker(streamWorkers(workers)[0]);
   // A change published while the worker is down must be replayed by its replacement.
-  fixture.rows[projects.beta.id] = [...fixture.rows[projects.beta.id], row('BETA02', 'Beta second')];
-  fixture.emit(projects.beta.id, 'created', 'HS2-BETA02');
+  const beta02 = row('BETA02', 'Beta second');
+  fixture.rows[projects.beta.id] = [...fixture.rows[projects.beta.id], beta02];
+  fixture.emit(projects.beta.id, ticketChangeEvent('created', beta02));
   await expect.poll(() => streamWorkers(workers).length).toBe(2);
   // The restarted worker resumes each project from what the main thread already applied.
   await expect.poll(() => sinceOf(projects.alpha.id)).toContain(String(applied.alpha));
@@ -444,13 +456,15 @@ test('a crashed worker restarts and replays from the last applied cursor without
   await expect(page.locator('[data-ticket-slug="HS2-ALPHA2"]')).toHaveCount(1);
   // Replay repeats nothing: one new change costs at most one ticket reload.
   const alphaLoads = loads(projects.alpha.id);
-  fixture.rows[projects.alpha.id] = [...fixture.rows[projects.alpha.id], row('ALPHA3', 'Alpha third')];
-  fixture.emit(projects.alpha.id, 'created', 'HS2-ALPHA3');
+  const alpha3 = row('ALPHA3', 'Alpha third');
+  fixture.rows[projects.alpha.id] = [...fixture.rows[projects.alpha.id], alpha3];
+  fixture.emit(projects.alpha.id, ticketChangeEvent('created', alpha3));
   await expect(page.locator('[data-ticket-slug="HS2-ALPHA3"]')).toBeVisible();
   // A later change is the settle point: a project's deliveries apply in order, so once it renders, any
   // repeated ALPHA3 delivery has already been applied and counted. Two changes, at most two reloads.
-  fixture.rows[projects.alpha.id] = [...fixture.rows[projects.alpha.id], row('ALPHA4', 'Alpha fourth')];
-  fixture.emit(projects.alpha.id, 'created', 'HS2-ALPHA4');
+  const alpha4 = row('ALPHA4', 'Alpha fourth');
+  fixture.rows[projects.alpha.id] = [...fixture.rows[projects.alpha.id], alpha4];
+  fixture.emit(projects.alpha.id, ticketChangeEvent('created', alpha4));
   await expect(page.locator('[data-ticket-slug="HS2-ALPHA4"]')).toBeVisible();
   expect(loads(projects.alpha.id) - alphaLoads).toBeLessThanOrEqual(2);
   await expect(page.locator('[data-ticket-slug="HS2-ALPHA3"]')).toHaveCount(1);
@@ -474,10 +488,12 @@ test('a crash-looping worker falls back to main-thread streams for both projects
   await fixture.socketFor(projects.beta.id);
   await page.waitForTimeout(1_000);
   expect(streamWorkers(workers)).toHaveLength(4);
-  fixture.rows[projects.beta.id] = [...fixture.rows[projects.beta.id], row('BETA02', 'Beta second')];
-  fixture.emit(projects.beta.id, 'created', 'HS2-BETA02');
-  fixture.rows[projects.alpha.id] = [...fixture.rows[projects.alpha.id], row('ALPHA2', 'Alpha second')];
-  fixture.emit(projects.alpha.id, 'created', 'HS2-ALPHA2');
+  const beta02 = row('BETA02', 'Beta second');
+  fixture.rows[projects.beta.id] = [...fixture.rows[projects.beta.id], beta02];
+  fixture.emit(projects.beta.id, ticketChangeEvent('created', beta02));
+  const alpha2 = row('ALPHA2', 'Alpha second');
+  fixture.rows[projects.alpha.id] = [...fixture.rows[projects.alpha.id], alpha2];
+  fixture.emit(projects.alpha.id, ticketChangeEvent('created', alpha2));
   await expect(page.locator('[data-ticket-slug="HS2-ALPHA2"]')).toBeVisible();
   await page.getByRole('tab', { name: 'Beta' }).click();
   await expect(page.locator('[data-ticket-slug="HS2-BETA02"]')).toBeVisible();
@@ -521,11 +537,13 @@ test('a version-skewed worker falls back to main-thread streams for both project
   await fixture.socketFor(projects.alpha.id);
   await fixture.socketFor(projects.beta.id);
   expect(streamWorkers(workers)).toHaveLength(1);
-  fixture.rows[projects.alpha.id] = [...fixture.rows[projects.alpha.id], row('ALPHA2', 'Alpha second')];
-  fixture.emit(projects.alpha.id, 'created', 'HS2-ALPHA2');
+  const alpha2 = row('ALPHA2', 'Alpha second');
+  fixture.rows[projects.alpha.id] = [...fixture.rows[projects.alpha.id], alpha2];
+  fixture.emit(projects.alpha.id, ticketChangeEvent('created', alpha2));
   await expect(page.locator('[data-ticket-slug="HS2-ALPHA2"]')).toBeVisible();
-  fixture.rows[projects.beta.id] = [...fixture.rows[projects.beta.id], row('BETA02', 'Beta second')];
-  fixture.emit(projects.beta.id, 'created', 'HS2-BETA02');
+  const beta02 = row('BETA02', 'Beta second');
+  fixture.rows[projects.beta.id] = [...fixture.rows[projects.beta.id], beta02];
+  fixture.emit(projects.beta.id, ticketChangeEvent('created', beta02));
   await page.getByRole('tab', { name: 'Beta' }).click();
   await expect(page.locator('[data-ticket-slug="HS2-BETA02"]')).toBeVisible();
 });

@@ -1,10 +1,44 @@
 /**
- * Server-shaped nudge and pending-permission builders shared by the web E2E specs (HS2-GM6A8W,
- * HS2-CSPDW8). Each builder mirrors one server emitter and is checked against the client's
+ * Server-shaped ticket change, nudge and pending-permission builders shared by the web E2E specs
+ * (HS2-GM6A8W, HS2-CSPDW8, HS2-Y59J3K). Each builder mirrors one server emitter and is checked against the client's
  * contract types with `satisfies`, so a fixture cannot drift into a shape the server never sends.
  */
-import type { ChangeEvent, PermissionRequest } from '../src/api';
+import type { ChangeEvent, PermissionRequest, Ticket } from '../src/api';
 import type { PermissionDecision, PermissionScope } from '../src/permission-notifications';
+
+/**
+ * The per-ticket change kinds the server publishes (`changed_in` / `removed_in` in
+ * `crates/hotsheet-server/src/events.rs`, the store watcher, and provider write-behind and webhooks).
+ */
+export type TicketChangeKind =
+  | 'created'
+  | 'updated'
+  | 'deleted'
+  | 'changed'
+  | 'closed'
+  | 'moved'
+  | 'claimed'
+  | 'released'
+  | 'renewed'
+  | 'assigned'
+  | 'note_added'
+  | 'attachment_added'
+  | 'attachment_removed'
+  | 'attachment_renamed'
+  | 'attachment_metadata_updated'
+  | 'attachment_annotations_updated'
+  | 'attachment_markup_updated';
+
+/**
+ * The server's per-ticket change event: `store` is the ticket's connection id (a Markdown store's
+ * `store_url_id`, or the provider connection), `id` is the native ticket id, and `slug` is the
+ * ticket's slug; `message` is omitted. The watcher's `deleted` for a vanished file has an empty
+ * slug, so pass `slug: ''` for that case (HS2-Y59J3K).
+ */
+export const ticketChangeEvent = (
+  kind: TicketChangeKind,
+  ticket: Pick<Ticket, 'connection_id' | 'native_id'> & { slug: string },
+) => ({ store: ticket.connection_id, kind, id: ticket.native_id, slug: ticket.slug }) satisfies ChangeEvent;
 
 /**
  * The mocked project's permission identity: `ask_project` (`crates/hotsheet-server/src/routes/permissions.rs`)

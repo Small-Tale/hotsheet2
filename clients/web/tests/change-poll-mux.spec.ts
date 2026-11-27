@@ -1,8 +1,10 @@
 import { expect, type Page, type Request, test, type WebSocketRoute } from '@playwright/test';
 
+import type { ChangeEvent, Ticket } from '../src/api';
 import { appRequests } from './app-requests';
 import { openMockedProject } from './open-mocked-project';
 import { realTicketServer } from './real-ticket-server';
+import { ticketChangeEvent } from './server-event-fixtures';
 
 /**
  * HS2-6W1NNF: with WebSockets failing, every open project used to hold its own replay long-poll,
@@ -93,7 +95,7 @@ async function installBridge(
     projects.map((project) => [project.id, [row(`${project.name.toUpperCase()}1`, `${project.name} first`)]]),
   );
   const cursor = new Map<string, number>(projects.map((project) => [project.id, 1]));
-  const log = new Map<string, Array<{ cursor: number; store: string; kind: string; id: string; slug: string }>>();
+  const log = new Map<string, Array<ChangeEvent & { cursor: number }>>();
   const wakers = new Set<() => void>();
   const muxBodies: MuxPoll[][] = [];
   const directPolls: string[] = [];
@@ -254,10 +256,10 @@ async function installBridge(
   };
   page.on('requestfinished', settle);
   page.on('requestfailed', settle);
-  const emit = (project: string, kind: string, slug: string) => {
+  const emit = (project: string, change: ChangeEvent) => {
     const next = (cursor.get(project) ?? 1) + 1;
     cursor.set(project, next);
-    log.set(project, [...(log.get(project) ?? []), { cursor: next, store: 'git', kind, id: slug, slug }]);
+    log.set(project, [...(log.get(project) ?? []), { ...change, cursor: next }]);
     if (liveSockets && subscriptions.has(project))
       bridgeSocket?.send(
         JSON.stringify({
@@ -309,8 +311,9 @@ test('one live bridge WebSocket serves open projects through add, remove, and re
   expect(bridge.directPolls).toEqual([]);
 
   const target = projects[3];
-  bridge.rows.set(target.id, [...bridge.rows.get(target.id)!, row('DELTA2', 'Delta second')]);
-  bridge.emit(target.id, 'created', 'HS2-DELTA2');
+  const delta2 = row('DELTA2', 'Delta second');
+  bridge.rows.set(target.id, [...bridge.rows.get(target.id)!, delta2]);
+  bridge.emit(target.id, ticketChangeEvent('created', delta2));
   await page.getByRole('tab', { name: target.name }).click();
   await expect(page.locator('[data-ticket-slug="HS2-DELTA2"]')).toBeVisible();
 
@@ -324,8 +327,9 @@ test('one live bridge WebSocket serves open projects through add, remove, and re
   await bridge.closeBridge();
   await expect.poll(() => bridge.bridgeSocketCount(), { timeout: 30_000 }).toBe(2);
   await expect.poll(() => bridge.subscriptions.size, { timeout: 30_000 }).toBe(projects.length - 1);
-  bridge.rows.set(target.id, [...bridge.rows.get(target.id)!, row('DELTA3', 'Delta third')]);
-  bridge.emit(target.id, 'created', 'HS2-DELTA3');
+  const delta3 = row('DELTA3', 'Delta third');
+  bridge.rows.set(target.id, [...bridge.rows.get(target.id)!, delta3]);
+  bridge.emit(target.id, ticketChangeEvent('created', delta3));
   await page.getByRole('tab', { name: target.name }).click();
   await expect(page.locator('[data-ticket-slug="HS2-DELTA3"]')).toBeVisible();
 });
@@ -347,7 +351,8 @@ test('dense live ticket events use bounded collection reads across active and ba
     [background, 'CHARLIE'],
   ] as const) {
     bridge.rows.set(target.id, [...bridge.rows.get(target.id)!, row(`${prefix}2`, `${prefix} latest`)]);
-    for (let index = 0; index < 24; index += 1) bridge.emit(target.id, 'updated', `HS2-${prefix}${index}`);
+    for (let index = 0; index < 24; index += 1)
+      bridge.emit(target.id, ticketChangeEvent('updated', row(`${prefix}${index}`, `${prefix} ${index}`)));
   }
   await expect(page.locator('[data-ticket-slug="HS2-HOTEL2"]')).toContainText('HOTEL latest');
   await expect
@@ -377,13 +382,17 @@ test('dense changes reconcile the latest real-server ticket collection within th
     await openMockedProject(page);
     await expect(page.getByText('First live ticket')).toBeVisible();
     await expect.poll(() => bridge.subscriptions.has(target.id)).toBe(true);
-    const created = await server.request<{ slug: string }>(`/checkouts/${server.checkoutId}/tickets`, 'POST', {
-      title: 'Latest live ticket',
-    });
+    const created = await server.request<Pick<Ticket, 'connection_id' | 'native_id'> & { slug: string }>(
+      `/checkouts/${server.checkoutId}/tickets`,
+      'POST',
+      {
+        title: 'Latest live ticket',
+      },
+    );
     const ticketBefore = bridge.ticketLoads.get(target.id) ?? 0;
     const corruptBefore = bridge.corruptLoads.get(target.id) ?? 0;
     const started = Date.now();
-    for (let index = 0; index < 30; index += 1) bridge.emit(target.id, 'updated', created.slug);
+    for (let index = 0; index < 30; index += 1) bridge.emit(target.id, ticketChangeEvent('updated', created));
     await expect(page.locator(`[data-ticket-slug="${created.slug}"]`)).toContainText('Latest live ticket');
     expect(Date.now() - started).toBeLessThan(3_000);
     expect((bridge.ticketLoads.get(target.id) ?? 0) - ticketBefore).toBeLessThanOrEqual(3);
@@ -430,8 +439,9 @@ for (const mode of ['main thread', 'worker'] as const)
     // An event for one background project reaches that project only.
     const target = projects[3];
     const loadsBefore = new Map(bridge.ticketLoads);
-    bridge.rows.set(target.id, [...bridge.rows.get(target.id)!, row('DELTA2', 'Delta second')]);
-    bridge.emit(target.id, 'created', 'HS2-DELTA2');
+    const delta2 = row('DELTA2', 'Delta second');
+    bridge.rows.set(target.id, [...bridge.rows.get(target.id)!, delta2]);
+    bridge.emit(target.id, ticketChangeEvent('created', delta2));
     await expect
       .poll(() => (bridge.ticketLoads.get(target.id) ?? 0) - (loadsBefore.get(target.id) ?? 0), { timeout: 10_000 })
       .toBeGreaterThan(0);
@@ -460,7 +470,8 @@ for (const mode of ['main thread', 'worker'] as const)
     // Each remaining project still polls through the shared request (a project between its
     // WebSocket retry and its replay poll is briefly absent, so collect across requests).
     const afterClose = bridge.muxBodies.length;
-    bridge.emit(projects[0].id, 'activity', 'HS2-ALPHA1');
+    // A payload-free stand-in for the server's `activity` event: any delivery wakes the shared poll.
+    bridge.emit(projects[0].id, { store: 'git', kind: 'activity', id: 'activity', slug: '' });
     await expect
       .poll(() => new Set(bridge.muxBodies.slice(afterClose).flatMap((polls) => polls.map((poll) => poll.project))), {
         timeout: 40_000,

@@ -2,6 +2,7 @@ import { expect, type Locator, type Page, type Route, test } from '@playwright/t
 
 import { appRequests } from './app-requests';
 import { openMockedProject } from './open-mocked-project';
+import { ticketChangeEvent } from './server-event-fixtures';
 
 // HS2-7D3MPP: the ticket editor never writes while the user types and saves once when focus leaves
 // (HS2-RE1PS6). These walk the transitions around that rule through the shipped inspector: a reload
@@ -1019,7 +1020,11 @@ test('a live change merged into an open unsaved draft is announced and saved on 
   server.tokens['01'] = 'T-remote';
   await expect.poll(() => server.polls.length).toBeGreaterThan(0);
   await server.polls.shift()!.fulfill({
-    json: { cursor: 2, events: [{ store: 'git-local', kind: 'changed', id: '01', slug: 'HS2-EDIT' }], overflow: false },
+    json: {
+      cursor: 2,
+      events: [ticketChangeEvent('changed', { connection_id: 'git-local', native_id: '01', slug: 'HS2-EDIT' })],
+      overflow: false,
+    },
   });
 
   // The open draft takes both edits without a card, the merge is announced, and nothing is written yet.

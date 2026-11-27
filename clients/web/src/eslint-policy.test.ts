@@ -676,10 +676,11 @@ describe('web ESLint policy', () => {
     expect(unworded).toEqual([]);
   });
 
-  it('hs2_gm6a8w_permission_events_use_typed_builders in every spec (HS2-CSPDW8)', () => {
-    // Permission and terminal nudges and the pending list mirror the server's ChangeEvent and
-    // PermissionInfo shapes only through the shared typed builders; a hand-written literal drifts
-    // (empty store, no project, a ticket slug for the tool, a `turn` the nudge never carries).
+  it('hs2_gm6a8w_permission_events_use_typed_builders in every spec (HS2-CSPDW8, HS2-Y59J3K)', () => {
+    // Permission and terminal nudges, ticket change events, and the pending list mirror the server's
+    // ChangeEvent and PermissionInfo shapes only through the shared typed builders; a hand-written
+    // literal drifts (empty store, no project, a ticket slug for the tool, a `turn` the nudge never
+    // carries, a placeholder ticket id or store).
     const tests = new URL('../tests/', import.meta.url);
     const builders = readFileSync(new URL('server-event-fixtures.ts', tests), 'utf8');
     const nudgeLiteral = /[{,]\s*kind: '(?:permission_asked|permission_resolved|terminal_question|terminal_halted)'/;
@@ -689,20 +690,26 @@ describe('web ESLint policy', () => {
       expect(line).toMatch(/^\s*(?:\)\s*=>\s*)?\(\{ store, kind: 'permission_\w+', id, slug/);
     expect(builders).toMatch(/const terminalEvent = \([^)]*\) =>\s*\(\{ store: '', kind, id, slug: ''/);
     expect(builders).toContain('): ServerPermissionInfo & Request => ({');
-    expect(builders.match(/\bsatisfies ChangeEvent\b/g)).toHaveLength(4);
+    expect(builders).toMatch(
+      /const ticketChangeEvent = \([^)]*\) =>\s*\(\{ store: ticket\.connection_id, kind, id: ticket\.native_id, slug: ticket\.slug \}\)/,
+    );
+    expect(builders.match(/\bsatisfies ChangeEvent\b/g)).toHaveLength(5);
+    const ticketChangeLiteral =
+      /[{,]\s*kind: '(?:created|updated|deleted|changed|closed|moved|claimed|released|renewed|assigned|note_added|attachment_\w+)'/;
     const offenders: string[] = [];
     for (const name of readdirSync(tests).filter((entry) => entry.endsWith('.ts'))) {
       if (name === 'server-event-fixtures.ts') continue;
       const source = readFileSync(new URL(name, tests), 'utf8');
       source.split('\n').forEach((line, index) => {
         if (nudgeLiteral.test(line)) offenders.push(`${name}:${index + 1} hand-written nudge literal`);
+        if (ticketChangeLiteral.test(line)) offenders.push(`${name}:${index + 1} hand-written ticket change literal`);
       });
       // Builders replace both forms of a hand-written nudge: an `emit('<kind>')` shorthand, and a
       // spread that adds fields (such as a `turn` envelope) the server's nudge never carries.
       if (/emit\(\d*,?\s*'(?:terminal_|permission_)/.test(source)) offenders.push(`${name} emits a nudge by kind`);
       if (/\.\.\.(?:permission\w+Event|terminalEvent)\(/.test(source))
         offenders.push(`${name} extends a nudge builder`);
-      if (/const (?:permission\w+Event|pendingPermission|terminalEvent) =/.test(source))
+      if (/const (?:permission\w+Event|pendingPermission|terminalEvent|ticketChangeEvent) =/.test(source))
         offenders.push(`${name} redefines a shared builder`);
     }
     expect(offenders).toEqual([]);

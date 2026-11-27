@@ -2,6 +2,7 @@ import { expect, type Page, test } from '@playwright/test';
 
 import { appRequests } from './app-requests';
 import { openMockedProject } from './open-mocked-project';
+import { ticketChangeEvent } from './server-event-fixtures';
 import { ticketsJson } from './ticket-page-fixture';
 
 const project = {
@@ -190,7 +191,9 @@ async function mockBulkProject(page: Page, { conflictFirst = false }: { conflict
         return route.fulfill({
           json: {
             cursor: pollCursor,
-            events: [{ store: 'git-local', kind: 'updated', id: 'external', slug: 'HS2-EXTERNAL' }],
+            events: [
+              ticketChangeEvent('updated', { connection_id: 'git-local', native_id: 'external', slug: 'HS2-EXTERNAL' }),
+            ],
             overflow: false,
           },
         });

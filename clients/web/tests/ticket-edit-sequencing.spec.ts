@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 
 import { appRequests } from './app-requests';
 import { openMockedProject } from './open-mocked-project';
+import { ticketChangeEvent } from './server-event-fixtures';
 
 // HS2-K9SG2R: two rapid edits to the same field of the same ticket used to self-conflict — the second
 // edit read the same pre-first concurrency token and got a false "ticket was modified". Per-ticket
@@ -877,7 +878,7 @@ test('an open details edit survives a refresh that drops its ticket from the lis
   await polls.shift()!.fulfill({
     json: {
       cursor: 2,
-      events: [{ store: 'git-local', kind: 'changed', id: '01', slug: 'HS2-EDIT' }],
+      events: [ticketChangeEvent('changed', { connection_id: 'git-local', native_id: '01', slug: 'HS2-EDIT' })],
       overflow: false,
     },
   });

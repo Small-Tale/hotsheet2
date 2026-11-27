@@ -10,15 +10,7 @@ import WebSocket from 'ws';
 
 import { withoutGitRepositoryEnv } from '../scripts/repository-env.mjs';
 import type { ConversationMessage } from '../src/ai-conversation';
-import type {
-  AdvisoryClaimStatus,
-  ChangeEvent,
-  FullTicket,
-  MediaAnnotation,
-  Note,
-  PermissionRequest,
-  TicketRow,
-} from '../src/api';
+import type { AdvisoryClaimStatus, ChangeEvent, FullTicket, MediaAnnotation, Note, TicketRow } from '../src/api';
 import type { ConversationExportPayload } from '../src/conversation-export';
 import { createConversationExportBridge } from '../src/conversation-export-bridge';
 import { isFeedbackNeeded } from '../src/feedback-needed';
@@ -42,6 +34,7 @@ import {
   permissionRemovedEvent,
   type ServerPermissionInfo,
   terminalEvent,
+  ticketChangeEvent,
 } from './server-event-fixtures';
 import { printThenEcho } from './terminal-fixture-command';
 import { ticketsJson } from './ticket-page-fixture';
@@ -233,7 +226,7 @@ test('opens the Workers workspace and its shared ticket summary (HS2-E9SR7R)', a
     await sourcePolls.shift()!.fulfill({
       json: {
         cursor: ++sourceCursor,
-        events: [{ store: 'git-other', kind: 'updated', id: '01', slug: row.slug }],
+        events: [ticketChangeEvent('updated', { connection_id: 'git-other', native_id: '01', slug: row.slug })],
         overflow: false,
       },
     });
@@ -12944,7 +12937,7 @@ test('refreshes repository status from the project long-poll stream without simp
     await pending.shift()!.fulfill({
       json: {
         cursor,
-        events: [{ store: 'demo-checkout', kind: 'changed', id: '01', slug: 'HS2-DEMO01' }],
+        events: [ticketChangeEvent('changed', { connection_id: 'demo-checkout', native_id: '01', slug: 'HS2-DEMO01' })],
         overflow: false,
       },
     });
@@ -13861,7 +13854,7 @@ test('shows the compact confidence pill on completed list rows and board cards a
   await polls.shift()!.fulfill({
     json: {
       cursor: 2,
-      events: [{ store: 'demo-checkout', kind: 'updated', id: '06', slug: 'HS2-DONE01' }],
+      events: [ticketChangeEvent('updated', { connection_id: 'demo-checkout', native_id: '06', slug: 'HS2-DONE01' })],
       overflow: false,
     },
   });
@@ -13873,7 +13866,7 @@ test('shows the compact confidence pill on completed list rows and board cards a
   await polls.shift()!.fulfill({
     json: {
       cursor: 3,
-      events: [{ store: 'demo-checkout', kind: 'updated', id: '06', slug: 'HS2-DONE01' }],
+      events: [ticketChangeEvent('updated', { connection_id: 'demo-checkout', native_id: '06', slug: 'HS2-DONE01' })],
       overflow: false,
     },
   });
@@ -13886,7 +13879,7 @@ test('shows the compact confidence pill on completed list rows and board cards a
   await polls.shift()!.fulfill({
     json: {
       cursor: 4,
-      events: [{ store: 'demo-checkout', kind: 'updated', id: '06', slug: 'HS2-DONE01' }],
+      events: [ticketChangeEvent('updated', { connection_id: 'demo-checkout', native_id: '06', slug: 'HS2-DONE01' })],
       overflow: false,
     },
   });
@@ -13984,7 +13977,7 @@ test('shows the live claim and its ETA in the inspector and reader headers and c
   await polls.shift()!.fulfill({
     json: {
       cursor: 2,
-      events: [{ store: 'demo-checkout', kind: 'released', id: '01', slug: 'HS2-DEMO01' }],
+      events: [ticketChangeEvent('released', { connection_id: 'demo-checkout', native_id: '01', slug: 'HS2-DEMO01' })],
       overflow: false,
     },
   });
@@ -14088,7 +14081,7 @@ test('shows ETA progress on actively claimed tickets in list and column views an
   await polls.shift()!.fulfill({
     json: {
       cursor: 2,
-      events: [{ store: 'demo-checkout', kind: 'renewed', id: '01', slug: 'HS2-DEMO01' }],
+      events: [ticketChangeEvent('renewed', { connection_id: 'demo-checkout', native_id: '01', slug: 'HS2-DEMO01' })],
       overflow: false,
     },
   });
@@ -15823,7 +15816,9 @@ test('defers ticket refresh without hiding an open metadata popup', async ({ pag
   await polls.shift()!.fulfill({
     json: {
       cursor,
-      events: [{ store: 'git-local', kind: 'created', id: incoming.id, slug: incoming.slug }],
+      events: [
+        ticketChangeEvent('created', { connection_id: 'git-local', native_id: incoming.id, slug: incoming.slug }),
+      ],
       overflow: false,
     },
   });
@@ -15886,7 +15881,13 @@ test('defers ticket refresh without hiding an open metadata popup', async ({ pag
   await polls.shift()!.fulfill({
     json: {
       cursor,
-      events: [{ store: 'git-local', kind: 'updated', id: notStartedRow.id, slug: notStartedRow.slug }],
+      events: [
+        ticketChangeEvent('updated', {
+          connection_id: 'git-local',
+          native_id: notStartedRow.id,
+          slug: notStartedRow.slug,
+        }),
+      ],
       overflow: false,
     },
   });
@@ -17290,7 +17291,9 @@ test('finishes local ticket creation motion without redundantly reconciling its 
       await polls.shift()!.fulfill({
         json: {
           cursor,
-          events: [{ store: 'git-local', kind: 'created', id: created.id, slug: created.slug }],
+          events: [
+            ticketChangeEvent('created', { connection_id: 'git-local', native_id: created.id, slug: created.slug }),
+          ],
           overflow: false,
         },
       });
@@ -22165,7 +22168,9 @@ test('keeps healthy tickets usable and offers safe reveal plus AI repair recover
   await polls.shift()!.fulfill({
     json: {
       cursor,
-      events: [{ store: 'git-local', kind: 'changed', id: diagnostic.id, slug: diagnostic.slug }],
+      events: [
+        ticketChangeEvent('changed', { connection_id: 'git-local', native_id: diagnostic.id, slug: diagnostic.slug }),
+      ],
       overflow: false,
     },
   });
@@ -22296,7 +22301,9 @@ test('keeps healthy tickets usable and offers safe reveal plus AI repair recover
   await polls.shift()!.fulfill({
     json: {
       cursor,
-      events: [{ store: 'git-local', kind: 'changed', id: diagnostic.id, slug: diagnostic.slug }],
+      events: [
+        ticketChangeEvent('changed', { connection_id: 'git-local', native_id: diagnostic.id, slug: diagnostic.slug }),
+      ],
       overflow: false,
     },
   });
@@ -22550,7 +22557,7 @@ test('merges unrelated external ticket fields and offers an editable merge for t
     await polls.shift()!.fulfill({
       json: {
         cursor,
-        events: [{ store: 'git-local', kind: 'changed', id: '01', slug: 'HS2-DEMO01' }],
+        events: [ticketChangeEvent('changed', { connection_id: 'git-local', native_id: '01', slug: 'HS2-DEMO01' })],
         overflow: false,
       },
     });
@@ -22773,7 +22780,7 @@ test('does not report this clients own in-flight autosave as a merge conflict @c
     await polls.shift()!.fulfill({
       json: {
         cursor,
-        events: [{ store: 'git-local', kind: 'changed', id: '01', slug: 'HS2-DEMO01' }],
+        events: [ticketChangeEvent('changed', { connection_id: 'git-local', native_id: '01', slug: 'HS2-DEMO01' })],
         overflow: false,
       },
     });
@@ -38029,7 +38036,7 @@ test('keeps a production attachment label edit open while a live ticket update r
   await polls.shift()!.fulfill({
     json: {
       cursor: 2,
-      events: [{ store: 'demo-checkout', kind: 'updated', id: '01', slug: 'HS2-DEMO01' }],
+      events: [ticketChangeEvent('updated', { connection_id: 'demo-checkout', native_id: '01', slug: 'HS2-DEMO01' })],
       overflow: false,
     },
   });
@@ -38418,7 +38425,7 @@ test('shows the conflict card instead of overwriting when a finished label edit 
     await polls.shift()!.fulfill({
       json: {
         cursor,
-        events: [{ store: 'demo-checkout', kind: 'updated', id: '01', slug: 'HS2-DEMO01' }],
+        events: [ticketChangeEvent('updated', { connection_id: 'demo-checkout', native_id: '01', slug: 'HS2-DEMO01' })],
         overflow: false,
       },
     });

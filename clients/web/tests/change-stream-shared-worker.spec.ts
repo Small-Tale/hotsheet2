@@ -4,6 +4,8 @@ import { createServer } from 'node:http';
 import { expect, type Page, test } from '@playwright/test';
 import WebSocket, { WebSocketServer } from 'ws';
 
+import { ticketChangeEvent } from './server-event-fixtures';
+
 test('two tabs share one bridge socket but keep independent project streams (HS2-NP7R42)', async ({
   page,
   context,
@@ -91,7 +93,14 @@ test('two tabs share one bridge socket but keep independent project streams (HS2
           client,
           project: 'same',
           subscription: subscription.subscription,
-          data: JSON.stringify({ cursor, store: 'same', kind: 'changed', id: String(cursor), slug: `HS2-${cursor}` }),
+          data: JSON.stringify({
+            cursor,
+            ...ticketChangeEvent('changed', {
+              connection_id: 'same',
+              native_id: String(cursor),
+              slug: `HS2-${cursor}`,
+            }),
+          }),
         }),
       );
     };
