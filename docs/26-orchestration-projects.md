@@ -310,8 +310,9 @@ action `sites`) lists every active project, ordered by label, with its active si
 (the project's own target first) and this machine's binding of each: destination,
 last confirmation, last failure. It reads the manifest and the binding file and
 contacts nothing; like every binding read it is machine-local. Settings ›
-Orchestration lists a project's other sites right after it, each labelled `Site of
-<project>` with its machine and connection state.
+Orchestration shows a project with several sites as one tree group, its home site first
+and then its other sites, each with its machine and connection state (HS2-M1T6KN, §26.27
+Settings → Orchestration).
 
 **What each site's machine is (HS2-D4G81Q).** Asked with `capabilities=true`
 (`GET …/sites?capabilities=true` with the actor in the query, or `POST …/sites` with
@@ -327,8 +328,8 @@ machine that reports nothing about itself carries neither. Both fields are addit
 skipped when unset; without the flag the view still contacts nothing. Settings ›
 Orchestration reads it only while a project has more than one site, after the list has
 loaded, and on each `orchestration_changed` event. Each site row of such a project adds its
-machine's OS to its description (`Site of Widgets · Local on This Computer · macOS 15.1,
-arm64`), and the detail of any of its sites gains a **Sites** section with one table per
+machine's OS to its description (`Site · Local on This Computer · macOS 15.1, arm64`; the
+home site's reads `Home Site · …`), and the detail of any of its sites gains a **Sites** section with one table per
 site: Site (the home marked `Home`), Where, then the System, Processor, GPU, AI Tools
 and Toolchains rows of HS2-ZY4Z4G, or why the machine was not read. What a machine is
 shows in one place: for a project with several sites the capacity region leaves those
@@ -6448,16 +6449,35 @@ for an Orchestration project only, **Orchestration** right after it. The navigat
 category list and `SettingsCategory` carry both; Orchestration falls back to General when
 the type changes to Software while it shows.
 
-- **Projects.** One row per active declaration with its name, where it is bound (local
-  on this computer, or remote on the reviewed server's name), and a connection badge from
-  the cached binding. Its "…" menu (and its context menu) has Show Project Tab (enabled
-  while that project's tab is open) and Stop Orchestrating…. For an orchestration project
+- **Projects (HS2-M1T6KN, Design v1 Concept A).** A Kerf `TreeList` named _Orchestrated
+  Projects_. A project with one site is a single row at the top level: its name, where it
+  is bound (local on this computer, or remote on the reviewed server's name), and a
+  connection badge from the cached binding. A project with several sites is a top-level
+  group row (a Lucide layers icon) whose description is the site count and each site's
+  machine once, the home site's first (_3 sites · This Computer, Build Host, Studio Mac_;
+  a site not bound here reads _Not Bound_; with more than three machines, the first three
+  and _and N more_), with a roll-up badge: how many sites share the most severe state that
+  needs a look (_1 Unreachable_, _2 Not Bound_), _All <state>_ when every site agrees, or
+  none. Its children are the home site (a Lucide house, _Home Site · <where>_) and then
+  the other sites by label (_Site · <where>_), each with its own badge; a change in flight
+  shows a spinner in place of the badge. Every group is open by default. Closing or
+  opening one (its disclosure arrow, or Left and Right on its row) is a view preference
+  remembered per orchestration project and per browser
+  (`hotsheet.orchestration.projects.collapsed`, never sent to the server); adding a site
+  opens its project's group again so the new site shows beside the toast. The tree's
+  keyboard is Kerf's (Up, Down, Home, End, Left, Right, type-ahead; Enter or Space chooses
+  a row). Choosing a row opens its detail in the inspector; the group stands for its home
+  site. TreeList rows hold no "…" button, so a row's actions are in its context menu
+  (right-click, or the context-menu key or Shift+F10 on the focused row; a group's are its
+  home site's) and in the same _Actions for <name>_ menu in the detail's toolbar: Show
+  Project Tab (enabled while that project's tab is open) and Stop Orchestrating…, plus the
+  site actions below. For an orchestration project
   open from another server, a project local to that server is its remote tab here (same
   server registration); a project remote to that server names one of its registrations,
   not this computer's, so no tab is matched and Show Project Tab stays disabled
   (HS2-7SHGQH). The sessions' Show in Drawer follows the same mapping. An empty project
   shows _No projects yet._
-- **Add a Site and Separate (HS2-E9VVQF).** A project row's menu has **Add a Site**, a
+- **Add a Site and Separate (HS2-E9VVQF).** A project's actions have **Add a Site**, a
   submenu of the open projects that reach the same ticket store as that project, by
   default. Each open tab is inspected once through the machine-local `POST
 …/orchestration/inspect`, which binds nothing, and its `checkout_authority` is compared
@@ -6466,7 +6486,7 @@ the type changes to Software while it shows.
   edge cases, each marked _Another ticket store_ or _Ticket store unknown_ where it
   applies; the server's refusal (`site_store_mismatch` and the other site codes) is a
   toast and stays in the message line until the next change (HS2-40CTDS). **Open Another Project…** there runs the regular open flow and adds
-  the project it opens as a site. A site row's menu has **Make <site> the Home Site**
+  the project it opens as a site. A site's actions have **Make <site> the Home Site**
   (HS2-NAA3HV, a Lucide house), which re-homes the project at the stored manifest
   revision without asking (the same action on the old home undoes it; the result is a
   toast, and a refusal with its site code is a toast that also stays in the message
@@ -6521,9 +6541,10 @@ the type changes to Software while it shows.
   (HS2-XHQ1EH: the server ignores and drops them); every member it does not show is
   written back unchanged.
 - **Where (HS2-NGP2AK).** A project with several sites names where every site is: its
-  row reads _N sites · Local on This Computer, Remote on Build host_ (each place once,
-  the project's own first), and the detail's Binding lists one row per site, the home
-  site marked _(Home)_, under _Where: N sites_.
+  home site's detail title reads _N sites · Local on This Computer, Remote on Build host_
+  (each place once, the project's own first), the tree names each site's place on its own
+  row (HS2-M1T6KN), and the detail's Binding lists one row per site, the home site marked
+  _(Home)_, under _Where: N sites_.
 - **A project's limits (HS2-7WF6JD).** The detail's **Limits** section, between Binding
   and Capacity and Admission, edits that project's entry in the policy (`targets[]`).
   Its header's **About Limits** help button (HS2-Y737GM, Kerf's ListHeader action and
