@@ -1209,6 +1209,7 @@ dependencies = [
  "clap",
  "hotsheet-cli",
  "hotsheet-extsync",
+ "hotsheet-http",
  "hotsheet-model",
  "hotsheet-plugins",
  "hotsheet-resource-claims",
@@ -1220,7 +1221,7 @@ dependencies = [
  "tempfile",
  "time",
  "toml 0.8.23",
- "ureq 2.12.1",
+ "ureq 3.5.2",
 ]
 
 [[package]]
