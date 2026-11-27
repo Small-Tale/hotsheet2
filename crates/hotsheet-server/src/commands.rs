@@ -251,7 +251,7 @@ impl CommandManager {
             .collect()
     }
     /// How the run's exit waiter ended its output drain, once it has settled (HS2-Y0KGC1).
-    #[cfg(test)]
+    #[cfg(all(test, unix))]
     fn drain_outcome(&self, id: &str) -> Option<DrainOutcome> {
         self.runs.lock_or_recover().get(id).and_then(|r| r.drain)
     }
