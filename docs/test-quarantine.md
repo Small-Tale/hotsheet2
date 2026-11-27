@@ -47,6 +47,13 @@ real; those wait on ordered delivery (a marker written after the events they che
 `REAL_STREAM_TEST_BOUND`, never on a quiet window. A real-stream test that still times out
 past that bound gets a ticket with a retries-off reproduction, as any other.
 
+The same rule holds for Node `fs.watch` in `clients/web`. On macOS, closing a directory
+watcher blocks the event loop until `fseventsd` re-registers the process's stream, so a
+real watcher inside an ordinary unit test can push it past its timeout under load
+(HS2-E0185C). Inject the module's watcher seam (for example `WatchDirectory` in
+`src/migration-jobs.ts`) and keep one real-watcher smoke test bounded like
+`REAL_STREAM_TEST_BOUND`.
+
 ## Quarantined tests
 
 <!-- quarantine:begin -->

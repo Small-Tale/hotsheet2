@@ -15,7 +15,7 @@ export interface DirectoryWatcher {
 }
 /** Starts a native watcher; it may throw (or later emit `error`) when the OS refuses one. */
 export type WatchDirectory = (directory: string, changed: (filename: string | null) => void) => DirectoryWatcher;
-const nativeWatchDirectory: WatchDirectory = (directory, changed) =>
+export const nativeWatchDirectory: WatchDirectory = (directory, changed) =>
   watchFiles(directory, (_event, filename) => {
     changed(filename);
   });

@@ -1,12 +1,18 @@
+import { randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import { watch } from 'node:fs';
 import { mkdtemp, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 
 import { describe, expect, it, vi } from 'vitest';
 
-import { MigrationJobs, type MigrationOwner, type WatchDirectory } from './migration-jobs';
+import {
+  type DirectoryWatcher,
+  MigrationJobs,
+  type MigrationOwner,
+  nativeWatchDirectory,
+  type WatchDirectory,
+} from './migration-jobs';
 import {
   acceptMigrationJob,
   migrationCounter,
@@ -31,6 +37,8 @@ function memoryLocks() {
     },
   };
 }
+/** Matches the Rust `hotsheet_jobs::watch::REAL_STREAM_TEST_BOUND` for real-stream tests. */
+const REAL_WATCHER_TEST_BOUND_MS = 300_000;
 const owner: MigrationOwner = {
   projectId: 'project-a',
   root: '/work/a',
@@ -233,19 +241,19 @@ describe('migration ownership adversaries', () => {
           };
         }),
     );
-    // HS2-Z69ARD: each registry still installs a real OS directory watcher, but the
-    // test also keeps its change callbacks. Under gate load macOS FSEvents delivered
-    // the owner's rename seconds late, so the test wakes the foreign long poll itself
-    // once the terminal checkpoint is durable instead of waiting on OS latency.
+    // HS2-Z69ARD, HS2-E0185C: this case proves arbitration and revision replay, not OS
+    // delivery, so the registries watch through an in-process stream the test drives
+    // once the terminal checkpoint is durable. A real macOS FSEvents watcher was late
+    // under gate load, and closing one blocks the event loop on a `fseventsd`
+    // registration RPC, which ran this case past its timeout. The native watcher has
+    // its own bounded smoke test below.
     const wakes: ((filename: string | null) => void)[] = [];
-    const recordingWatch: WatchDirectory = (path, changed) => {
+    const inProcessWatch: WatchDirectory = (_path, changed) => {
       wakes.push(changed);
-      return watch(path, (_event, filename) => {
-        changed(filename);
-      });
+      return Object.assign(new EventEmitter(), { close: () => {} });
     };
-    const a = new MigrationJobs(directory, runner, undefined, locks.lock, undefined, recordingWatch);
-    const b = new MigrationJobs(directory, runner, undefined, locks.lock, undefined, recordingWatch);
+    const a = new MigrationJobs(directory, runner, undefined, locks.lock, undefined, inProcessWatch);
+    const b = new MigrationJobs(directory, runner, undefined, locks.lock, undefined, inProcessWatch);
     try {
       await Promise.all([a.snapshot(owner.root), b.snapshot(owner.root)]);
       const starts = await Promise.allSettled([a.start(owner), b.start(owner)]);
@@ -270,6 +278,57 @@ describe('migration ownership adversaries', () => {
       await rm(directory, { recursive: true, force: true });
     }
   });
+
+  // HS2-E0185C: the module's one real-stream smoke test (docs/test-quarantine.md,
+  // "Native file-event latency"). It waits on ordered delivery, bounded like the Rust
+  // REAL_STREAM_TEST_BOUND, because `fseventsd` can delay registration and delivery
+  // for seconds under build load. A refused watcher (EMFILE, as under the Claude Code
+  // sandbox) fails it at once.
+  it(
+    'delivers an atomically replaced checkpoint through the native directory watcher',
+    async () => {
+      const directory = await mkdtemp(resolve(tmpdir(), 'migration-native-watch-'));
+      const replace = async (name: string) => {
+        const destination = resolve(directory, name),
+          temporary = `${destination}.${randomUUID()}.tmp`;
+        await writeFile(temporary, '{}\n', { flag: 'wx' });
+        await rename(temporary, destination);
+      };
+      const seen = new Set<string>();
+      let refusal: Error | undefined,
+        arrived = () => {};
+      let watcher: DirectoryWatcher | undefined;
+      try {
+        watcher = nativeWatchDirectory(directory, (filename) => {
+          if (filename) seen.add(filename);
+          arrived();
+        });
+        watcher.on('error', (error) => {
+          refusal = error;
+          arrived();
+        });
+        // FSEvents registers its stream asynchronously and drops earlier changes. A
+        // delivered probe proves the stream is live; later changes arrive in order.
+        while (!seen.has('probe.json')) {
+          if (refusal) throw refusal;
+          await replace('probe.json');
+        }
+        const checkpoint = `${'a'.repeat(64)}.json`;
+        const delivered = new Promise<void>((done, fail) => {
+          arrived = () => {
+            if (refusal) fail(refusal);
+            else if (seen.has(checkpoint)) done();
+          };
+        });
+        await replace(checkpoint);
+        await delivered;
+      } finally {
+        watcher?.close();
+        await rm(directory, { recursive: true, force: true });
+      }
+    },
+    REAL_WATCHER_TEST_BOUND_MS,
+  );
 
   // HS2-D6TDWY: under full-suite load macOS FSEvents refuses new directory
   // watchers with EMFILE. A foreign watcher must degrade, never fail the long poll.
