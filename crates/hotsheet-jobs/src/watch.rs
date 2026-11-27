@@ -35,6 +35,7 @@ pub struct PathWatcher {
     starts: usize,
 }
 
+#[cfg(target_os = "macos")]
 type SharedHandler = std::sync::Arc<std::sync::Mutex<dyn FnMut(Delivery) + Send>>;
 
 enum Inner {

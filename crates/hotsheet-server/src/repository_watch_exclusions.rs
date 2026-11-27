@@ -415,6 +415,7 @@ mod monitor_tests {
     /// HS2-2HZN2C before/after evidence: deliveries and the monitor's own CPU while a churn
     /// loop writes thousands of files under `target/` and `.claude/worktrees/` of a
     /// repo-shaped checkout. Run with `--run-ignored only --nocapture`, unsandboxed.
+    #[cfg(unix)]
     #[test]
     #[ignore = "measurement for HS2-2HZN2C; prints numbers rather than asserting them"]
     fn hs2_2hzn2c_measure_churn_with_and_without_exclusions() {
@@ -472,6 +473,7 @@ mod monitor_tests {
     }
 
     /// This process's user and system CPU seconds (children excluded).
+    #[cfg(unix)]
     fn cpu_seconds() -> f64 {
         // SAFETY: getrusage fills the zeroed struct it is given.
         let usage = unsafe {
