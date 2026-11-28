@@ -191,6 +191,11 @@ miss an edit made in the same second as its previous scan until the native strea
 gap, not a second stream, is what made the old macOS registered-store test fail (HS2-SG1BKJ); the
 permanent 250ms polling fallback it replaces re-walked each registered store four times a second and
 kept an idle server busy. Steady-state detection takes tens of milliseconds plus the 150ms debounce.
+A ticket write the server did not make is announced with its ticket id even when its bytes already
+match the index: the CLI and the serverless MCP backend update the shared index right after their
+own write, so without this a CLI note or status change reached clients and ticket-level subscribers
+(notifications, announcer milestones) only by chance. The server's own writes are recognized as
+local echoes and stay silent. One write usually arrives as several file events, so each distinct content of a ticket is announced once within 5 s (HS2-G3HJZH).
 
 **Which directory the native stream holds (HS2-VN96J5, HS2-C3REQ1).** On macOS and Linux the stream
 watches the store's `tickets/` directory. On Windows it watches the store root and admits only events under

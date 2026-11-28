@@ -195,6 +195,7 @@ impl AppState {
                 store_id: id,
                 host: self.host.clone(),
                 local_write_hashes: self.local_write_hashes.clone(),
+                external_announcements: self.external_announcements.clone(),
                 events: self.events.clone(),
                 event_log: self.event_log.clone(),
                 checkout_registry: self.checkout_registry.clone(),

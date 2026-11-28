@@ -284,14 +284,14 @@ describe('main CI chip and row model (HS2-57BYEA)', () => {
   });
 
   it('adds a labelled CI chip only when the run fails, runs, or waits (HS2-505PHC)', () => {
-    expect(liveChips(withCi(run('failure')))).toEqual([
+    expect(liveChips(withCi(run('failure')))).toMatchObject([
       { kind: 'ci', text: 'CI failed', title: 'main CI failed · 9f8e7d6', tone: 'danger' },
     ]);
     // Started 18 minutes before the display clock.
-    expect(liveChips(withCi(run('in_progress')))).toEqual([
+    expect(liveChips(withCi(run('in_progress')))).toMatchObject([
       { kind: 'ci', text: 'CI · 18:00', title: 'main CI running for 18:00 · 9f8e7d6', tone: 'neutral' },
     ]);
-    expect(liveChips(withCi(run('queued')))).toEqual([
+    expect(liveChips(withCi(run('queued')))).toMatchObject([
       { kind: 'ci', text: 'CI · queued', title: 'main CI queued · 9f8e7d6', tone: 'neutral' },
     ]);
     for (const status of ['success', 'cancelled', 'unavailable'] as const)
@@ -400,58 +400,95 @@ describe('Live CI chip display clock (HS2-505PHC)', () => {
   });
 });
 
-describe('stale main CI reports (HS2-CC7TCB)', () => {
+describe('CI runs that cannot be verified (HS2-D3JJ49)', () => {
   const HOUR = 60 * MINUTE;
-  const reportedRun = (status: 'in_progress' | 'queued', reportedAgoMs: number, nowMs = NOW): LiveStoreState => ({
+  const reportedRun = (
+    status: 'in_progress' | 'queued' | 'failure',
+    reportedAgoMs: number,
+    nowMs = NOW,
+    extra: Partial<NonNullable<LiveStoreState['ci']>> = {},
+  ): NonNullable<LiveStoreState['ci']> => ({
+    status,
+    checkout: 'demo-ab12',
+    branch: 'main',
+    sha: '8f6c8d81f0a1',
+    run_url: 'https://github.com/acme/widgets/actions/runs/2983',
+    workflow: 'CI',
+    started_at_ms: nowMs - reportedAgoMs - 5 * MINUTE,
+    finished_at_ms: status === 'failure' ? nowMs - reportedAgoMs : null,
+    reported_at_ms: nowMs - reportedAgoMs,
+    ...extra,
+  });
+  const store = (...runs: NonNullable<LiveStoreState['ci']>[]): LiveStoreState => ({
     ...demoLiveState('quiet'),
-    ci: {
-      status,
-      checkout: 'demo-ab12',
-      branch: 'main',
-      sha: '8f6c8d81f0a1',
-      run_url: 'https://github.com/acme/widgets/actions/runs/2983',
-      workflow: 'CI',
-      started_at_ms: nowMs - reportedAgoMs - 5 * MINUTE,
-      finished_at_ms: null,
-      reported_at_ms: nowMs - reportedAgoMs,
-    },
+    ...(runs[0] ? { ci: runs[0] } : {}),
+    ci_runs: runs,
   });
+  const olderServer = (ci: NonNullable<LiveStoreState['ci']>): LiveStoreState => ({ ...demoLiveState('quiet'), ci });
   const shown = { visible: true, expanded: false };
-  const ciChip = (states: LiveStoreState[], nowMs = NOW) =>
-    liveChips(projectLiveSummary(states, nowMs)!).find((chip) => chip.kind === 'ci');
+  const ciChips = (states: LiveStoreState[], nowMs = NOW) =>
+    liveChips(projectLiveSummary(states, nowMs)!).filter((chip) => chip.kind === 'ci');
 
-  it('shows a run reported running over 2 h ago as unknown, with when it was last seen and no clock', () => {
-    const stale = reportedRun('in_progress', 2 * HOUR + 5 * MINUTE);
-    expect(summary(stale).ci).toMatchObject({
-      status: 'unknown',
-      lastSeen: 'running',
-      shortSha: '8f6c8d8',
-      ageMs: 2 * HOUR + 5 * MINUTE,
-    });
-    expect(ciChip([stale])).toEqual({
-      kind: 'ci',
-      text: 'CI · unknown',
-      title: 'main CI status unknown · last seen running 2h 05m ago · 8f6c8d8',
-      tone: 'neutral',
-    });
-    expect(liveCiClockRunning([stale], shown, NOW)).toBe(false);
-    expect(ciChip([reportedRun('queued', 3 * HOUR)])?.title).toBe(
-      'main CI status unknown · last seen queued 3h 00m ago · 8f6c8d8',
-    );
+  it('shows nothing for an unverifiable run, never an unknown chip', () => {
+    const unverifiable = store(reportedRun('in_progress', MINUTE, NOW, { verification: 'unverifiable' }));
+    expect(summary(unverifiable).ci).toEqual({ status: 'unavailable', branch: 'main' });
+    expect(summary(unverifiable).ciRuns).toEqual([]);
+    expect(ciChips([unverifiable])).toEqual([]);
+    expect(liveCiClockRunning([unverifiable], shown, NOW)).toBe(false);
   });
 
-  it('moves fresh, stale, renewed by a new report, then finished', () => {
-    // Fresh: reported 2 h ago exactly, the run still counts.
-    expect(ciChip([reportedRun('in_progress', 2 * HOUR)])?.text).toBe('CI · 2:05:00');
-    expect(liveCiClockRunning([reportedRun('in_progress', 2 * HOUR)], shown, NOW)).toBe(true);
-    // Stale one millisecond later.
-    expect(ciChip([reportedRun('in_progress', 2 * HOUR + 1)])?.text).toBe('CI · unknown');
-    // A newer report of the same run renews it.
-    expect(ciChip([reportedRun('in_progress', MINUTE)])?.text).toBe('CI · 6:00');
-    // The run's end replaces it, and a finished run never goes stale.
-    const failed = reportedRun('in_progress', 3 * HOUR);
-    failed.ci = { ...failed.ci!, status: 'failure', finished_at_ms: NOW - 3 * HOUR };
-    expect(ciChip([failed])).toMatchObject({ text: 'CI failed', tone: 'danger' });
+  it('hides a run in flight past its verify_by_ms, or an older server report past 2 h', () => {
+    const until = (by: number | null) =>
+      store(reportedRun('in_progress', 2 * HOUR, NOW, { verification: 'verified', verify_by_ms: by }));
+    expect(ciChips([until(NOW)])[0]?.text).toBe('CI · 2:05:00');
+    expect(ciChips([until(NOW - 1)])).toEqual([]);
+    // A followed run has no bound.
+    expect(ciChips([until(null)])[0]?.text).toBe('CI · 2:05:00');
+    // An older server sends no bound: 2 h after its report, as before.
+    expect(ciChips([olderServer(reportedRun('in_progress', 2 * HOUR))])[0]?.text).toBe('CI · 2:05:00');
+    expect(ciChips([olderServer(reportedRun('in_progress', 2 * HOUR + 1))])).toEqual([]);
+    // A finished run always shows.
+    expect(ciChips([olderServer(reportedRun('failure', 3 * HOUR))])).toMatchObject([{ text: 'CI failed' }]);
+  });
+
+  it('keeps a transient run shown with its last known status, its title saying the provider is retried', () => {
+    const transient = store(reportedRun('in_progress', MINUTE, NOW, { verification: 'transient', verify_by_ms: null }));
+    expect(ciChips([transient])).toMatchObject([
+      {
+        text: 'CI · 6:00',
+        title: 'main CI running for 6:00 · 8f6c8d8 · provider unreachable, retrying',
+        tone: 'neutral',
+      },
+    ]);
+    expect(summary(transient).ci).toMatchObject({ status: 'in_progress', transient: true });
+  });
+
+  it('shows one chip per run in flight, named by what tells them apart, plus the newest failure', () => {
+    const ci = reportedRun('in_progress', MINUTE),
+      platforms = reportedRun('queued', 2 * MINUTE, NOW, { workflow: 'Platforms' }),
+      docs = reportedRun('failure', 30 * MINUTE, NOW, { workflow: 'Docs' });
+    const chips = ciChips([store(ci, platforms, docs)]);
+    expect(chips.map((chip) => chip.text)).toEqual(['CI · 6:00', 'Platforms · queued']);
+    expect(chips.map((chip) => chip.title)).toEqual([
+      'main CI running for 6:00 · 8f6c8d8',
+      'main Platforms queued · 8f6c8d8',
+    ]);
+    expect(chips.map((chip) => chip.ci?.workflow)).toEqual(['CI', 'Platforms']);
+    // The newest run failing adds its chip too.
+    const failedNewest = reportedRun('failure', 0, NOW, { workflow: 'Docs' });
+    expect(ciChips([store(failedNewest, ci, platforms)]).map((chip) => chip.text)).toEqual([
+      'Docs failed',
+      'CI · 6:00',
+      'Platforms · queued',
+    ]);
+    // A second branch of the same workflow is named by its branch.
+    const branches = ciChips([store(ci, reportedRun('in_progress', MINUTE, NOW, { branch: 'docs' }))]);
+    expect(branches.map((chip) => chip.text)).toEqual(['main CI · 6:00', 'docs CI · 6:00']);
+    // Two stores reporting the same branch and workflow show the newer run once.
+    const older = { ...store(reportedRun('in_progress', 10 * MINUTE)), store: 'other' };
+    expect(ciChips([older, store(ci)]).map((chip) => chip.text)).toEqual(['CI · 6:00']);
+    expect(liveCiClockRunning([store(platforms, ci)], shown, NOW)).toBe(true);
+    expect(liveCiClockRunning([store(platforms)], shown, NOW)).toBe(false);
   });
 
   describe('with fake timers', () => {
@@ -463,8 +500,15 @@ describe('stale main CI reports (HS2-CC7TCB)', () => {
       vi.useRealTimers();
     });
 
-    it('stops the display clock when the running report goes stale, and starts it on a new report', () => {
-      let states: LiveStoreState[] = [reportedRun('in_progress', 2 * HOUR - 2_000)],
+    it('hides the chip and stops the display clock when the trust window ends, and shows a new report', () => {
+      const bounded = (nowMs: number, reportedAgoMs: number) =>
+        store(
+          reportedRun('in_progress', reportedAgoMs, nowMs, {
+            verification: 'verified',
+            verify_by_ms: nowMs - reportedAgoMs + 2 * HOUR,
+          }),
+        );
+      let states: LiveStoreState[] = [bounded(NOW, 2 * HOUR - 2_000)],
         clock = Date.now();
       const timer = createTurnClock(
         () => liveCiClockRunning(states, shown, clock),
@@ -476,22 +520,22 @@ describe('stale main CI reports (HS2-CC7TCB)', () => {
       timer.sync();
       expect(timer.running()).toBe(true);
       vi.advanceTimersByTime(1_000);
-      expect(ciChip(states, clock)?.text).toBe('CI · 2:04:59');
-      // The tick that crosses the bound renders `unknown`; the next one stops the clock.
+      expect(ciChips(states, clock)[0]?.text).toBe('CI · 2:04:59');
+      // The tick that crosses the bound hides the chip; the next one stops the clock.
       vi.advanceTimersByTime(2_000);
-      expect(ciChip(states, clock)?.text).toBe('CI · unknown');
+      expect(ciChips(states, clock)).toEqual([]);
       vi.advanceTimersByTime(1_000);
       expect(timer.running()).toBe(false);
       const frozen = clock;
       vi.advanceTimersByTime(10_000);
       expect(clock).toBe(frozen);
-      // A new report of the run makes it believable again.
-      states = [reportedRun('in_progress', 0, Date.now())];
+      // A new report of the run shows it again.
+      states = [bounded(Date.now(), 0)];
       clock = Date.now();
       timer.sync();
       expect(timer.running()).toBe(true);
       vi.advanceTimersByTime(1_000);
-      expect(ciChip(states, clock)?.text).toBe('CI · 5:01');
+      expect(ciChips(states, clock)[0]?.text).toBe('CI · 5:01');
       timer.stop();
     });
   });

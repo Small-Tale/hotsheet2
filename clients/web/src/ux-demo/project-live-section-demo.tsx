@@ -16,7 +16,7 @@ import {
   type DemoCiScenario,
   demoHostHealth,
   type DemoHostScenario,
-  demoLiveCi,
+  demoLiveCiRuns,
   type DemoLiveScenario,
   demoLiveState,
 } from './live-section-fixtures';
@@ -38,7 +38,8 @@ const HOST_CHOICES: SelectChoice[] = [
   { value: 'battery', label: 'On Battery (Warning)' },
 ];
 
-// The `main` CI run (HS2-505PHC): the compact chip names itself and, while it runs, its elapsed time.
+// The CI runs (HS2-505PHC): each compact chip names itself and, while it runs, its elapsed time; HS2-D3JJ49: one
+// chip per run in flight, and nothing for a run that cannot be verified.
 const CI_CHOICES: SelectChoice[] = [
   { value: 'none', label: 'None Reported' },
   { value: 'running', label: 'Running' },
@@ -46,7 +47,9 @@ const CI_CHOICES: SelectChoice[] = [
   { value: 'queued', label: 'Queued' },
   { value: 'failed', label: 'Failed' },
   { value: 'passed', label: 'Passed' },
-  { value: 'stale', label: 'Running, Reported Hours Ago' },
+  { value: 'transient', label: 'Running, Provider Unreachable' },
+  { value: 'several', label: 'Several Runs in Flight' },
+  { value: 'unverifiable', label: 'Cannot Be Verified' },
 ];
 
 const MODE_CHOICES: SelectChoice[] = [
@@ -57,7 +60,14 @@ const MODE_CHOICES: SelectChoice[] = [
 const DEFAULTS = { scenario: 'attention', host: 'disk-warning', ci: 'running', mode: 'compact' } as const;
 
 /** Every CI chip face, side by side in the states example. */
-const CI_CHIP_STATES: readonly DemoCiScenario[] = ['running', 'running-no-start', 'queued', 'failed', 'stale'];
+const CI_CHIP_STATES: readonly DemoCiScenario[] = [
+  'running',
+  'running-no-start',
+  'queued',
+  'failed',
+  'transient',
+  'several',
+];
 
 export const projectLiveSectionSettings = {
   scenario: signal<string>(DEFAULTS.scenario),
@@ -69,25 +79,33 @@ export const projectLiveSectionSettings = {
 /** HS2-7PSBHQ: the open Live CI context menu of the interactive example. */
 export const projectLiveSectionCiMenu = signal<LiveCiMenuState | undefined>(undefined);
 
+/** HS2-D3JJ49: the runs Clear CI Status removed from the interactive example, by branch and workflow. */
+export const projectLiveSectionClearedRuns = signal<readonly string[]>([]);
+
+const runKey = (run: { branch: string | null; workflow: string | null }) => `${run.branch ?? ''}:${run.workflow ?? ''}`;
+
 export function resetProjectLiveSectionDemo(root?: ParentNode): void {
   projectLiveSectionSettings.scenario.value = DEFAULTS.scenario;
   projectLiveSectionSettings.host.value = DEFAULTS.host;
   projectLiveSectionSettings.ci.value = DEFAULTS.ci;
   projectLiveSectionSettings.mode.value = DEFAULTS.mode;
   projectLiveSectionCiMenu.value = undefined;
+  projectLiveSectionClearedRuns.value = [];
   if (root) syncSettingsControls(root, 'project-live-section', { values: { ...DEFAULTS } });
 }
 
-function liveState(scenario: string, ci: string) {
+function liveState(scenario: string, ci: string, cleared: readonly string[] = []) {
   const state = demoLiveState(scenario as DemoLiveScenario),
-    run = demoLiveCi(ci as DemoCiScenario);
-  return run ? { ...state, ci: run } : state;
+    runs = demoLiveCiRuns(ci as DemoCiScenario).filter((run) => !cleared.includes(runKey(run)));
+  return ci === 'none' ? state : { ...state, ...(runs[0] ? { ci: runs[0] } : {}), ci_runs: runs };
 }
 
-function section(scenario: string, host: string, ci: string, expanded: boolean) {
+function section(scenario: string, host: string, ci: string, expanded: boolean, cleared: readonly string[] = []) {
   return (
     <ProjectLiveSection
-      summary={scenario === 'none' ? undefined : projectLiveSummary([liveState(scenario, ci)], DEMO_LIVE_NOW_MS)}
+      summary={
+        scenario === 'none' ? undefined : projectLiveSummary([liveState(scenario, ci, cleared)], DEMO_LIVE_NOW_MS)
+      }
       callouts={hostCallouts(demoHostHealth(host as DemoHostScenario))}
       expanded={expanded}
     />
@@ -101,15 +119,23 @@ export function ProjectLiveSectionDemo() {
     <CatalogExampleStack>
       <CatalogExample
         label="Interactive"
-        note="The header action switches between the compact line and the detail rows. Hover a gauge or chip for its explanation, which is also its accessible name. With Main CI set to Running, Reported Hours Ago, right-click the section (or press the context-menu key on it) for Clear CI Status, which forgets the run whose end nobody reported (HS2-7PSBHQ)."
+        note="The header action switches between the compact line and the detail rows. Hover a gauge or chip for its explanation, which is also its accessible name. Right-click a CI chip or row for Clear CI Status, which forgets that run; right-click elsewhere on the section, or press the context-menu key on it, to list each shown run (HS2-7PSBHQ, HS2-D3JJ49)."
       >
-        <div class="demo-sidebar-width">{section(scenario.value, host.value, ci.value, mode.value === 'expanded')}</div>
+        <div class="demo-sidebar-width">
+          {section(
+            scenario.value,
+            host.value,
+            ci.value,
+            mode.value === 'expanded',
+            projectLiveSectionClearedRuns.value,
+          )}
+        </div>
         {projectLiveSectionCiMenu.value && <LiveCiContextMenu {...projectLiveSectionCiMenu.value} />}
       </CatalogExample>
 
       <CatalogExample
         label="Main CI Chip"
-        note="The compact CI chip names itself (HS2-505PHC): its elapsed time while it runs, which the app re-renders each second while the section shows, then Running before a start is reported, Queued, and Failed. A run reported running over 2 h ago reads Unknown, with no clock (HS2-CC7TCB). A passing run shows no chip."
+        note="The compact CI chip names itself (HS2-505PHC): its elapsed time while it runs, which the app re-renders each second while the section shows, then Running before a start is reported, Queued, and Failed. A run whose provider is unreachable for now keeps its last face. Several runs in flight each get a chip named by their workflow (HS2-D3JJ49). A passing run, or one that cannot be verified, shows no chip."
       >
         {CI_CHIP_STATES.map((state) => (
           <div class="demo-sidebar-width" data-demo-ci={state}>
@@ -145,7 +171,10 @@ function wireProjectLiveSectionDemo(root: HTMLElement): () => void {
       const name = control.getAttribute('name');
       if (name === 'scenario') projectLiveSectionSettings.scenario.value = control.value;
       if (name === 'host') projectLiveSectionSettings.host.value = control.value;
-      if (name === 'ci') projectLiveSectionSettings.ci.value = control.value;
+      if (name === 'ci') {
+        projectLiveSectionSettings.ci.value = control.value;
+        projectLiveSectionClearedRuns.value = [];
+      }
       if (name === 'mode') projectLiveSectionSettings.mode.value = control.value;
     }),
   );
@@ -165,20 +194,16 @@ function wireProjectLiveSectionDemo(root: HTMLElement): () => void {
       });
     }),
   );
-  // HS2-7PSBHQ: the same menu wiring as the app; clearing here clears the interactive example's run.
+  // HS2-7PSBHQ, HS2-D3JJ49: the same menu wiring as the app; clearing here removes that run of the
+  // interactive example.
   demoListeners.add(
     wireLiveCiMenu(root, {
       menu: projectLiveSectionCiMenu,
-      clear: () => {
-        projectLiveSectionSettings.ci.value = 'none';
-        syncSettingsControls(root, 'project-live-section', {
-          values: {
-            scenario: projectLiveSectionSettings.scenario.value,
-            host: projectLiveSectionSettings.host.value,
-            ci: 'none',
-            mode: projectLiveSectionSettings.mode.value,
-          },
-        });
+      clear: (target) => {
+        projectLiveSectionClearedRuns.value = [
+          ...projectLiveSectionClearedRuns.value,
+          runKey({ branch: target.branch ?? null, workflow: target.workflow ?? null }),
+        ];
       },
     }),
   );

@@ -463,6 +463,10 @@ async fn main() -> Result<()> {
     // Deliver matching bus events to configured notifier channels (HS2-R5HTZN).
     let _notify =
         hotsheet_server::notification_router::spawn_notification_router(state.clone()).await;
+    // Say ticket milestones (started with initial thoughts, questions, follow-ups, completion)
+    // through the announcer's activity stream (HS2-G3HJZH). Held for the run.
+    let _milestones =
+        hotsheet_server::announcer_milestones::spawn_announcer_milestones(state.clone());
     // Group each new ungrouped ticket with the project's default AI tool when the project's
     // `auto_group_new_tickets` setting is on (HS2-FN018Q). Held for the run.
     let _auto_group = hotsheet_server::auto_group::spawn_auto_grouper(state.clone());

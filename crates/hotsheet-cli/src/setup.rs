@@ -315,6 +315,66 @@ mod tests {
     }
 
     #[test]
+    fn hs2_x0zsz8_setup_installs_subagent_hooks_once_and_doctor_finds_them_missing() {
+        let d = project();
+        let claude = hotsheet_plugins::builtin_plugins()
+            .into_iter()
+            .find(|plugin| plugin.manifest.id == "claude")
+            .unwrap();
+        // Never set up: nothing to report.
+        assert_eq!(
+            hotsheet_plugins::setup::missing_hook_events(d.path(), &claude),
+            None
+        );
+        // A project set up before the subagent events existed, with a user's own hook.
+        std::fs::create_dir_all(d.path().join(".claude")).unwrap();
+        std::fs::write(
+            d.path().join(".claude/settings.local.json"),
+            r#"{"hooks":{"PermissionRequest":[{"matcher":"*","hooks":[{"type":"command","command":"/old/hotsheet-cli permission-hook --agent claude"}]}],"SubagentStop":[{"hooks":[{"type":"command","command":"my-subagent-log"}]}]}}"#,
+        )
+        .unwrap();
+        let missing = hotsheet_plugins::setup::missing_hook_events(d.path(), &claude).unwrap();
+        for event in ["SubagentStart", "SubagentStop", "SessionStart"] {
+            assert!(missing.iter().any(|m| m == event), "{event}: {missing:?}");
+        }
+        assert!(!missing.iter().any(|m| m == "PermissionRequest"));
+
+        setup(d.path(), d.path(), Some("claude"), false).unwrap();
+        setup(d.path(), d.path(), Some("claude"), false).unwrap();
+        assert_eq!(
+            hotsheet_plugins::setup::missing_hook_events(d.path(), &claude),
+            Some(Vec::new())
+        );
+        let s: serde_json::Value =
+            serde_json::from_str(&read(d.path(), ".claude/settings.local.json")).unwrap();
+        for event in ["SubagentStart", "SubagentStop"] {
+            let entries = s["hooks"][event].as_array().unwrap();
+            let ours: Vec<_> = entries
+                .iter()
+                .filter(|entry| {
+                    entry["hooks"][0]["command"]
+                        .as_str()
+                        .is_some_and(|c| c.contains("permission-hook --agent claude"))
+                })
+                .collect();
+            assert_eq!(ours.len(), 1, "exactly one Hot Sheet {event} hook");
+            assert!(
+                ours[0].get("matcher").is_none(),
+                "{event} matches every agent"
+            );
+            assert_eq!(ours[0]["hooks"][0]["timeout"], 5);
+        }
+        assert!(
+            s["hooks"]["SubagentStop"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|entry| entry["hooks"][0]["command"] == "my-subagent-log"),
+            "the user's own subagent hook survives"
+        );
+    }
+
+    #[test]
     fn setup_codex_writes_agents_skill_and_toml_idempotently() {
         let d = project();
         std::fs::create_dir_all(d.path().join(".codex")).unwrap();

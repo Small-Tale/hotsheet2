@@ -16,6 +16,7 @@ import {
   Gauge,
   ListX,
   Maximize2,
+  Milestone,
   Minimize2,
   PictureInPicture,
   PictureInPicture2,
@@ -30,6 +31,7 @@ import {
 import { ANNOUNCER_DOCK_BOUNDS, ANNOUNCER_DOCK_REGION_ID, ANNOUNCER_FLOATING_ID } from '../announcer-layout';
 import type { AnnouncerReelItem } from '../announcer-reel';
 import { announcerSettingsMenu } from '../announcer-settings';
+import type { AnnouncerAiSettings } from '../api';
 import { MarkdownPreview } from './markdown-preview';
 
 /** Where the open announcer shows (HS2-BS0XFK): `docked` in the left sidebar's footer under a resizable
@@ -56,6 +58,8 @@ export interface AnnouncerOverlayProps {
   voices?: readonly string[];
   /** Speech rate (HS2-PRCC6V). */
   rate?: number;
+  /** The server's milestone AI switches (HS2-G3HJZH). */
+  ai?: AnnouncerAiSettings;
   presentation?: AnnouncerPresentation;
   /** The docked section's height, as the device last stored it. */
   dockSize?: number;
@@ -84,6 +88,7 @@ export function AnnouncerOverlay({
   voice = '',
   voices = [],
   rate = 1,
+  ai,
   presentation = 'corner',
   dockSize = ANNOUNCER_DOCK_BOUNDS.fallback,
   surfacePresentation = 'overlay',
@@ -211,9 +216,11 @@ export function AnnouncerOverlay({
                     voice,
                     rate,
                     hasHistory: items.length > 0,
+                    ai,
                     icons: {
                       voice: <LucideIcon icon={AudioLines} name="audio-lines" />,
                       speed: <LucideIcon icon={Gauge} name="gauge" />,
+                      milestones: <LucideIcon icon={Milestone} name="milestone" />,
                       clear: <LucideIcon icon={ListX} name="list-x" />,
                     },
                   })}

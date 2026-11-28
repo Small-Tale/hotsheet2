@@ -199,24 +199,55 @@ describe('ProjectLiveSection main CI (HS2-57BYEA)', () => {
     expect(String(ProjectLiveSection({ summary: quiet, expanded: true }))).not.toContain('data-live-row="ci"');
   });
 
-  it('names the run Clear CI Status forgets only while it shows as unknown, in both modes (HS2-7PSBHQ)', () => {
-    const reportedAt = DEMO_LIVE_NOW_MS - 3 * 60 * 60_000;
-    const stale = projectLiveSummary(
-      [
-        {
-          ...demoLiveState('quiet'),
-          ci: { ...ci, status: 'in_progress', finished_at_ms: null, reported_at_ms: reportedAt },
-        },
-      ],
+  it('names the run Clear CI Status forgets on each shown chip and row (HS2-7PSBHQ, HS2-D3JJ49)', () => {
+    for (const expanded of [false, true]) {
+      const markup = String(ProjectLiveSection({ summary: failing, expanded }));
+      expect(markup).toContain('data-ci-clear-checkout="demo-ab12"');
+      expect(markup).toContain(`data-ci-clear-reported-at-ms="${ci.reported_at_ms}"`);
+      expect(markup).toContain('data-ci-clear-workflow="CI"');
+    }
+    // A passing run has a row, not a chip; nothing reported names nothing.
+    expect(String(ProjectLiveSection({ summary: passing }))).not.toContain('data-ci-clear-checkout');
+    expect(String(ProjectLiveSection({ summary: passing, expanded: true }))).toContain('data-ci-clear-checkout');
+    expect(String(ProjectLiveSection({ summary: quiet }))).not.toContain('data-ci-clear-checkout');
+  });
+
+  it('shows nothing for an unverifiable run and never an unknown chip (HS2-D3JJ49)', () => {
+    const hidden = projectLiveSummary(
+      [{ ...demoLiveState('quiet'), ci_runs: [{ ...ci, status: 'in_progress', verification: 'unverifiable' }] }],
       DEMO_LIVE_NOW_MS,
     );
     for (const expanded of [false, true]) {
-      const markup = String(ProjectLiveSection({ summary: stale, expanded }));
-      expect(markup).toContain('data-ci-clear-checkout="demo-ab12"');
-      expect(markup).toContain(`data-ci-clear-reported-at-ms="${reportedAt}"`);
+      const markup = String(ProjectLiveSection({ summary: hidden, expanded }));
+      expect(markup).not.toContain('data-live-chip="ci"');
+      expect(markup).not.toContain('data-live-row="ci"');
+      expect(markup).not.toContain('unknown');
     }
-    expect(String(ProjectLiveSection({ summary: stale }))).toContain('CI · unknown');
-    for (const summary of [failing, passing, quiet])
-      expect(String(ProjectLiveSection({ summary }))).not.toContain('data-ci-clear-checkout');
+  });
+
+  it('shows one chip and one row per run in flight, each naming its run (HS2-D3JJ49)', () => {
+    const running = (workflow: string, startedAgoMs: number) => ({
+      ...ci,
+      workflow,
+      status: 'in_progress' as const,
+      started_at_ms: DEMO_LIVE_NOW_MS - startedAgoMs,
+      finished_at_ms: null,
+      reported_at_ms: DEMO_LIVE_NOW_MS - 5_000,
+    });
+    const several = projectLiveSummary(
+      [{ ...demoLiveState('quiet'), ci_runs: [running('CI', 65_000), running('Platforms', 190_000)] }],
+      DEMO_LIVE_NOW_MS,
+    );
+    const compact = String(ProjectLiveSection({ summary: several }));
+    expect(compact.match(/data-live-chip="ci"/gu)).toHaveLength(2);
+    expect(compact).toContain('CI · 1:05');
+    expect(compact).toContain('Platforms · 3:10');
+    expect(compact).toContain('title="main Platforms running for 3:10 · 9f8e7d6"');
+    expect(compact).toContain('data-ci-clear-workflow="Platforms"');
+    expect(compact).toContain('data-ci-clear-label="main Platforms"');
+    const expanded = String(ProjectLiveSection({ summary: several, expanded: true }));
+    expect(expanded.match(/data-live-row="ci"/gu)).toHaveLength(2);
+    expect(expanded).toContain('>CI running<');
+    expect(expanded).toContain('>Platforms running<');
   });
 });

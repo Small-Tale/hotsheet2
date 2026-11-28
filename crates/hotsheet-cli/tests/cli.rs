@@ -2517,7 +2517,8 @@ fn hs2_jttqmy_live_state_reads_the_local_server_snapshot() {
 /// HS2-M8HHEA: `ci report` posts the run to the local server's
 /// `POST /checkouts/{reference}/ci-status`, naming an explicit checkout or the checkout of the
 /// current directory, and prints the server's answer; outside a checkout it asks for one.
-/// HS2-7PSBHQ: `ci clear` sends `DELETE` to the same route the same way.
+/// HS2-7PSBHQ: `ci clear` sends `DELETE` to the same route the same way; HS2-D3JJ49: with
+/// its branch and workflow filters.
 #[test]
 fn hs2_m8hhea_ci_report_posts_the_run_to_the_local_server() {
     use std::io::{BufRead, BufReader, Read, Write};
@@ -2569,7 +2570,9 @@ fn hs2_m8hhea_ci_report_posts_the_run_to_the_local_server() {
         "POST /checkouts/demo-1234/ci-status HTTP/1.1".to_string(),
         format!("POST /checkouts/{encoded}/ci-status HTTP/1.1"),
         // HS2-7PSBHQ: `ci clear` forgets the stored run through `DELETE` on the same route.
-        "DELETE /checkouts/demo-1234/ci-status?reported_at_ms=17 HTTP/1.1".to_string(),
+        // HS2-D3JJ49: the branch and workflow filters name one run.
+        "DELETE /checkouts/demo-1234/ci-status?reported_at_ms=17&branch=release%2F2&workflow=Build%20all HTTP/1.1"
+            .to_string(),
         format!("DELETE /checkouts/{encoded}/ci-status HTTP/1.1"),
     ];
     let server = std::thread::spawn(move || {
@@ -2676,6 +2679,10 @@ fn hs2_m8hhea_ci_report_posts_the_run_to_the_local_server() {
             "demo-1234",
             "--reported-at-ms",
             "17",
+            "--branch",
+            "release/2",
+            "--workflow",
+            "Build all",
         ],
     );
     assert!(
@@ -2750,6 +2757,7 @@ const HOOK_TESTS: &[&str] = &[
     "claude_session_start_reports_its_inbox_socket_token_and_version",
     "hs2_ssmdq1_permission_hook_reconnects_a_session_the_server_forgot_and_retries",
     "hs2_5ycgh5_permission_hook_reports_claude_tool_activity_without_file_contents",
+    "hs2_x0zsz8_external_claude_subagent_hooks_report_progress_to_the_machine_host",
 ];
 
 #[test]
@@ -3299,6 +3307,84 @@ fn hs2_5ycgh5_permission_hook_reports_claude_tool_activity_without_file_contents
         serde_json::json!({ "file_path": "src/notes.md" })
     );
     assert!(!body.to_string().contains("private file body"));
+}
+
+/// HS2-X0ZSZ8: a Claude session started outside any Hot Sheet terminal inherits no server
+/// route. Its subagent hooks still reach the running machine host, found through the host's
+/// instance record, and send only identifiers. Inside a Hot Sheet terminal the server already
+/// follows the subagent transcripts, so the hook sends nothing for them.
+#[test]
+fn hs2_x0zsz8_external_claude_subagent_hooks_report_progress_to_the_machine_host() {
+    let home = tempfile::tempdir().unwrap();
+    let anchor = hotsheet_cli::external_launch::machine_host_store(home.path());
+    std::fs::create_dir_all(&anchor).unwrap();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    let instance = hotsheet_cli::external_launch::instance_path(home.path(), &anchor);
+    std::fs::create_dir_all(instance.parent().unwrap()).unwrap();
+    std::fs::write(
+        &instance,
+        serde_json::json!({
+            "pid": std::process::id(),
+            "url": url,
+            "secret": "machine-secret",
+            "store_path": hotsheet_sync::paths::canonicalize(&anchor).unwrap(),
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let stop = serde_json::json!({
+        "session_id": "external-session",
+        "transcript_path": "/tmp/projects/fixture/external-session.jsonl",
+        "cwd": "/work/app",
+        "permission_mode": "default",
+        "hook_event_name": "SubagentStop",
+        "stop_hook_active": false,
+        "agent_id": "def456",
+        "agent_type": "Explore",
+        "agent_transcript_path": "/tmp/projects/fixture/external-session/subagents/agent-def456.jsonl",
+        "last_assistant_message": "private subagent summary",
+    });
+    let server = std::thread::spawn({
+        let listener = listener.try_clone().unwrap();
+        move || capture_one_request(listener)
+    });
+    hook_cli()
+        .env("HOTSHEET_HOME", home.path())
+        .args(["permission-hook", "--agent", "claude"])
+        .write_stdin(stop.to_string())
+        .assert()
+        .success()
+        .stdout(predicate::str::is_empty());
+    let (line, secret, body) = server.join().unwrap();
+    assert_eq!(line, "POST /ai-hooks/subagent-progress HTTP/1.1");
+    assert_eq!(secret, "machine-secret");
+    let body: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(
+        body,
+        serde_json::json!({
+            "event": "stop", "session_id": "external-session", "cwd": "/work/app",
+            "agent_id": "def456", "agent_type": "Explore",
+        })
+    );
+
+    // In a Hot Sheet terminal the same hook stays silent: nothing reaches any server.
+    hook_cli()
+        .env("HOTSHEET_HOME", home.path())
+        .env("HOTSHEET_TERMINAL_ID", "claude-9")
+        .env("HOTSHEET_SERVER", &url)
+        .env("HOTSHEET_SECRET", "terminal-secret")
+        .args(["permission-hook", "--agent", "claude"])
+        .write_stdin(stop.to_string())
+        .assert()
+        .success()
+        .stdout(predicate::str::is_empty());
+    listener.set_nonblocking(true).unwrap();
+    assert_eq!(
+        listener.accept().map(|_| ()).unwrap_err().kind(),
+        std::io::ErrorKind::WouldBlock,
+        "a terminal session's subagent hook sends nothing"
+    );
 }
 
 /// HS2-SSMDQ1: a restarted server answers a turn report with "not connected". The hook then
@@ -4459,6 +4545,8 @@ fn setup_claude_scopes_question_resolution_hooks_without_narrowing_permissions()
         "UserPromptSubmit",
         "SessionStart",
         "SessionEnd",
+        "SubagentStart",
+        "SubagentStop",
     ] {
         assert!(
             settings["hooks"][event][0].get("matcher").is_none(),

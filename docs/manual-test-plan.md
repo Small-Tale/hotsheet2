@@ -175,11 +175,22 @@ With `gh auth status` signed in and a project whose `ci-status.json` holds a
 `hotsheet-cli ci report --status in_progress` and a real finished run's
 40-character `--sha`, `--run-url`, `--workflow`, `--branch main`, then stop the
 server and set its `reported_at_ms` back), restart the server. Within a few
-minutes the sidebar's `CI · unknown` chip turns into that run's real verdict
-(no chip for a pass, `CI failed` for a failure) with no further report. Then
-report another stale run without a token available, confirm it stays
-`CI · unknown`, right-click the Live section, choose Clear CI Status, and
-confirm the chip goes away and `hotsheet-cli live-state` shows `unavailable`.
+minutes the run's real verdict shows (no chip for a pass, `CI failed` for a
+failure) with no further report; until then no chip shows for it (HS2-D3JJ49).
+Then report another stale run without a token available and confirm no chip
+or row ever shows for it and `hotsheet-cli live-state` lists no `ci_runs`.
+
+### Unverifiable and several main CI runs against real GitHub (HS2-D3JJ49)
+
+With `gh auth status` signed in, push a commit that starts two workflows and
+report each run with `hotsheet-cli ci report --status in_progress` (its
+40-character `--sha`, `--run-url`, `--workflow`, `--branch main`). The sidebar
+shows one chip per run, named by workflow, each ticking. Turn the network off
+for a few minutes: both chips stay, their titles end `provider unreachable,
+retrying`; turn it back on and the titles return to normal, then each chip
+turns into its verdict. Right-click one chip, choose Clear CI Status, and
+confirm only that chip goes. Report a run of a repository the token cannot
+read and confirm no chip shows once the watch answers 404.
 
 ### Launched-agent sandbox recovery (HS2-DVZXSD)
 
@@ -1214,13 +1225,28 @@ through a task that reads and searches the code, edits a few files, runs tests,
 and commits. Listen for a few minutes: routine reading, searching and editing
 should appear on screen as an occasional summary ("codex looked through the code
 for …") but not be said (HS2-G3HJZH), and neither should turn starts and ends;
-nothing said should be "ran zsh" or a path or flag. Test runs, commits, ticket
-claims and permission requests should be said promptly in the first person ("I
-ran the unit tests, and they passed"), the first utterance and any switch to
+nothing said should be "ran zsh" or a path or flag. Test runs, commits and
+permission requests should be said promptly in the first person ("I ran the unit
+tests, and they passed"); ticket claims are said as milestones instead (below). The first utterance and any switch to
 another project should start "For <project>," (HS2-MR8GA4), and a Codex test run
 should say whether it passed. Judge whether the pace feels edited rather than
 exhaustive. Unit and browser tests pin the policy; only listening can judge the
 pace.
+
+### Announcer ticket milestones with the real AI tool (HS2-G3HJZH)
+
+Automated tests never run a real model. On a machine signed in to `claude`, with
+the Announcer open and Live on and both **Milestones** switches on, have an agent
+claim a synthetic ticket, post a `## Preliminary thoughts` note with a
+`note_summary`, file a follow-up with `--follow-up-to`, ask a `feedback_needed`
+question, and complete it. Within about 5 to 25 seconds of each write, listen for a
+conversational first-person line that names the ticket's short slug ("For <project>,
+I started investigating …"); a bare claim or a test phase may be shown but not
+said. Turn **AI wording** off and repeat a note: the template line ("An update on
+… (SLUG): …") is said. Turn **AI importance** off: the rule decides what is said.
+Sign out of `claude` (or rename it on PATH) and confirm templates and rules still
+work. Judge whether the AI's choices of what to say match "important / interesting
+milestones, tests / task completions / failures, permissions / questions".
 
 ### Grid sidebar touch swipe on a phone or tablet (HS2-EZSQDF)
 

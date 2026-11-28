@@ -1,6 +1,6 @@
 # 15. Cross-Tool Activity / Narration Interface
 
-> **Status: Rich native stream and Announcer built (HS2-KP31ZE/HS2-4C68Y8/HS2-SW655F/HS2-5PSQJQ).** A **tool-agnostic activity event stream** — the common
+> **Status: Rich native stream, Announcer, and ticket milestones built (HS2-KP31ZE/HS2-4C68Y8/HS2-SW655F/HS2-5PSQJQ/HS2-G3HJZH).** A **tool-agnostic activity event stream** — the common
 > interface the **Announcer** (narration + TTS) and a **timeline** consume, so
 > narration isn't Claude-only like HS1's (which rode Claude's OTLP stream). Part of
 > the "generalize a concern across every tool via a capability" theme (with `drive`
@@ -168,10 +168,12 @@ The `activity` capability turns native signals → events; the host owns the str
   are minutiae, so live mode shows them as it passes but does not say them; Play still says the
   shown entry on request. Entries
   already shown when live narration starts, and retained history, are not repeated. Clear history
-  resets the edit. Ticket-level milestones with substance (a ticket started with initial thoughts, a
-  decision with the follow-up it created, a question for the person) need a ticket-write source the
-  activity stream does not carry yet; the wording source and default chattiness wait on the
-  maintainer's choice on HS2-G3HJZH. Other events keep their prose,
+  resets the edit. Ticket milestones (§15.6.1) are headlines of their own, never folded, shown as
+  their structured line and said as the server worded them, and live narration says one only when
+  the server's importance score selected it. Since milestones tell the ticket story, ticket commands
+  guessed from a tool's command line ("claimed a ticket") and builds and installs that did not fail
+  are shown but not said live; tests and checks, failures, commits and pushes, permissions,
+  questions, and blocks are said. Other events keep their prose,
   with inline code read as a short name or "a command", and code blocks and links
   replaced by plain words. A default edit summary is read by file name,
   browser speech or a configured server provider. The macOS server offers a local
@@ -200,6 +202,74 @@ The `activity` capability turns native signals → events; the host owns the str
 
 - **Timeline** — a per-ticket / per-session "what happened" view, reads the stored
   window. (A natural, cheaper first consumer than full TTS.)
+
+### 15.6.1 Ticket milestones (HS2-G3HJZH)
+
+> **Built (HS2-G3HJZH).** The maintainer chose templates over structured ticket data as the source,
+> rewritten by an AI into conversational speech with a template fallback and an off switch, and asked
+> for an AI importance criterion favoring milestones, test and task completions and failures, and
+> permissions and questions ("maybe using some kind of lighter AI classifier", read as a small,
+> cheap model).
+
+The tool stream says what an agent did step by step; a person wants to hear what the work reached.
+Those milestones live in ticket writes, so the server produces them
+(`crates/hotsheet-server/src/announcer_milestones.rs`, pure logic in
+`crates/hotsheet-ticketing/src/announcer_milestones.rs` and `announcer_ai.rs`):
+
+- **Source.** One subscriber watches the change bus for ticket writes from the server, the CLI, and
+  MCP (through the store watcher) and compares each changed ticket with what it saw before: status,
+  started phase, and blocked state (seeded from each store's index at startup), and seen note and
+  follow-up ids (a ticket first seen later counts only notes and follow-ups created after its store
+  was seeded). Only AI work is narrated, because the agent speaks for itself: a note counts when its
+  author role is `ai`; a status, phase, or block counts when the transition's own activity note is
+  AI-authored or, with no authored note, while a worker holds the claim.
+- **Milestones.** Started; initial thoughts (a `## Preliminary thoughts` note); progress (any other
+  regular note, by its `note_summary`, else its first line of prose); a question (a
+  `feedback_needed` note); a follow-up created; blocked; testing (`initial_testing`); waiting on CI
+  (`final_testing`); completed. A store's milestones are gathered until it has been quiet for 4 s
+  (at most 15 s) and coalesced per ticket: initial thoughts replace a bare start, follow-ups join the
+  note written with them, and a completion takes its note's summary and replaces the test phases.
+- **Templates.** The shown line is structured Markdown ("Started **HS2-QXVHPB** Code organization.
+  Initial thoughts: …"). The spoken line is first person with the ticket's title and short slug,
+  modeled on the maintainer's examples: "I started investigating a ticket focusing on Code
+  organization (QXVHPB). My initial thoughts: …", "An update on … (QXVHPB): … I've created a new
+  ticket (123456) for …", "I have a question about … (QXVHPB), when you have a moment: …", "I
+  finished … (QXVHPB).". The client adds "For {project}," on a project change (HS2-MR8GA4).
+- **Importance.** Each milestone gets a 0–100 score; at 50 or more live narration says it, below it
+  is shown but not said. With AI importance on, one prompt per batch (at most 8 milestones) asks the
+  person's AI tool for the scores; otherwise, and whenever a call fails, times out, is refused by the
+  budget, or returns an unusable reply, a rule scores it: question 95, blocked 90, completed 85,
+  initial thoughts 75, follow-up 70, progress 55 (a failure word lifts it by 25), waiting on CI 45,
+  started 40, testing 30; follow-ups add 10.
+- **Wording.** With AI wording on, one prompt per batch of the milestones that will be said asks for
+  one first-person line each. A line is kept only when it is plain, at most 320 characters, in the
+  first person, and still names the ticket and each follow-up by its short slug; otherwise the
+  template line is said.
+- **Recorded.** Each decided milestone is an activity event (`ticket_status`, `plan`, `decision`, or
+  `blocked`, with the ticket set) recorded through the rolling store and the live bus, so digest and
+  live narration share it. `summary` is the shown line; `detail` carries `milestone`, `slug`,
+  `title`, `note_summary`, `follow_ups`, `spoken`, `speak`, `score`, `scored_by` (`ai` or `rules`),
+  and `worded_by` (`ai` or `template`).
+- **The model call.** The person's signed-in `claude` CLI (found through its installed plugin, no
+  API key), the same way `npm run commit:msg` reaches signed-in Claude: `claude -p <prompt> --model
+claude-haiku-5-5 --output-format json --json-schema <schema>` with a short system prompt, no
+  tools, no MCP servers, hooks disabled, slash commands off, and no saved session, in a private empty
+  directory with Hot Sheet's server and worker variables removed. Each call is killed with its
+  process group after 20 s. One worker thread decides every batch, so at most one call is in
+  flight; at most 30 calls run per rolling hour; a failed call pauses AI for 10 minutes; scores and
+  lines are cached by milestone id, so a write observed twice never asks twice. No call runs in a
+  test process (`HOTSHEET_AI_TOOL_PROBES=off`), while the Announcer feature is off, or while both
+  switches are off. Codex parity is a follow-up (HS2-G3HJZH notes).
+- **Switches.** `announcer.ai_importance` and `announcer.ai_rewrite` are machine-wide settings
+  (`${HOTSHEET_HOME}/settings.json`), both on by default, read and written with `GET`/`PUT
+/announcer/settings`, `hotsheet-cli settings set announcer.ai_importance false --scope global`, or the
+  Announcer settings menu's **Milestones** submenu (**AI importance**, **AI wording**), which reads
+  them when the announcer opens. Off, the rule score and the template line are used.
+- **Privacy.** A prompt carries, per milestone, only its kind, the ticket's short slug and title,
+  the note's one-line summary (or a blocked reason), and follow-up short slugs and titles. Note
+  bodies, ticket details, paths, commands, and attachments never leave the store for this. Those
+  titles and summaries do reach the person's own AI tool and its provider while either switch is on;
+  turning both off keeps them local.
 
 ## 15.7 Durable milestone distillation
 

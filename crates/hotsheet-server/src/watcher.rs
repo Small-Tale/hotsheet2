@@ -6,7 +6,7 @@ use crate::events::{
 };
 use crate::multistore::{StoreEntry, StoreHost};
 use crate::store_watch_scope::TicketsWatchScope;
-use crate::{AppState, LocalWriteHashes, multistore};
+use crate::{AppState, ExternalAnnouncements, LocalWriteHashes, multistore};
 use hotsheet_index::hash_bytes;
 use hotsheet_model::{Ulid, parse_file};
 use hotsheet_sync::LockExt;
@@ -444,6 +444,7 @@ pub(crate) struct WatchTarget {
     pub(crate) store_id: String,
     pub(crate) host: StoreHost,
     pub(crate) local_write_hashes: LocalWriteHashes,
+    pub(crate) external_announcements: ExternalAnnouncements,
     pub(crate) events: broadcast::Sender<ChangeEvent>,
     pub(crate) event_log: Arc<Mutex<EventLog>>,
     pub(crate) checkout_registry: hotsheet_ticketing::checkouts::CheckoutRegistry,
@@ -462,6 +463,7 @@ pub(crate) fn default_watch_target(state: &AppState) -> WatchTarget {
         store_id: multistore::store_url_id(&state.store),
         host: state.host.clone(),
         local_write_hashes: state.local_write_hashes.clone(),
+        external_announcements: state.external_announcements.clone(),
         events: state.events.clone(),
         event_log: state.event_log.clone(),
         checkout_registry: state.checkout_registry.clone(),
@@ -2519,6 +2521,24 @@ pub(crate) fn handle_path_change(target: &WatchTarget, path: &FsPath) -> bool {
     // bytes happen to match the current index row.
     let already = index.with_lock(|index| index.content_hash(&id).ok().flatten());
     if already.as_deref() == Some(hash.as_str()) {
+        // HS2-G3HJZH: the CLI and serverless MCP update the shared index right after their own
+        // write, so their write often reaches this watcher already indexed. It is still a change
+        // this server did not make (its own writes are local echoes above): announce the ticket,
+        // or ticket-level subscribers (notifications, announcer milestones) never hear of it.
+        // A write usually arrives as several file events (and rescans): announce each distinct
+        // content of a ticket once, so one CLI note is one `changed`, not three.
+        let fresh = target.external_announcements.with_lock(|announced| {
+            announced.retain(|_, (_, at)| at.elapsed() <= Duration::from_secs(5));
+            let key = (target.store_id.clone(), id.to_string());
+            if announced.get(&key).is_some_and(|(seen, _)| *seen == hash) {
+                return false;
+            }
+            announced.insert(key, (hash.clone(), Instant::now()));
+            true
+        });
+        if fresh && let Ok(ticket) = parse_file(&String::from_utf8_lossy(&bytes)) {
+            emit("changed", ticket.id.to_string(), ticket.slug.clone());
+        }
         return true;
     }
 
@@ -3682,6 +3702,78 @@ mod freshness_tests {
         noise.join().unwrap();
         drop(tx);
         looping.join().unwrap();
+    }
+
+    /// HS2-G3HJZH: the CLI updates the shared index right after its own write, so the write
+    /// can reach the watcher already indexed. It is still announced with its ticket id, once per
+    /// distinct content however many file events report it; a later different write announces
+    /// again; the server's own write (a local echo) stays silent.
+    #[test]
+    fn hs2_g3hjzh_an_external_write_already_indexed_is_announced_once() {
+        let (_dir, store) = store();
+        let state = crate::AppState::new(store.clone(), "secret".into()).unwrap();
+        let target = super::default_watch_target(&state);
+        let mut events = target.events.subscribe();
+        let ticket = create(&store, "written by the CLI");
+        let path = store.ticket_path(&ticket.id);
+        // What the CLI does after writing: index the new bytes itself. Returns their hash.
+        let cli_indexes = || {
+            let current = store.read_ticket(&ticket.id).unwrap();
+            let hash = hotsheet_index::hash_bytes(&std::fs::read(&path).unwrap());
+            target
+                .entry
+                .index
+                .lock()
+                .unwrap()
+                .upsert(&current, &path.display().to_string(), &hash)
+                .unwrap();
+            hash
+        };
+        let announced_ids =
+            |events: &mut tokio::sync::broadcast::Receiver<crate::events::ChangeEvent>| {
+                let mut ids = Vec::new();
+                while let Ok(event) = events.try_recv() {
+                    assert_eq!(
+                        (event.kind.as_str(), event.slug.as_str()),
+                        ("changed", ticket.slug.as_str())
+                    );
+                    ids.push(event.id);
+                }
+                ids
+            };
+        let rewrite = |title: &str| {
+            hotsheet_ticketing::ops::update(
+                &store,
+                &ticket.id,
+                crate::now(),
+                hotsheet_ticketing::TicketPatch {
+                    title: Some(title.into()),
+                    ..hotsheet_ticketing::TicketPatch::default()
+                },
+            )
+            .unwrap();
+        };
+        cli_indexes();
+        // Several file events for one write: announced once, invalidation kept each time.
+        for _ in 0..3 {
+            assert!(super::handle_path_change(&target, &path));
+        }
+        assert_eq!(announced_ids(&mut events), [ticket.id.to_string()]);
+        // A later CLI write with different content announces again, once.
+        rewrite("written by the CLI again");
+        cli_indexes();
+        assert!(super::handle_path_change(&target, &path));
+        assert!(super::handle_path_change(&target, &path));
+        assert_eq!(announced_ids(&mut events), [ticket.id.to_string()]);
+        // The server's own write is a local echo: nothing.
+        rewrite("written by the server");
+        let hash = cli_indexes();
+        target.local_write_hashes.lock().unwrap().insert(
+            (target.store_id.clone(), ticket.id.to_string(), hash),
+            Instant::now(),
+        );
+        assert!(!super::handle_path_change(&target, &path));
+        assert!(announced_ids(&mut events).is_empty());
     }
 
     #[test]

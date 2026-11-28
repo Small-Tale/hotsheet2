@@ -1359,7 +1359,8 @@ async fn hs2_m8hhea_reported_ci_runs_are_pushed_in_the_live_state() {
         "POST",
         &format!("/checkouts/{main_id}/ci-status"),
         Some(
-            json!({"status": "in_progress", "sha": sha, "workflow": "CI", "started_at_ms": 1_000}),
+            json!({"status": "in_progress", "branch": "main", "sha": sha, "workflow": "CI",
+                    "started_at_ms": 1_000}),
         ),
     )
     .await;
@@ -1835,6 +1836,118 @@ async fn hs2_ztrf4q_live_tokens_sums_the_recorded_window() {
                     h.store_id
                 ))
                 .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(unauthenticated.status(), StatusCode::UNAUTHORIZED);
+}
+
+/// HS2-X0ZSZ8 E2E: a Claude session started outside any Hot Sheet terminal reports its
+/// subagents through the installed hooks. Each report moves the last progress of the store
+/// linked to the checkout containing the session's directory, so its live word reads Active
+/// while a background agent works, then Stopped after the grace once it goes quiet. A
+/// directory outside every checkout records nothing; a malformed or unauthenticated report
+/// is refused.
+#[tokio::test(flavor = "multi_thread")]
+async fn hs2_x0zsz8_external_claude_subagent_hooks_move_last_progress() {
+    let h = harness();
+    let project = h._dir.path().join("project-x");
+    std::fs::create_dir_all(project.join("src")).unwrap();
+    let path = h._dir.path().join("project-x.hs2");
+    let store = FsStore::init_git(&path, &StoreMetadata::new("PX")).unwrap();
+    let store_id = hotsheet_server::multistore::store_url_id(&store);
+    let state = h
+        .state
+        .clone()
+        .with_checkout_registry(h._dir.path().join("checkouts.json"));
+    let router = app(state.clone());
+    let (status, opened) = call(
+        &router,
+        "POST",
+        "/projects/open",
+        Some(json!({"root": project, "stores": [path]})),
+    )
+    .await;
+    assert!(status.is_success(), "{status} {opened}");
+    let mut events = state.subscribe();
+    let (_, before) = call(
+        &router,
+        "GET",
+        &format!("/stores/{store_id}/live-state"),
+        None,
+    )
+    .await;
+    assert_ne!(before["state"], "active", "nothing has happened yet");
+    let before_progress = before["activity"]["last_progress_ms"].as_i64();
+
+    let cwd = project.join("src").to_string_lossy().to_string();
+    let report = |event: &str| {
+        json!({"event": event, "session_id": "external-1", "cwd": cwd,
+               "agent_id": "agent-7", "agent_type": "general-purpose"})
+    };
+    let endpoint = "/ai-hooks/subagent-progress";
+    let (status, reply) = call(&router, "POST", endpoint, Some(report("start"))).await;
+    assert_eq!(status, StatusCode::OK, "{reply}");
+    assert_eq!(reply, json!({"recorded": true, "store": store_id}));
+    let started = next_live(&mut events, &store_id, |live| live["state"] == "active").await;
+    let first = started["activity"]["last_progress_ms"].as_i64().unwrap();
+    assert!(before_progress.is_none_or(|before| first > before));
+
+    // With no further report the store goes quiet after the grace (300 ms here).
+    next_live(&mut events, &store_id, |live| live["state"] == "stopped").await;
+
+    // A tool call of the background agent is a heartbeat; its stop is progress too.
+    for event in ["tool", "stop"] {
+        let (status, reply) = call(&router, "POST", endpoint, Some(report(event))).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(reply["recorded"], true);
+    }
+    let resumed = next_live(&mut events, &store_id, |live| live["state"] == "active").await;
+    assert!(resumed["activity"]["last_progress_ms"].as_i64().unwrap() >= first);
+
+    // A directory outside every registered checkout records nothing and stays quiet.
+    let outside = h
+        ._dir
+        .path()
+        .join("elsewhere")
+        .to_string_lossy()
+        .to_string();
+    let (status, reply) = call(
+        &router,
+        "POST",
+        endpoint,
+        Some(json!({"event": "start", "session_id": "external-2", "cwd": outside})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(reply, json!({"recorded": false, "store": null}));
+
+    // Malformed reports are refused before any store is touched.
+    for bad in [
+        json!({"event": "start", "session_id": "", "cwd": cwd}),
+        json!({"event": "start", "session_id": "s", "cwd": "relative/dir"}),
+        json!({"event": "start", "session_id": "s", "cwd": cwd, "agent_id": "x".repeat(200)}),
+    ] {
+        let (status, _) = call(&router, "POST", endpoint, Some(bad.clone())).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{bad}");
+    }
+    let (status, _) = call(
+        &router,
+        "POST",
+        endpoint,
+        Some(json!({"event": "finish", "session_id": "s", "cwd": cwd})),
+    )
+    .await;
+    assert!(status.is_client_error(), "unknown event: {status}");
+    let unauthenticated = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(endpoint)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(report("start").to_string()))
                 .unwrap(),
         )
         .await

@@ -500,18 +500,25 @@ pub(crate) enum CiCmd {
         #[arg(long)]
         finished_at_ms: Option<i64>,
     },
-    /// Forget the CI run stored for a checkout (HS2-7PSBHQ), such as one last reported
-    /// running long ago whose end nobody reported. Idempotent; prints whether a run was
-    /// cleared and the run still stored. The next report stores a run again.
+    /// Forget CI runs stored for a checkout (HS2-7PSBHQ): every run, or only the ones the
+    /// filters name (HS2-D3JJ49: one run is kept per branch and workflow). Idempotent;
+    /// prints whether a run was cleared and the runs still stored. The next report stores
+    /// a run again.
     Clear {
         /// A registered checkout id, alias, or root. Defaults to the checkout of the current
         /// directory that links the selected store.
         #[arg(long)]
         checkout: Option<String>,
-        /// Clear only while the stored run is the one reported at this time (its
-        /// `reported_at_ms`), so a newer report is kept.
+        /// Clear only a run reported at this time (its `reported_at_ms`), so a newer report
+        /// is kept.
         #[arg(long)]
         reported_at_ms: Option<i64>,
+        /// Clear only runs of this branch.
+        #[arg(long)]
+        branch: Option<String>,
+        /// Clear only runs of this workflow.
+        #[arg(long)]
+        workflow: Option<String>,
     },
 }
 
@@ -982,12 +989,26 @@ fn cmd_ci(store: &Path, cmd: CiCmd) -> Result<()> {
         CiCmd::Clear {
             checkout,
             reported_at_ms,
-        } => (
-            checkout,
-            "DELETE",
-            None,
-            reported_at_ms.map_or_else(String::new, |at| format!("?reported_at_ms={at}")),
-        ),
+            branch,
+            workflow,
+        } => {
+            // HS2-D3JJ49: the filters name one run among the checkout's runs.
+            let mut query: Vec<String> = Vec::new();
+            if let Some(at) = reported_at_ms {
+                query.push(format!("reported_at_ms={at}"));
+            }
+            for (name, value) in [("branch", branch), ("workflow", workflow)] {
+                if let Some(value) = value {
+                    query.push(format!("{name}={}", urlencoding_component(&value)));
+                }
+            }
+            let query = if query.is_empty() {
+                String::new()
+            } else {
+                format!("?{}", query.join("&"))
+            };
+            (checkout, "DELETE", None, query)
+        }
     };
     let checkout = match checkout {
         Some(checkout) => checkout,

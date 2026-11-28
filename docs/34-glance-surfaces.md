@@ -112,8 +112,8 @@ duration goes in the hover title and the accessible name, never on the face. For
 34 minutes" is the title of a May be stuck glyph, not visible text. Chips and rows appear only when they
 have something to say. The full-width callout for likely-critical conditions (§34.1) is one exception. The
 `main` CI chip is the other (HS2-505PHC): a bare spinner glyph read as an unexplained countdown, so its face
-names it in a word or two plus a clock while it runs (`CI · 1:05`, `CI · queued`, `CI failed`,
-`CI · unknown` for a stale report; §34.6). A
+names it in a word or two plus a clock while it runs (`CI · 1:05`, `CI · queued`, `CI failed`, or
+`Platforms · 3:10` beside other runs; §34.6). A
 Jobs sidebar chip that shows progress follows the same labelled-chip rule when it is built.
 
 ## 34.5 Standby (HS2-EQVZTZ, shipped)
@@ -204,36 +204,44 @@ the default) and `m1-project-sidebar-live-{light,dark}` (expanded).
   live state exists and never issues a request. The compact problem-state chip (May be stuck, Stalled,
   Halted) is a glyph whose title gives the state and the last-progress age of the stores that show that
   state, as do the expanded state row and the section's accessible name; a busier linked store never lends
-  its age to a stalled one (HS2-PPZQX9). The grid sidebar's group titles pair their word the same way. `main` CI (HS2-57BYEA) comes
-  from the newest run the project's stores reported in their live `ci` (HS2-M8HHEA,
-  [32](32-notifier-plugins.md) §32.8.5): the compact chip shows only while that run failed (danger), runs,
-  or waits to run (neutral), titled with the branch, word, and short sha; the expanded row names any
-  reported run (passed, failed, running, queued, cancelled) with its short sha and age. Glyphs match the
-  Stats tile (HS2-E16ZEK).
+  its age to a stalled one (HS2-PPZQX9). The grid sidebar's group titles pair their word the same way. CI (HS2-57BYEA) comes
+  from the shown runs the project's stores list in their live `ci_runs` (HS2-M8HHEA, HS2-D3JJ49,
+  [32](32-notifier-plugins.md) §32.8.5): a compact chip shows for each run that runs or waits to run
+  (neutral), and for the newest run while it failed (danger), each titled with the branch, workflow when
+  several differ, word, and short sha; the expanded section has one row per shown run (passed, failed,
+  running, queued, cancelled) with its short sha and age. Glyphs match the Stats tile (HS2-E16ZEK).
 - **Labelled CI chip (HS2-505PHC, shipped).** The compact CI chip keeps its status glyph as the Kerf
   `Badge` icon and adds text: `CI · 1:05` while the run runs, counted from the run's reported
   `started_at_ms` (`m:ss`, then `h:mm:ss` from an hour; a start ahead of this machine's clock reads
   `0:00`), `CI · running` before a start is reported, `CI · queued` while it waits, and `CI failed`. A
   running chip's title adds the elapsed time (`main CI running for 1:05 · 9f8e7d6`). The clock face moves
   each second from a second render-only display clock that runs only while the page and the project
-  sidebar show, the section is compact, and the selected project's newest run is running with a known
+  sidebar show, the section is compact, and one of its chips is running with a known
   start; it writes the same render clock and never issues a request. Queued and failed chips carry no
   clock.
-- **Stale CI report (HS2-CC7TCB, shipped).** A run reported running or queued more than 2 hours ago,
-  and never since, is not shown as running: the chip reads `CI · unknown` in the neutral tone with the
-  official Lucide `circle-help` glyph and no clock, titled
-  `main CI status unknown · last seen running 2h 05m ago · 8f6c8d8`; the expanded row reads
-  `main CI unknown` with `seen 2h 05m ago`, without the sha so it fits the sidebar; the Stats tile word is a
-  quiet `Unknown`, like `No CI reported`. The display clock stops at the bound. A GitHub Actions run is
-  normally followed to its end by the server first ([32](32-notifier-plugins.md) §32.8.5).
-- **Clear CI Status (HS2-7PSBHQ, shipped).** While the run shows as unknown, right-clicking the Live section
-  (or pressing the context-menu key on its focused toggle) opens a Kerf `PopupMenu` context menu, as for the
-  other sidebar entries, with one item, **Clear CI Status** (Lucide `eraser`). It asks the project's server to
-  forget that stored run (`DELETE /checkouts/{reference}/ci-status` with the run's `reported_at_ms`, so a
-  newer report is never cleared unseen); the pushed live state then removes the chip and row. Outside presses
-  and Escape close the menu. The Live section is one toggle button, so there is no nested overflow button;
-  other CI states offer no menu and keep the browser's own. A restarted server also re-checks such a run once
-  ([32](32-notifier-plugins.md) §32.8.5).
+- **Several CI runs (HS2-D3JJ49).** When several runs are in flight (several workflows, or several
+  checkouts or branches), each gets its own chip, the same Kerf `Badge`, and its own expanded row; nothing
+  is aggregated. A chip's face names what tells the runs apart: the workflow when their workflows differ
+  (`CI · 1:05`, `Platforms · 3:10`), the branch before `CI` when their branches differ (`docs CI · queued`),
+  each part cut at 16 characters with an ellipsis; one run reads `CI` as before. Beside other runs a row reads like its chip, without the branch or sha so it fits the narrow sidebar
+  (`Platforms running`); a single run reads `main CI running · 9f8e7d6` as before. The
+  server keeps the newest run per branch and workflow and lists at most 8.
+- **Unverifiable CI runs (HS2-D3JJ49, replacing HS2-CC7TCB's `CI · unknown`).** A run that cannot be
+  verified shows nothing: no chip, no row, and the Stats tile falls back to the newest run it can show or
+  No CI reported. That covers a run in flight that nothing follows once 2 hours pass after its report, a
+  run the provider no longer knows, and a restart's re-check that settled nothing
+  ([32](32-notifier-plugins.md) §32.8.5). A run whose provider is only unreachable for now (a network or
+  service error, a rate limit) keeps its chip with its last known face; its title ends
+  `provider unreachable, retrying`. The display clock stops once no chip ticks; it never issues a request.
+- **Clear CI Status (HS2-7PSBHQ, HS2-D3JJ49, shipped).** Right-clicking a CI chip or row opens a Kerf
+  `PopupMenu` context menu, as for the other sidebar entries, with **Clear CI Status** (Lucide `eraser`)
+  for that run. Right-clicking elsewhere on the Live section, or pressing the context-menu key on its
+  focused toggle, lists one item per shown run, each naming it (`Clear main Platforms Status`; a single run
+  reads `Clear CI Status`). An item asks the project's server to forget that stored run
+  (`DELETE /checkouts/{reference}/ci-status` with the run's `reported_at_ms`, `branch` and `workflow`, so
+  a newer report is never cleared unseen); the pushed live state then removes its chip and row and leaves
+  the others. Outside presses and Escape close the menu. The Live section is one toggle button, so there is
+  no nested overflow button; with no CI run shown the browser's own menu stays.
 - **Remote project tabs (HS2-4R99XY).** A cross-server tab shows the same gauges and chips, from the remote
   server's own live state. The browser's `remote:<binding>:<checkout>` id never equals the remote server's
   checkout id, and the remote server may host a store whose id the local server also uses, so each remote
@@ -311,8 +319,8 @@ A **Right now** section above the existing "Ticket flow and usage" on the Stats 
   state; a 30-second local display clock ages values only while Stats is shown and never requests.
   "Data as of" is when the client last applied a snapshot. Completed counts today's UTC calendar day
   from the analytics the page already loads, labelled with that midnight's local time. The `main` CI tile
-  (HS2-E16ZEK) renders the newest run any store in scope reported in its live `ci` (HS2-M8HHEA,
-  [32](32-notifier-plugins.md) §32.8.5): a status word and glyph (Passed, Failed, Running, Queued,
+  (HS2-E16ZEK) renders the newest shown run any store in scope lists (HS2-M8HHEA, HS2-D3JJ49,
+  [32](32-notifier-plugins.md) §32.8.5; a run that cannot be verified is skipped): a status word and glyph (Passed, Failed, Running, Queued,
   Cancelled), the branch and short sha, the age of `finished_at_ms` (or how long it has run or waited)
   from the local display clock, and a View run link when `run_url` is set. Only a failure tints it. With
   no reported run it says No CI reported. It makes no request. The Tokens 12h column draws

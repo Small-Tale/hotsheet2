@@ -3,6 +3,7 @@ import type {
   AiCommandRun,
   AiToolDefaults,
   AiToolDescriptor,
+  AnnouncerAiSettings,
   CalibrationReport,
   Checkout,
   CheckoutActivityEvent,
@@ -777,6 +778,12 @@ export const parseProviderDescriptor = shape<ProviderDescriptor>(
 /** `GET /tts/voices` (HS2-CEZVSE). */
 export const parseTtsVoices = shape<TtsVoice>('speech voice', { name: isString, lang: isString }).list;
 
+/** `GET`/`PUT /announcer/settings` (HS2-G3HJZH). */
+export const parseAnnouncerAiSettings = shape<AnnouncerAiSettings>('announcer settings', {
+  ai_importance: isBoolean,
+  ai_rewrite: isBoolean,
+});
+
 /** `PUT /checkouts/{reference}/sources/{connection_id}/ticket-prefix` (HS2-8QJ6W3). */
 export const parseTicketPrefix = shape<{ ticket_prefix: string }>('ticket prefix', { ticket_prefix: isString });
 
@@ -1095,17 +1102,25 @@ const liveRates = shape('live rates', {
 });
 // HS2-M8HHEA: main CI status reported by a linked checkout's CI watcher.
 const liveCiStatuses = new Set(['unavailable', 'queued', 'in_progress', 'success', 'failure', 'cancelled']);
-const liveCi = shape('live CI', {
-  status: (field) => typeof field === 'string' && liveCiStatuses.has(field),
-  checkout: isNullableString,
-  branch: isNullableString,
-  sha: isNullableString,
-  run_url: isNullableString,
-  workflow: isNullableString,
-  started_at_ms: isNullableNumber,
-  finished_at_ms: isNullableNumber,
-  reported_at_ms: isNullableNumber,
-});
+const liveCi = shape(
+  'live CI',
+  {
+    status: (field) => typeof field === 'string' && liveCiStatuses.has(field),
+    checkout: isNullableString,
+    branch: isNullableString,
+    sha: isNullableString,
+    run_url: isNullableString,
+    workflow: isNullableString,
+    started_at_ms: isNullableNumber,
+    finished_at_ms: isNullableNumber,
+    reported_at_ms: isNullableNumber,
+  },
+  // HS2-D3JJ49: an older server omits the verification members; a newer one sends them, null while unavailable.
+  {
+    verification: (field) => field === 'verified' || field === 'transient' || field === 'unverifiable',
+    verify_by_ms: isNumber,
+  },
+);
 export const parseLiveStoreState = shape<LiveStoreState>(
   'live state',
   {
@@ -1124,8 +1139,8 @@ export const parseLiveStoreState = shape<LiveStoreState>(
     rates: liveRates.check,
   },
   {},
-  // HS2-M8HHEA: an older server omits `ci`.
-  { ci: liveCi.check },
+  // HS2-M8HHEA: an older server omits `ci`; HS2-D3JJ49: and `ci_runs`.
+  { ci: liveCi.check, ci_runs: listOf(liveCi.check) },
 );
 export const parseLiveStateList = shape<LiveStateList>('live state list', {
   epoch_ms: isNumber,

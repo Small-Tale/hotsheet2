@@ -1,3 +1,4 @@
+import { ticketMilestone } from './announcer-milestone';
 import type { AnnouncerReelItem } from './announcer-reel';
 import { agentName, type AnnouncedStep, announcerStep, HEADLINE_CATEGORIES } from './announcer-speech';
 
@@ -51,6 +52,8 @@ export function announcerLevel(
   item: AnnouncerReelItem,
   step: AnnouncedStep = announcerStep(item.event),
 ): AnnouncerLevel {
+  // A ticket milestone is told on its own, never folded into routine steps (HS2-G3HJZH).
+  if (ticketMilestone(item.event)) return 'headline';
   if (item.event.importance === 'high') return 'headline';
   if (HEADLINE_CATEGORIES.has(step.category) || step.outcome === 'failed') return 'headline';
   // Inline code is a command or a name, not a report, so only the prose around it is read.
@@ -106,13 +109,28 @@ export function editAnnouncerReel(reel: readonly AnnouncerReelItem[], options: E
 const UNSPOKEN_KINDS: ReadonlySet<string> = new Set(['turn_start', 'turn_end']);
 
 /**
- * Whether live narration says an entry aloud (HS2-G3HJZH). Routine steps, folded or alone, and turn
- * boundaries are minutiae: they stay in the reel to read and step through, and Play still says them
- * on request, but live narration passes over them and says only headlines.
+ * Headlines shown but not said live (HS2-G3HJZH): ticket commands guessed from a tool's command line
+ * ("claimed a ticket") are said as the server's richer ticket milestones instead, and a build or an
+ * install that did not fail is footwork. A failure of any of them is still said.
+ */
+const UNSPOKEN_HEADLINES: ReadonlySet<string> = new Set(['ticket', 'build', 'install']);
+
+/**
+ * Whether live narration says an entry aloud (HS2-G3HJZH). A ticket milestone is said when the
+ * server's importance score selected it. Routine steps, folded or alone, turn boundaries, and the
+ * headlines above are minutiae: they stay in the reel to read and step through, and Play still says
+ * them on request, but live narration passes over them. Tests and checks, failures, commits and
+ * pushes, permissions, questions, and blocks are said.
  */
 export function announcerSpeaks(entry: Pick<AnnouncerEntry, 'level' | 'members'>): boolean {
+  const milestone = entry.members.length === 1 ? ticketMilestone(entry.members[0].event) : undefined;
+  if (milestone) return milestone.speak;
   if (entry.level !== 'headline') return false;
-  return !entry.members.every((member) => UNSPOKEN_KINDS.has(member.event.kind));
+  if (entry.members.every((member) => UNSPOKEN_KINDS.has(member.event.kind))) return false;
+  return !entry.members.every((member) => {
+    const step = announcerStep(member.event);
+    return UNSPOKEN_HEADLINES.has(step.category) && step.outcome !== 'failed' && member.event.importance !== 'high';
+  });
 }
 
 /** When the earliest open group settles, for a runtime timer; undefined when none is open. */

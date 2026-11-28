@@ -1,3 +1,4 @@
+import { ticketMilestone } from './announcer-milestone';
 import type { ActivityEvent } from './api';
 
 /**
@@ -90,6 +91,9 @@ type SpeakableEvent = Pick<ActivityEvent, 'tool' | 'kind' | 'summary' | 'detail'
  * keeps the tool's name.
  */
 export function announcerSpokenText(event: SpeakableEvent): string {
+  // A ticket milestone is said as the server worded it, already in the first person (HS2-G3HJZH).
+  const milestone = ticketMilestone(event);
+  if (milestone) return milestone.spoken;
   if (event.kind === 'command') {
     const step = announcerStep(event);
     return `I ${withOutcome(step)}.`;

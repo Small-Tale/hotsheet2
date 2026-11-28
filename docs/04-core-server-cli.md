@@ -469,7 +469,7 @@ hotsheet ticket-flow
 hotsheet live-state [--all]
 hotsheet live-history [--hours 12]
 hotsheet ci report --status success --branch main --sha <sha> --run-url <url> [--checkout <ref>]
-hotsheet ci clear [--checkout <ref>] [--reported-at-ms <ms>]
+hotsheet ci clear [--checkout <ref>] [--reported-at-ms <ms>] [--branch <name>] [--workflow <name>]
 hotsheet activity --ticket HS-7f3k9q --min-importance high --limit 20
 hotsheet notifications list --checkout web --recipient reviewer@example.com
 hotsheet notifications ack <notification-id>
@@ -482,10 +482,11 @@ no server: it reads the selected store's recorded state transitions (`metrics/lo
 and tickets, and prints the segments and completions of the last `--hours` (1–168), as
 `GET /live-history` serves them ([34](34-glance-surfaces.md) §34.8, HS2-9AN4DN). `ci report` posts a CI
 run a local tool observed to `POST /checkouts/{reference}/ci-status` for `--checkout` or the checkout of
-the current directory, and prints whether it applied; the server pushes it as the live state's `ci`
-([32](32-notifier-plugins.md) §32.8.5, HS2-M8HHEA). `ci clear` forgets the run stored for that checkout
-through `DELETE` on the same route, only the one reported at `--reported-at-ms` when given, and prints
-whether it cleared (HS2-7PSBHQ). Activity accepts `--session`;
+the current directory, and prints whether it applied; the server keeps one run per checkout, branch, and workflow and pushes the shown ones as the live
+state's `ci_runs` and `ci` ([32](32-notifier-plugins.md) §32.8.5, HS2-M8HHEA, HS2-D3JJ49). `ci clear`
+forgets runs stored for that checkout through `DELETE` on the same route: every run, or only those
+matching `--reported-at-ms`, `--branch`, and `--workflow` when given, and prints whether it cleared and
+the runs left (HS2-7PSBHQ, HS2-D3JJ49). Activity accepts `--session`;
 notifications can filter by `--checkout`, `--store`, `--ticket`, and `--recipient`.
 An absent server fails with a start-server instruction. The ticket-flow summary covers
 the selected `-C` store and activity uses that store's persisted rolling window: both read
@@ -580,7 +581,10 @@ adapter that cannot list voices returns an empty list; an unknown provider is 40
 failed listing 503, HS2-CEZVSE). On macOS the server supplies `macos-say`, passing
 narration through stdin and converting the temporary audio to WAV; the temporary files
 are removed after the response is built. Its voices come from `say -v '?'`, parsed by
-`tts::parse_say_voices`.
+`tts::parse_say_voices`. `GET`/`PUT /announcer/settings` read and write the machine-wide
+announcer milestone switches `{ai_importance, ai_rewrite}` (both default on; a `PUT` body may
+name either), which decide whether ticket milestones are scored and worded by the person's AI
+tool or by rules and templates (HS2-G3HJZH, `docs/15` §15.6.1).
 
 #### Route reference: runs, views, lifecycle, bridge probe, announce
 

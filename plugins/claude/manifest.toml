@@ -126,15 +126,20 @@ event = "PermissionRequest"
 # capacity") as a halted session on the Hot Sheet terminal; UserPromptSubmit and a successful
 # Stop clear it when work resumes or completes (HS2-HJ4D1H, HS2-6J79SA). SessionStart/SessionEnd report that the session in a Hot
 # Sheet terminal is connected to Hot Sheet (HS2-EV1XK3). Older Claude versions ignore unknown
-# hook events.
-additional_events = ["PreToolUse", "PostToolUse", "PostToolUseFailure", "StopFailure", "Stop", "UserPromptSubmit", "SessionStart", "SessionEnd"]
+# hook events. SubagentStart/SubagentStop report a session's subagents (including background
+# agents) as progress for the checkout's store, so a session started outside a Hot Sheet
+# terminal still reads Active while its agents work (HS2-X0ZSZ8). They only report and never
+# block: the adapter exits 0 without output.
+additional_events = ["PreToolUse", "PostToolUse", "PostToolUseFailure", "StopFailure", "Stop", "UserPromptSubmit", "SessionStart", "SessionEnd", "SubagentStart", "SubagentStop"]
 # Question-resolution events only need AskUserQuestion; permission and tool hooks
 # retain their existing matchers and decisions.
 # Empty matchers omit the matcher key for lifecycle/turn events. Claude 2.1.308
 # skips UserPromptSubmit and Stop hooks when they carry matcher = "*".
-event_matchers = { PostToolUse = "AskUserQuestion", PostToolUseFailure = "AskUserQuestion", StopFailure = "", Stop = "", UserPromptSubmit = "", SessionStart = "", SessionEnd = "" }
+event_matchers = { PostToolUse = "AskUserQuestion", PostToolUseFailure = "AskUserQuestion", StopFailure = "", Stop = "", UserPromptSubmit = "", SessionStart = "", SessionEnd = "", SubagentStart = "", SubagentStop = "" }
 command = "hotsheet-cli permission-hook --agent claude"
 timeout_seconds = 86430
+# The subagent progress reports are bounded, fire-and-forget posts (HS2-X0ZSZ8).
+event_timeout_seconds = { SubagentStart = 5, SubagentStop = 5 }
 
 [activity]
 # Claude's PreToolUse/UserPromptSubmit/Stop hook events + transcript map to activity events

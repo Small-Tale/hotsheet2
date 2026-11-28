@@ -1,6 +1,8 @@
 import type { PopupMenuEntry } from '@kerfjs/ui/popup-menu';
 import type { SafeHtml } from 'kerfjs/jsx-runtime';
 
+import type { AnnouncerAiSettings } from './api';
+
 /** The announcer's per-device narration settings (HS2-PRCC6V). */
 export interface AnnouncerSettings {
   /** `browser` (Web Speech) or a server provider id such as `macos-say`. */
@@ -88,6 +90,7 @@ export function announcerSettingsMenu({
   voice,
   rate,
   hasHistory,
+  ai,
   icons,
 }: {
   providers: readonly string[];
@@ -97,12 +100,22 @@ export function announcerSettingsMenu({
   voice: string;
   rate: number;
   hasHistory: boolean;
-  icons: { voice: SafeHtml; speed: SafeHtml; clear: SafeHtml };
+  /** The server's machine-wide milestone switches (HS2-G3HJZH); undefined until read or when unavailable. */
+  ai?: AnnouncerAiSettings;
+  icons: { voice: SafeHtml; speed: SafeHtml; milestones: SafeHtml; clear: SafeHtml };
 }): PopupMenuEntry[] {
   const choice = (setting: string, value: string, label: string, checked: boolean): PopupMenuEntry => ({
     label,
     checked,
     attributes: { 'data-announcer-setting': setting, 'data-announcer-value': value },
+  });
+  // A switch carries the value it changes to; unread switches are shown off and disabled.
+  const aiSwitch = (setting: string, label: string, on: boolean | undefined): PopupMenuEntry => ({
+    label,
+    checked: on === true,
+    disabled: on === undefined,
+    disabledReason: on === undefined ? 'Server settings are unavailable' : undefined,
+    attributes: { 'data-announcer-setting': setting, 'data-announcer-value': on ? 'off' : 'on' },
   });
   const engines = ['browser', ...providers.filter((id) => id !== 'browser')];
   return [
@@ -124,6 +137,15 @@ export function announcerSettingsMenu({
       submenu: ANNOUNCER_RATES.map((choiceRate) =>
         choice('rate', String(choiceRate), announcerRateLabel(choiceRate), choiceRate === rate),
       ),
+    },
+    {
+      // HS2-G3HJZH: ticket milestones are scored and worded by the person's AI tool unless turned off.
+      label: 'Milestones',
+      icon: icons.milestones,
+      submenu: [
+        aiSwitch('ai-importance', 'AI importance', ai?.ai_importance),
+        aiSwitch('ai-rewrite', 'AI wording', ai?.ai_rewrite),
+      ],
     },
     { kind: 'divider' },
     {

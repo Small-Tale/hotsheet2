@@ -3741,6 +3741,35 @@ fn is_hotsheet_hook(entry: &serde_json::Value) -> bool {
         })
 }
 
+/// The hook events `plugin` declares that its installed hook file in `project` lacks a Hot
+/// Sheet hook for (HS2-X0ZSZ8), so `doctor` can report a project set up before an event was
+/// added (for example Claude's `SubagentStart`/`SubagentStop`). `None` when the plugin has no
+/// hooks or the project has none of Hot Sheet's hooks for it, so a tool that was never set up
+/// is not reported. Read-only.
+#[must_use]
+pub fn missing_hook_events(project: &Path, plugin: &Plugin) -> Option<Vec<String>> {
+    let spec = plugin.manifest.hooks.as_ref()?;
+    let contents = std::fs::read_to_string(project.join(&spec.target)).ok()?;
+    let root: serde_json::Value = serde_json::from_str(&contents).ok()?;
+    let hooks = root.get("hooks")?.as_object()?;
+    let installed = |event: &str| {
+        hooks
+            .get(event)
+            .and_then(serde_json::Value::as_array)
+            .is_some_and(|entries| entries.iter().any(is_hotsheet_hook))
+    };
+    if !hooks.keys().any(|event| installed(event)) {
+        return None;
+    }
+    let mut missing: Vec<String> = Vec::new();
+    for event in std::iter::once(&spec.event).chain(&spec.additional_events) {
+        if !installed(event) && !missing.contains(event) {
+            missing.push(event.clone());
+        }
+    }
+    Some(missing)
+}
+
 /// Resolve a hook command's binary (its first token) to a stable CLI path when the local host
 /// runs a temporary snapshot. Otherwise use the absolute sibling next to the running binary
 /// (no PATH reliance, HS2-103), keeping the rest of the args.

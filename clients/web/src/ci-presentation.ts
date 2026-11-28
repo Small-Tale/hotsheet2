@@ -1,20 +1,11 @@
-import {
-  CircleCheck,
-  CircleDashed,
-  CircleHelp,
-  CircleSlash,
-  CircleX,
-  Clock,
-  type IconNode,
-  LoaderCircle,
-} from 'lucide';
+import { CircleCheck, CircleDashed, CircleSlash, CircleX, Clock, type IconNode, LoaderCircle } from 'lucide';
 
 import { type CiDisplayStatus, formatDuration, type RightNowCi } from './stats-right-now';
 
 /**
  * The `main` CI word and glyph per reported status, shared by the Stats Right now tile (HS2-E16ZEK)
- * and the project sidebar Live chip and row (HS2-57BYEA), in the circle family of the status badges.
- * `unknown` is a stale running or queued report (HS2-CC7TCB).
+ * and the project sidebar Live chips and rows (HS2-57BYEA), in the circle family of the status badges.
+ * A run that cannot be verified has no presentation: it is not shown (HS2-D3JJ49).
  */
 export const CI_PRESENTATION: Readonly<Record<CiDisplayStatus, { word: string; icon: IconNode; name: string }>> = {
   success: { word: 'Passed', icon: CircleCheck, name: 'circle-check' },
@@ -23,16 +14,11 @@ export const CI_PRESENTATION: Readonly<Record<CiDisplayStatus, { word: string; i
   queued: { word: 'Queued', icon: Clock, name: 'clock' },
   cancelled: { word: 'Cancelled', icon: CircleSlash, name: 'circle-slash' },
   unavailable: { word: 'No CI reported', icon: CircleDashed, name: 'circle-dashed' },
-  unknown: { word: 'Unknown', icon: CircleHelp, name: 'circle-help' },
 };
 
-/**
- * How long ago the run finished, or how long it has run or waited: "12m ago", "running 4m". A stale report
- * says when it was last seen and never counts on (HS2-CC7TCB): "last seen running 2h 05m ago".
- */
+/** How long ago the run finished, or how long it has run or waited: "12m ago", "running 4m". */
 export function ciAge(ci: RightNowCi): string | undefined {
   if (ci.ageMs === undefined) return undefined;
-  if (ci.status === 'unknown') return `last seen ${ci.lastSeen ?? 'running'} ${formatDuration(ci.ageMs)} ago`;
   if (ci.status === 'in_progress') return `running ${formatDuration(ci.ageMs)}`;
   if (ci.status === 'queued') return `waiting ${formatDuration(ci.ageMs)}`;
   return `${formatDuration(ci.ageMs)} ago`;
@@ -50,22 +36,56 @@ export function formatCiElapsed(ms: number): string {
   return `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, '0')}:${seconds}`;
 }
 
+/** The longest workflow or branch part of a chip's name before it is cut with an ellipsis. */
+const NAME_PART_MAX = 16;
+
+function namePart(text: string): string {
+  return text.length <= NAME_PART_MAX ? text : `${text.slice(0, NAME_PART_MAX - 1)}…`;
+}
+
 /**
- * The compact Live chip's face for a non-trivial `main` CI run (HS2-505PHC, docs/34-glance-surfaces.md
- * §34.4): `CI · 1:05` while it runs (`CI · running` before a start is reported), `CI · queued`,
- * `CI failed`, and `CI · unknown` for a stale running or queued report, which has no clock (HS2-CC7TCB);
- * `undefined` for a run the compact line does not show.
+ * What tells several shown runs apart (HS2-D3JJ49): the workflow when the runs' workflows differ, otherwise
+ * `CI`, after the branch when their branches differ. One run, or runs that differ in nothing, read `CI`.
  */
-export function ciChipText(ci: RightNowCi): string | undefined {
+export interface CiRunNaming {
+  workflows: boolean;
+  branches: boolean;
+}
+
+/** Which parts tell `runs` apart (HS2-D3JJ49). */
+export function ciRunNaming(runs: readonly RightNowCi[]): CiRunNaming {
+  const distinct = (part: (ci: RightNowCi) => string) => new Set(runs.map(part)).size > 1;
+  return {
+    workflows: distinct((ci) => ci.workflow ?? 'CI'),
+    branches: distinct((ci) => ci.branch),
+  };
+}
+
+/** A shown run's short name on its chip (HS2-D3JJ49): `CI`, `Platforms`, `docs CI`, or `docs Platforms`. */
+export function ciRunName(ci: RightNowCi, naming: CiRunNaming): string {
+  const workflow = naming.workflows ? namePart(ci.workflow ?? 'CI') : 'CI';
+  return naming.branches ? `${namePart(ci.branch)} ${workflow}` : workflow;
+}
+
+/** A run's full name in titles, rows and menus: `main CI`, or `main Platforms` when workflows differ. */
+export function ciRunLabel(ci: RightNowCi, naming: CiRunNaming): string {
+  return `${ci.branch} ${naming.workflows ? (ci.workflow ?? 'CI') : 'CI'}`;
+}
+
+/**
+ * The compact Live chip's face for a non-trivial CI run (HS2-505PHC, docs/34-glance-surfaces.md §34.4):
+ * `CI · 1:05` while it runs (`CI · running` before a start is reported), `CI · queued`, and `CI failed`;
+ * `undefined` for a run the compact line does not show. With several chips, `name` tells them apart
+ * (HS2-D3JJ49): `Platforms · 3:10`.
+ */
+export function ciChipText(ci: RightNowCi, name = 'CI'): string | undefined {
   switch (ci.status) {
     case 'in_progress':
-      return ci.ageMs === undefined ? 'CI · running' : `CI · ${formatCiElapsed(ci.ageMs)}`;
+      return ci.ageMs === undefined ? `${name} · running` : `${name} · ${formatCiElapsed(ci.ageMs)}`;
     case 'queued':
-      return 'CI · queued';
+      return `${name} · queued`;
     case 'failure':
-      return 'CI failed';
-    case 'unknown':
-      return 'CI · unknown';
+      return `${name} failed`;
     case 'success':
     case 'cancelled':
     case 'unavailable':
@@ -87,47 +107,85 @@ export function ciDetail(ci: RightNowCi): string {
 }
 
 /**
- * The project sidebar's expanded CI row (HS2-57BYEA): `main CI passed · 1a2b3c4` with `12m ago` trailing. A
- * stale report fits the narrow row as `main CI unknown` with `seen 2h 10m ago` (HS2-CC7TCB); its commit and
- * what it was last seen doing are in the compact chip's title.
+ * The project sidebar's expanded CI row (HS2-57BYEA): `main CI passed · 1a2b3c4` with `12m ago` trailing.
+ * With several runs whose workflows differ, each row names its workflow (HS2-D3JJ49): `main Platforms running`.
  */
-export function ciRow(ci: RightNowCi): { label: string; trailing: string } {
+export function ciRow(
+  ci: RightNowCi,
+  naming: CiRunNaming = { workflows: false, branches: false },
+): { label: string; trailing: string } {
+  const word = CI_PRESENTATION[ci.status].word.toLowerCase();
+  // HS2-D3JJ49: beside other runs the row reads like its chip (`Platforms running`), without the branch or
+  // sha, so the longer name still fits the sidebar's narrow row.
+  if (naming.workflows || naming.branches)
+    return { label: `${ciRunName(ci, naming)} ${word}`, trailing: ciAge(ci) ?? '' };
   const sha = ci.shortSha ? ` · ${ci.shortSha}` : '';
-  if (ci.status === 'unknown')
-    return {
-      label: `${ci.branch} CI unknown`,
-      trailing: ci.ageMs === undefined ? '' : `seen ${formatDuration(ci.ageMs)} ago`,
-    };
   return {
-    label: `${ci.branch} CI ${CI_PRESENTATION[ci.status].word.toLowerCase()}${sha}`,
+    label: `${ciRunLabel(ci, naming)} ${word}${sha}`,
     trailing: ciAge(ci) ?? '',
   };
 }
 
-/** The stored run Clear CI Status forgets (HS2-7PSBHQ): the reporting checkout and when it reported. */
+/** One stored run Clear CI Status forgets (HS2-7PSBHQ, HS2-D3JJ49): its checkout, report time, and pair. */
 export interface CiClearTarget {
   checkout: string;
   reportedAtMs: number;
+  branch?: string;
+  workflow?: string;
+  /** The run's name in the menu item, e.g. `main Platforms`. */
+  label: string;
 }
 
 /**
- * What Clear CI Status would clear (HS2-7PSBHQ, docs/34-glance-surfaces.md): only a run shown as unknown, a
- * report of a run still in flight that nothing ended (HS2-CC7TCB), and only when it names its checkout and
- * report time, so the server never clears a newer report than the one the user saw.
+ * What Clear CI Status would clear for a shown run (HS2-7PSBHQ, HS2-D3JJ49, docs/34-glance-surfaces.md): any
+ * shown run that names its checkout and report time, so the server never clears a newer report than the one
+ * the user saw. The branch and workflow name it among the checkout's runs.
  */
-export function ciClearTarget(ci: RightNowCi): CiClearTarget | undefined {
-  if (ci.status !== 'unknown' || ci.checkout === undefined || ci.reportedAtMs === undefined) return undefined;
-  return { checkout: ci.checkout, reportedAtMs: ci.reportedAtMs };
+export function ciClearTarget(ci: RightNowCi, naming: CiRunNaming): CiClearTarget | undefined {
+  if (ci.status === 'unavailable' || ci.checkout === undefined || ci.reportedAtMs === undefined) return undefined;
+  return {
+    checkout: ci.checkout,
+    reportedAtMs: ci.reportedAtMs,
+    ...(ci.reportedBranch === undefined ? {} : { branch: ci.reportedBranch }),
+    ...(ci.workflow === undefined ? {} : { workflow: ci.workflow }),
+    label: ciRunLabel(ci, naming),
+  };
+}
+
+/** The data attributes a chip, row or menu item carries for its clear target (HS2-D3JJ49). */
+export function ciClearAttributes(target: CiClearTarget): Record<string, string> {
+  return {
+    'data-ci-clear-checkout': target.checkout,
+    'data-ci-clear-reported-at-ms': String(target.reportedAtMs),
+    ...(target.branch === undefined ? {} : { 'data-ci-clear-branch': target.branch }),
+    ...(target.workflow === undefined ? {} : { 'data-ci-clear-workflow': target.workflow }),
+    'data-ci-clear-label': target.label,
+  };
 }
 
 /**
- * The clear target a Live section or its menu item carries in its data attributes (HS2-7PSBHQ), or
- * `undefined` when either is missing or the time is not a whole non-negative number.
+ * The clear target an element carries in its data attributes (HS2-7PSBHQ, HS2-D3JJ49), or `undefined` when
+ * the checkout or time is missing or the time is not a whole non-negative number.
  */
-export function ciClearTargetOf(
-  checkout: string | undefined,
-  reportedAtMs: string | undefined,
-): CiClearTarget | undefined {
+export function ciClearTargetOf(dataset: {
+  ciClearCheckout?: string;
+  ciClearReportedAtMs?: string;
+  ciClearBranch?: string;
+  ciClearWorkflow?: string;
+  ciClearLabel?: string;
+}): CiClearTarget | undefined {
+  const { ciClearCheckout: checkout, ciClearReportedAtMs: reportedAtMs } = dataset;
   if (!checkout || reportedAtMs === undefined || !/^\d+$/u.test(reportedAtMs)) return undefined;
-  return { checkout, reportedAtMs: Number(reportedAtMs) };
+  return {
+    checkout,
+    reportedAtMs: Number(reportedAtMs),
+    ...(dataset.ciClearBranch === undefined ? {} : { branch: dataset.ciClearBranch }),
+    ...(dataset.ciClearWorkflow === undefined ? {} : { workflow: dataset.ciClearWorkflow }),
+    label: dataset.ciClearLabel || 'CI',
+  };
+}
+
+/** The menu item's label: `Clear CI Status`, naming the run when the menu lists several (HS2-D3JJ49). */
+export function ciClearItemLabel(target: CiClearTarget, several: boolean): string {
+  return several ? `Clear ${target.label} Status` : 'Clear CI Status';
 }

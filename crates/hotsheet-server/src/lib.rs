@@ -7,6 +7,7 @@
 
 mod activity_capture;
 mod ai_tool_discovery;
+pub mod announcer_milestones;
 mod api_error;
 pub mod auto_group;
 mod blocking_offload;
@@ -370,6 +371,9 @@ pub struct AppState {
     /// Recently indexed server writes, used to distinguish their filesystem echo from
     /// an external edit that happens to match the current index hash.
     local_write_hashes: LocalWriteHashes,
+    /// External already-indexed writes announced recently, so repeated file events for one
+    /// write announce it once (HS2-G3HJZH).
+    external_announcements: ExternalAnnouncements,
     /// Tickets whose index write failed (HS2-JD7TK0), keyed by store URL id. Shared with
     /// each store watcher, which retries them on a bounded backoff (HS2-5BAEX9); the
     /// store's next server write also retries them first.
@@ -522,6 +526,10 @@ pub struct AppState {
 
 type LocalWriteKey = (String, String, String);
 type LocalWriteHashes = Arc<Mutex<std::collections::HashMap<LocalWriteKey, std::time::Instant>>>;
+/// `(store id, ticket id)` → the content hash last announced for an external write the CLI had
+/// already indexed, and when (HS2-G3HJZH). One write's several file events announce once.
+type ExternalAnnouncements =
+    Arc<Mutex<std::collections::HashMap<(String, String), (String, std::time::Instant)>>>;
 
 #[derive(Default)]
 struct LifecycleControl {
@@ -703,6 +711,7 @@ impl AppState {
             writer_locks: Arc::default(),
             sync_kick: Arc::new(Mutex::new(None)),
             local_write_hashes: Default::default(),
+            external_announcements: Default::default(),
             index_repairs: Default::default(),
             worklist_refresher: Default::default(),
             permissions,
@@ -2947,6 +2956,11 @@ pub fn app(state: AppState) -> Router {
             "/terminals/{id}/claude-activity",
             post(report_claude_activity),
         )
+        // Claude subagent hooks from any session count as live progress (HS2-X0ZSZ8).
+        .route(
+            "/ai-hooks/subagent-progress",
+            post(routes::subagent_progress::report_subagent_progress),
+        )
         // Live hotsheet-mcp presence leases (HS2-HNXE38).
         .route(
             "/mcp-presence",
@@ -2963,6 +2977,12 @@ pub fn app(state: AppState) -> Router {
         // Ephemeral store-level announcement broadcast over the WS bus (HS2-HHDNTH) — not
         // persisted, live subscribers only.
         .route("/announce", post(post_announce))
+        // HS2-G3HJZH: the machine-wide AI importance and wording switches for milestones.
+        .route(
+            "/announcer/settings",
+            get(announcer_milestones::get_announcer_settings)
+                .put(announcer_milestones::put_announcer_settings),
+        )
         // The server host's health and its machine-wide thresholds (HS2-DTAVQA). Crossings
         // push as `host_health` change events; clients re-read this on each one.
         .route("/host-health", get(host_health::routes::get_host_health))

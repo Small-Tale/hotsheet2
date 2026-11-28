@@ -27427,10 +27427,10 @@ test('uses the exact seven-day completion chart beyond retained rows and opens p
   ).toBeVisible();
 });
 
-// HS2-CC7TCB: a run reported running over 2 h ago, and never again, is not shown as running: the Right now CI
-// tile says the status is unknown and when the run was last seen, untinted. Captured wide and narrow, light and
-// dark.
-test('Stats Right now shows a stale running CI report as unknown (HS2-CC7TCB)', async ({ page }) => {
+// HS2-D3JJ49 (replacing HS2-CC7TCB's Unknown): a run reported running over 2 h ago, and never again, cannot be
+// verified, so the Right now CI tile skips it and shows the newest run it can show: here an earlier passed run,
+// which the newer server lists in `ci_runs`. Captured wide and narrow, light and dark.
+test('Stats Right now skips a CI run that can no longer be verified (HS2-D3JJ49)', async ({ page }) => {
   test.setTimeout(120_000);
   await mockProject(page);
   const now = Date.now();
@@ -27449,7 +27449,37 @@ test('Stats Right now shows a stale running CI report as unknown (HS2-CC7TCB)', 
             started_at_ms: now - 165 * 60_000,
             finished_at_ms: null,
             reported_at_ms: now - 159 * 60_000,
+            verification: 'verified',
+            verify_by_ms: now - 39 * 60_000,
           },
+          ci_runs: [
+            {
+              status: 'in_progress',
+              checkout: project.id,
+              branch: 'main',
+              sha: '8f6c8d81f0a1',
+              run_url: 'https://ci.example.test/runs/2983',
+              workflow: 'CI',
+              started_at_ms: now - 165 * 60_000,
+              finished_at_ms: null,
+              reported_at_ms: now - 159 * 60_000,
+              verification: 'verified',
+              verify_by_ms: now - 39 * 60_000,
+            },
+            {
+              status: 'success',
+              checkout: project.id,
+              branch: 'main',
+              sha: '1a2b3c4d5e6f',
+              run_url: 'https://ci.example.test/runs/2970',
+              workflow: 'Platforms',
+              started_at_ms: now - 200 * 60_000,
+              finished_at_ms: now - 180 * 60_000,
+              reported_at_ms: now - 180 * 60_000,
+              verification: 'verified',
+              verify_by_ms: null,
+            },
+          ],
         }
       : {}),
   }));
@@ -27463,11 +27493,12 @@ test('Stats Right now shows a stale running CI report as unknown (HS2-CC7TCB)', 
     .getByRole('region', { name: 'Cross-Project Stats' })
     .locator('[data-component="stats-right-now"]');
   const ciTile = rightNow.locator('[data-tile="ci"]');
-  await expect(ciTile).toHaveAttribute('data-ci-status', 'unknown');
+  await expect(ciTile).toHaveAttribute('data-ci-status', 'success');
   await expect(ciTile).toHaveAttribute('data-attention', 'false');
-  await expect(ciTile).toContainText('Unknown');
-  await expect(ciTile).toContainText(/main CI · 8f6c8d8 · last seen running 2h 39m ago/u);
-  await expect(ciTile.locator('[data-lucide="circle-help"]')).toBeVisible();
+  await expect(ciTile).toContainText('Passed');
+  await expect(ciTile).toContainText(/main CI · 1a2b3c4 · 3h 00m ago/u);
+  await expect(ciTile).not.toContainText('Unknown');
+  await expect(ciTile).not.toContainText('8f6c8d8');
   await page.mouse.move(1, 1);
   for (const scheme of ['light', 'dark'] as const) {
     await page.emulateMedia({ colorScheme: scheme });
@@ -27479,7 +27510,7 @@ test('Stats Right now shows a stale running CI report as unknown (HS2-CC7TCB)', 
       await page.setViewportSize({ width, height: 900 });
       await expect(ciTile).toBeVisible();
       expect(await ciTile.evaluate((node) => node.scrollWidth - node.clientWidth)).toBeLessThanOrEqual(1);
-      await ciTile.screenshot({ path: `target/visual-captures/hs2-cc7tcb-stats-ci-tile-${scheme}-${label}.png` });
+      await ciTile.screenshot({ path: `target/visual-captures/hs2-d3jj49-stats-ci-tile-${scheme}-${label}.png` });
     }
   }
 });
