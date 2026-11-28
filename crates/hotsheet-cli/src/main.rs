@@ -715,6 +715,24 @@ enum Cmd {
         #[command(subcommand)]
         cmd: dispatch::groups::GroupCmd,
     },
+    /// List the project's milestones (HS2-9PYNCN, docs/38): open and conflicted ones, with
+    /// `--all` closed ones too. Milestones live in the code checkout's registry
+    /// (`.hotsheet2/milestones/`), so run this inside a checkout linked to the store.
+    Milestones {
+        /// Print `{"registry":…,"milestones":[{"id","title","description","due_on","state",
+        /// "closed_reason","closed_at","duplicate","conflict"}],"registry_sync":…}`.
+        #[arg(long)]
+        json: bool,
+        /// Also list closed milestones.
+        #[arg(long)]
+        all: bool,
+    },
+    /// Create, show, edit, close, or reopen a milestone in the project's registry
+    /// (HS2-9PYNCN, docs/38 §38.6). Each change is committed in the checkout.
+    Milestone {
+        #[command(subcommand)]
+        cmd: dispatch::milestones::MilestoneCmd,
+    },
     /// Sync the store with its git remote now: fetch, integrate incoming changes through
     /// the semantic merge driver (rebase), and push local commits. Normally automatic — this
     /// is the explicit "sync now" (docs/02 §2.12). Every cycle records the store's durable
@@ -1236,6 +1254,8 @@ fn writes_tickets(cmd: &Cmd) -> bool {
                 | Cmd::Note { .. }
                 | Cmd::Read { .. }
                 | Cmd::Groups { .. }
+                | Cmd::Milestones { .. }
+                | Cmd::Milestone { .. }
                 | Cmd::People { .. }
                 | Cmd::ConfidenceReport { .. }
                 | Cmd::PhaseReport { .. }

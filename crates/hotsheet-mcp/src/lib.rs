@@ -186,6 +186,20 @@ fn base_tools_list() -> Value {
             } }
         },
         {
+            "name": "hotsheet_milestones",
+            "description": "Project milestones (docs/38): the registry under the code checkout holds each milestone's title, optional Markdown description, optional due date (YYYY-MM-DD), and open or closed state; every write is committed in the checkout. Needs a checkout (the launched one, or `checkout`); without one it fails with milestone_registry_required. A milestone is named by its id or its title (case and spacing do not matter; a duplicated title needs the id). action=list returns {registry,milestones:[{id,title,description,due_on,state,closed_reason,closed_at,duplicate,conflict}],registry_sync} with open and conflicted milestones (all=true adds closed ones); action=show returns one milestone; action=create makes an open milestone from `title` (+ optional `description`, `due_on`) and returns {milestone,changed}; action=edit changes `title`, `description` or `due_on` (null clears the last two) and returns {milestone,changed}; action=close closes it with `reason` completed (default) or not_planned; action=reopen reopens it. Repeating a write changes and commits nothing (changed=false). Refusal codes: milestone_title_taken, milestone_not_found, milestone_ambiguous, invalid_milestone_title, invalid_due_on, invalid_milestone_close_reason, milestone_registry_conflict (the file holds Git conflict markers or does not parse; resolve it with Git), milestone_registry_required.",
+            "inputSchema": { "type": "object", "properties": {
+                "action": { "type": "string", "enum": ["list", "show", "create", "edit", "close", "reopen"], "description": "defaults to list" },
+                "milestone": str_prop("show/edit/close/reopen: the milestone's id or title"),
+                "title": str_prop("create: the title; edit: the new title (one line, at most 120 characters)"),
+                "description": { "type": ["string", "null"], "description": "create/edit: Markdown description; null (edit) clears it" },
+                "due_on": { "type": ["string", "null"], "description": "create/edit: due date YYYY-MM-DD; null (edit) clears it" },
+                "reason": { "type": "string", "enum": ["completed", "not_planned"], "description": "close: why (default completed)" },
+                "all": { "type": "boolean", "description": "list: also list closed milestones" },
+                "checkout": str_prop("optional checkout id/alias/path whose registry to use; defaults to the launched checkout")
+            } }
+        },
+        {
             "name": "hotsheet_query",
             "description": "List/filter tickets (status, priority, category, tags, text, up_next, open, close_reason, closed, group, has_group, sort). Returns compact rows (no Markdown body) by default — pass compact=false for bodies, or use hotsheet_get for one ticket. Complete unpaged checkout results are arrays; partial or truncated results are {items, partial, truncated, warnings}. Use limit to cap results. Every query returns at most 500 rows: an uncapped query matching more fails, so pass limit (at most 500) and page — store queries with page_after, checkout queries with page_size + cursor (served with or without a running server).",
             "inputSchema": { "type": "object", "properties": {
@@ -680,6 +694,7 @@ const MUTATING_TOOLS: &[&str] = &[
     "hotsheet_report_not_working",
     "hotsheet_batch",
     "hotsheet_groups",
+    "hotsheet_milestones",
     "hotsheet_announce",
     "hotsheet_claim",
     "hotsheet_advisory_claim_event",
@@ -1053,6 +1068,7 @@ fn dispatch_tool(name: &str, args: &Value, backend: &dyn Backend) -> Result<Valu
         }
         "hotsheet_batch" => batch_update(args, backend),
         "hotsheet_groups" => groups_tool(args, backend),
+        "hotsheet_milestones" => milestones_tool(args, backend),
         "hotsheet_announce" => backend.send("POST", "/announce", args).map_err(be_msg),
         "hotsheet_checkouts" => backend.get("/checkouts", &[]).map_err(be_msg),
         "hotsheet_resolve_checkout" => backend
@@ -1542,6 +1558,63 @@ fn groups_tool(args: &Value, backend: &dyn Backend) -> Result<Value, String> {
     backend
         .send("POST", &checkout_route(args, suffix), &Value::Object(body))
         .map_err(be_msg)
+}
+
+/// `hotsheet_milestones` (HS2-9PYNCN, docs/38 §38.6): list, show, create, edit, close, or
+/// reopen milestones through the checkout-scoped routes the server and the serverless backend
+/// both serve. Milestones live in a checkout's registry, so a call without one is refused.
+fn milestones_tool(args: &Value, backend: &dyn Backend) -> Result<Value, String> {
+    let action = args.get("action").and_then(Value::as_str).unwrap_or("list");
+    let Some(checkout) = args
+        .get("checkout")
+        .and_then(Value::as_str)
+        .filter(|checkout| !checkout.is_empty())
+    else {
+        return Err(hotsheet_ticketing::milestones::MilestoneError::RegistryRequired.to_string());
+    };
+    let base = format!(
+        "/checkouts/{}/milestones",
+        encode_checkout_reference(checkout)
+    );
+    let one = || {
+        arg_str(args, "milestone")
+            .map(|milestone| format!("{base}/{}", encode_checkout_reference(&milestone)))
+    };
+    // Copy the given fields; `null` stays null so an edit can clear a field.
+    let body = |fields: &[&str]| {
+        let mut body = serde_json::Map::new();
+        for field in fields {
+            if let Some(value) = args.get(*field) {
+                body.insert((*field).into(), value.clone());
+            }
+        }
+        Value::Object(body)
+    };
+    let result = match action {
+        "list" => {
+            let all = args.get("all").and_then(Value::as_bool).unwrap_or(false);
+            let query = if all {
+                vec![("all".to_string(), "true".to_string())]
+            } else {
+                Vec::new()
+            };
+            backend.get(&base, &query)
+        }
+        "show" => backend.get(&one()?, &[]),
+        "create" => {
+            arg_str(args, "title")?;
+            backend.send("POST", &base, &body(&["title", "description", "due_on"]))
+        }
+        "edit" => backend.send("PATCH", &one()?, &body(&["title", "description", "due_on"])),
+        "close" => backend.send("POST", &format!("{}/close", one()?), &body(&["reason"])),
+        "reopen" => backend.send("POST", &format!("{}/reopen", one()?), &body(&[])),
+        other => {
+            return Err(format!(
+                "unknown action '{other}' (list, show, create, edit, close, or reopen)"
+            ));
+        }
+    };
+    result.map_err(be_msg)
 }
 
 fn checkout_route(args: &Value, suffix: &str) -> String {
@@ -2062,6 +2135,120 @@ mod core_backend {
                 return Ok(Some((vec![self.store.clone()], None, rest)));
             }
             Ok(None)
+        }
+
+        /// The milestone routes (HS2-9PYNCN), served from the checkout's registry exactly as
+        /// the server's `routes::milestones` does: `GET|POST /checkouts/{reference}/milestones`,
+        /// `GET|PATCH …/milestones/{milestone}`, and `POST …/{milestone}/close|reopen`. `None`
+        /// when `path` is not a milestone route.
+        fn milestones_request(
+            &self,
+            method: &str,
+            path: &str,
+            query: &[(String, String)],
+            body: &Value,
+        ) -> Option<Result<Value, BackendError>> {
+            use hotsheet_ticketing::milestones::{
+                self as ms, CloseReason, MilestoneEdit, MilestoneRegistry, MilestoneWrite,
+            };
+            let (reference, rest) = path
+                .strip_prefix("/checkouts/")?
+                .split_once("/milestones")?;
+            let rest = rest.strip_prefix('/').unwrap_or(rest);
+            let mut parts = rest.split('/').filter(|part| !part.is_empty());
+            let (milestone, verb) = (parts.next(), parts.next());
+            if parts.next().is_some() || !matches!(verb, None | Some("close" | "reopen")) {
+                return None;
+            }
+            Some((|| {
+                let reference = decode_checkout_reference(reference)?;
+                let checkout = self
+                    .checkout_registry
+                    .resolve(&reference)
+                    .map_err(checkout_err)?;
+                let registry = MilestoneRegistry::for_checkout(Path::new(&checkout.root));
+                let write = |write: MilestoneWrite| Ok(to_value(&write));
+                let resolve = |milestone: &str| -> Result<String, BackendError> {
+                    let milestone = decode_checkout_reference(milestone)?;
+                    Ok(registry.resolve(&milestone).map_err(milestone_err)?.id)
+                };
+                if method != "GET" {
+                    body_actor(body)?;
+                }
+                let text = |key: &str| -> Result<Option<String>, BackendError> {
+                    match body.get(key) {
+                        None | Some(Value::Null) => Ok(None),
+                        Some(Value::String(text)) => Ok(Some(text.clone())),
+                        Some(_) => Err(bad_request(format!("{key} must be a string"))),
+                    }
+                };
+                let patch = |key: &str| -> Result<Option<Option<String>>, BackendError> {
+                    match body.get(key) {
+                        None => Ok(None),
+                        Some(Value::Null) => Ok(Some(None)),
+                        Some(Value::String(text)) => Ok(Some(Some(text.clone()))),
+                        Some(_) => Err(bad_request(format!("{key} must be a string or null"))),
+                    }
+                };
+                match (method, milestone, verb) {
+                    ("GET", None, None) => {
+                        let all = query
+                            .iter()
+                            .any(|(key, value)| key == "all" && value == "true");
+                        ms::listing(Some(&registry), all)
+                            .map(|listing| to_value(&listing))
+                            .map_err(milestone_err)
+                    }
+                    ("POST", None, None) => {
+                        let title =
+                            text("title")?.ok_or_else(|| bad_request("title is required"))?;
+                        let milestone = registry
+                            .create(
+                                &title,
+                                text("description")?.as_deref(),
+                                text("due_on")?.as_deref(),
+                            )
+                            .map_err(milestone_err)?;
+                        write(MilestoneWrite {
+                            milestone,
+                            changed: true,
+                        })
+                    }
+                    ("GET", Some(milestone), None) => {
+                        let milestone = decode_checkout_reference(milestone)?;
+                        registry
+                            .resolve(&milestone)
+                            .map(|milestone| to_value(&milestone))
+                            .map_err(milestone_err)
+                    }
+                    ("PATCH", Some(milestone), None) => {
+                        let edit = MilestoneEdit {
+                            title: text("title")?,
+                            description: patch("description")?,
+                            due_on: patch("due_on")?,
+                        };
+                        let id = resolve(milestone)?;
+                        write(registry.edit(&id, &edit).map_err(milestone_err)?)
+                    }
+                    ("POST", Some(milestone), Some("close")) => {
+                        let reason = text("reason")?
+                            .map(|reason| CloseReason::parse(&reason))
+                            .transpose()
+                            .map_err(milestone_err)?
+                            .unwrap_or_default();
+                        let id = resolve(milestone)?;
+                        write(registry.close(&id, reason).map_err(milestone_err)?)
+                    }
+                    ("POST", Some(milestone), Some("reopen")) => {
+                        let id = resolve(milestone)?;
+                        write(registry.reopen(&id).map_err(milestone_err)?)
+                    }
+                    _ => Err(BackendError {
+                        status: Some(405),
+                        message: format!("{method} is not supported on {path}"),
+                    }),
+                }
+            })())
         }
 
         /// The launched checkout's group registry, when this backend serves a project.
@@ -2589,6 +2776,10 @@ mod core_backend {
                     .map(|v| to_value(&v))
                     .map_err(checkout_err);
             }
+            // Milestones (HS2-9PYNCN): the server's checkout-scoped milestone routes.
+            if let Some(answer) = self.milestones_request("GET", path, query, &Value::Null) {
+                return answer;
+            }
             // Ticket groups (HS2-PDSHNN, HS2-9KZSD4): the server's `GET …/groups` shape.
             if let Some((stores, registry, "")) = self.group_scope(path)? {
                 let directory = group_directory(&stores)?;
@@ -3011,6 +3202,9 @@ mod core_backend {
                     status: Some(409),
                     message: "external advisory claims require a running Hot Sheet server in serverless MCP mode".into(),
                 });
+            }
+            if let Some(answer) = self.milestones_request(method, path, &[], body) {
+                return answer;
             }
             // Ticket groups (HS2-8CDFKR, HS2-9KZSD4): the server's create, rename,
             // ungroup, merge, and migrate routes, through the same workflows.
@@ -4564,6 +4758,26 @@ mod core_backend {
 
     /// The server's group error statuses: 400 invalid name, a name without a registry,
     /// or a bad merge; 404 unknown; 409 taken or ambiguous.
+    /// A milestone refusal with the server's status; the message names its code.
+    fn milestone_err(error: hotsheet_ticketing::milestones::MilestoneError) -> BackendError {
+        use hotsheet_ticketing::milestones::MilestoneError;
+        let status = match &error {
+            MilestoneError::Io { .. } => 500,
+            MilestoneError::InvalidTitle(_)
+            | MilestoneError::InvalidDueOn(_)
+            | MilestoneError::InvalidCloseReason(_)
+            | MilestoneError::RegistryRequired => 400,
+            MilestoneError::NotFound(_) => 404,
+            MilestoneError::Ambiguous(_)
+            | MilestoneError::TitleTaken { .. }
+            | MilestoneError::Conflict { .. } => 409,
+        };
+        BackendError {
+            status: Some(status),
+            message: error.to_string(),
+        }
+    }
+
     fn group_err(error: hotsheet_ticketing::groups::GroupError) -> BackendError {
         use hotsheet_ticketing::groups::{GroupError, GroupRegistryError};
         let status = match &error {

@@ -19647,6 +19647,268 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+  /checkouts/{reference}/milestones:
+    parameters: *a3
+    get:
+      operationId: list_checkout_milestones
+      description:
+        "The project's milestones from the checkout's milestone registry (HS2-9PYNCN, docs/38 §38.2): open and
+        conflicted milestones in due-date order (undated last), with `all=true` closed ones too, and the registry's
+        publication status."
+      parameters:
+        - name: all
+          in: query
+          description: Also list closed milestones.
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MilestoneListing'
+        '404':
+          description: Unknown checkout.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    post:
+      operationId: create_checkout_milestone
+      description:
+        "Create an open milestone in the checkout's registry (HS2-9PYNCN). The file is committed in the checkout and one
+        `milestones_changed` event is announced."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMilestone'
+      responses:
+        '201':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MilestoneWrite'
+        '400':
+          description: '`invalid_milestone_title` or `invalid_due_on`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: Unknown checkout.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: '`milestone_title_taken`: another milestone has the title, ignoring case and spacing.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /checkouts/{reference}/milestones/{milestone}:
+    parameters:
+      - $ref: '#/components/parameters/CheckoutReference'
+      - name: milestone
+        in: path
+        required: true
+        description: The milestone's id, or its title (case and spacing do not matter; a duplicated title needs the id).
+        schema:
+          type: string
+    get:
+      operationId: get_checkout_milestone
+      description: One milestone of the checkout's registry (HS2-9PYNCN).
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Milestone'
+        '404':
+          description: '`milestone_not_found`: no milestone has that id or title; or the checkout is unknown.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description:
+            "`milestone_ambiguous`: several milestones have that title; `milestone_title_taken`: the new title is
+            another milestone's; `milestone_registry_conflict`: the milestone's file holds Git conflict markers or does
+            not parse."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    patch:
+      operationId: edit_checkout_milestone
+      description:
+        "Change a milestone's title, description, or due date (HS2-9PYNCN); `null` clears the description or due date. A
+        change to nothing returns `changed: false`, writes nothing, and announces nothing."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EditMilestone'
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MilestoneWrite'
+        '400':
+          description: '`invalid_milestone_title` or `invalid_due_on`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: '`milestone_not_found`: no milestone has that id or title; or the checkout is unknown.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description:
+            "`milestone_ambiguous`: several milestones have that title; `milestone_title_taken`: the new title is
+            another milestone's; `milestone_registry_conflict`: the milestone's file holds Git conflict markers or does
+            not parse."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /checkouts/{reference}/milestones/{milestone}/close:
+    parameters:
+      - $ref: '#/components/parameters/CheckoutReference'
+      - name: milestone
+        in: path
+        required: true
+        description: The milestone's id, or its title (case and spacing do not matter; a duplicated title needs the id).
+        schema:
+          type: string
+    post:
+      operationId: close_checkout_milestone
+      description:
+        'Close a milestone as `completed` (the default) or `not_planned`, recording `closed_at` (HS2-9PYNCN). Its
+        tickets are not changed. Closing for the reason it already has changes nothing. The body is optional.'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CloseMilestone'
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MilestoneWrite'
+        '400':
+          description: '`invalid_milestone_close_reason`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: '`milestone_not_found`: no milestone has that id or title; or the checkout is unknown.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description:
+            "`milestone_ambiguous`: several milestones have that title; `milestone_title_taken`: the new title is
+            another milestone's; `milestone_registry_conflict`: the milestone's file holds Git conflict markers or does
+            not parse."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /checkouts/{reference}/milestones/{milestone}/reopen:
+    parameters:
+      - $ref: '#/components/parameters/CheckoutReference'
+      - name: milestone
+        in: path
+        required: true
+        description: The milestone's id, or its title (case and spacing do not matter; a duplicated title needs the id).
+        schema:
+          type: string
+    post:
+      operationId: reopen_checkout_milestone
+      description:
+        'Reopen a closed milestone, removing `closed_reason` and `closed_at` (HS2-9PYNCN). Reopening an open milestone
+        changes nothing. The body is optional.'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReopenMilestone'
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MilestoneWrite'
+        '404':
+          description: '`milestone_not_found`: no milestone has that id or title; or the checkout is unknown.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description:
+            "`milestone_ambiguous`: several milestones have that title; `milestone_title_taken`: the new title is
+            another milestone's; `milestone_registry_conflict`: the milestone's file holds Git conflict markers or does
+            not parse."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /resource-claims/{namespace}:
     parameters:
       - &a5
@@ -39390,6 +39652,167 @@ components:
           description:
             Suppressed by quiet hours or the hourly limit, and reported by a later notifications.held summary
             (HS2-CFMSP2).
+      additionalProperties: false
+    Milestone:
+      type: object
+      description: One milestone of a project's registry (HS2-9PYNCN, docs/38 §38.2).
+      required:
+        - id
+        - title
+        - state
+        - duplicate
+      properties:
+        id:
+          type: string
+          pattern: '^[0-9A-HJKMNP-TV-Z]{10}$'
+        title:
+          type: string
+          description: The stored title, or the placeholder `Milestone <id>` while the file is conflicted.
+        description:
+          type: string
+          description: Markdown; absent when empty.
+        due_on:
+          type: string
+          description: YYYY-MM-DD.
+        state:
+          type: string
+          enum:
+            - open
+            - closed
+            - conflicted
+        closed_reason:
+          type: string
+          enum:
+            - completed
+            - not_planned
+          description: Present only while closed.
+        closed_at:
+          type: string
+          description: RFC 3339 UTC; present only while closed.
+        duplicate:
+          type: boolean
+          description: Another milestone has the same title, ignoring case and spacing.
+        conflict:
+          type: object
+          description: Present only while conflicted.
+          required:
+            - file
+            - detail
+          properties:
+            file:
+              type: string
+              description: The milestone's file, relative to the checkout root.
+            detail:
+              type: string
+          additionalProperties: false
+      additionalProperties: false
+    MilestoneListing:
+      type: object
+      required:
+        - registry
+        - milestones
+      properties:
+        registry:
+          type: boolean
+          description: Whether a project milestone registry was read.
+        milestones:
+          type: array
+          items:
+            $ref: '#/components/schemas/Milestone'
+        registry_sync:
+          $ref: '#/components/schemas/RegistrySyncStatus'
+      additionalProperties: false
+    RegistrySyncStatus:
+      type: object
+      description: How a project registry was last committed and published (docs/35 §35.7).
+      required:
+        - state
+        - detail
+        - committed
+        - at
+      properties:
+        state:
+          type: string
+          enum:
+            - synced
+            - local_only
+            - waiting
+            - blocked
+            - failed
+            - untracked
+        detail:
+          type: string
+        committed:
+          type: boolean
+        at:
+          type: string
+      additionalProperties: false
+    MilestoneWrite:
+      type: object
+      required:
+        - milestone
+        - changed
+      properties:
+        milestone:
+          $ref: '#/components/schemas/Milestone'
+        changed:
+          type: boolean
+          description: False when the write changed nothing, so nothing was written, committed, or announced.
+      additionalProperties: false
+    CreateMilestone:
+      type: object
+      required:
+        - title
+      properties:
+        title:
+          type: string
+          description: One line, at most 120 characters after trimming and collapsing whitespace.
+        description:
+          type:
+            - string
+            - 'null'
+        due_on:
+          type:
+            - string
+            - 'null'
+          description: YYYY-MM-DD.
+        actor:
+          $ref: '#/components/schemas/Actor'
+      additionalProperties: false
+    EditMilestone:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type:
+            - string
+            - 'null'
+          description: null clears it.
+        due_on:
+          type:
+            - string
+            - 'null'
+          description: YYYY-MM-DD; null clears it.
+        actor:
+          $ref: '#/components/schemas/Actor'
+      additionalProperties: false
+    CloseMilestone:
+      type: object
+      properties:
+        reason:
+          type: string
+          enum:
+            - completed
+            - not_planned
+        actor:
+          $ref: '#/components/schemas/Actor'
+      additionalProperties: false
+    ReopenMilestone:
+      type: object
+      properties:
+        actor:
+          $ref: '#/components/schemas/Actor'
       additionalProperties: false
     TicketGroups:
       type: object

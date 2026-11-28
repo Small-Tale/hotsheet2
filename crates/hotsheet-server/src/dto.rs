@@ -397,7 +397,9 @@ impl UpdateReq {
     }
 }
 
-fn deserialize_nullable_patch<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
+pub(crate) fn deserialize_nullable_patch<'de, D, T>(
+    deserializer: D,
+) -> Result<Option<Option<T>>, D::Error>
 where
     D: serde::Deserializer<'de>,
     T: Deserialize<'de>,

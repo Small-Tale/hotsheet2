@@ -1100,6 +1100,11 @@ hotsheet group ungroup "Board DnD"        # remove every member (the registry en
 hotsheet group merge <from-id> <into-id>  # fold a duplicate name created in another clone (HS2-9KZSD4);
                                            # --remove-source also deletes the source's registry entry (HS2-GXKX1Q)
 hotsheet group delete <id or name>        # unassign every member, then delete the registry entry (HS2-GXKX1Q)
+hotsheet milestones [--all] [--json]      # the checkout's milestones (HS2-9PYNCN, docs/38); --all adds closed ones
+hotsheet milestone create "Toolchain 2.0" --due 2026-12-04 [--description-file notes.md]
+hotsheet milestone edit <id or title> [--title …] [--due … | --clear-due] [--description-file …]
+hotsheet milestone close <id or title> [--reason completed|not_planned]   # also `milestone reopen`
+hotsheet milestone show <id or title> [--json]   # each write is committed in the checkout as it returns
 hotsheet group migrate                    # explicit, idempotent: legacy group names -> registry ids
 hotsheet show HS-7f3k9q
 hotsheet attach HS-7f3k9q ./proof.png       # stable id + RFC3339 created_at
@@ -2337,6 +2342,7 @@ file the same way. It owns one delimited block:
 /.hotsheet2/*
 !/.hotsheet2/settings.json
 !/.hotsheet2/groups/
+!/.hotsheet2/milestones/
 !/.hotsheet2/orchestration.json
 !/.hotsheet2/orchestration-plan.json
 !/.hotsheet2/orchestration-policy.json
@@ -2348,7 +2354,8 @@ file the same way. It owns one delimited block:
 
 - Everything under `.hotsheet2/` is machine-local except the paths in
   `project_gitignore::SHARED_PROJECT_PATHS`: the shared settings file, the group registry
-  ([02](02-ticket-storage.md) §2.7.1), and the shared orchestration files: the target
+  ([02](02-ticket-storage.md) §2.7.1), the milestone registry ([38](38-milestones.md) §38.2,
+  HS2-9PYNCN), and the shared orchestration files: the target
   manifest, the shared plan, the policy, the plan templates (HS2-A4RVYA), the validation
   profiles, and the project resource-claim registry (HS2-GY8C2D). A new machine-local file needs no new ignore line.
   A new shared file must be added to that list. A policy test fails when an orchestration

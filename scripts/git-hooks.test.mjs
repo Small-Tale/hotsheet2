@@ -262,6 +262,65 @@ test('HS2-9EGWC4 pre-push lets only a registry-only fast-forward skip the gate a
   }
 });
 
+test('HS2-9PYNCN milestone registry entries take the registry fast paths like group entries', () => {
+  const f = fixture();
+  try {
+    const bin = resolve(f.root, 'bin');
+    const log = resolve(f.root, 'gate.log');
+    // The format check and the main-window verification both run through zsh: log and refuse.
+    executable(resolve(bin, 'zsh'), '#!/bin/sh\nprintf "zsh\\n" >> "$HOTSHEET_HOOK_TEST_LOG"\nexit 1\n');
+    const noHooks = resolve(f.root, 'no-hooks');
+    mkdirSync(noHooks);
+    executable(
+      resolve(f.repo, 'scripts/check.sh'),
+      '#!/bin/sh\nprintf "check\\n" >> "$HOTSHEET_HOOK_TEST_LOG"\nexit 1\n',
+    );
+    run('git', ['add', 'scripts/check.sh'], f.repo);
+    run('git', ['commit', '-q', '-m', 'Failing fixture gate'], f.repo);
+    const remote = resolve(f.root, 'remote.git');
+    run('git', ['init', '-q', '--bare', remote], f.root);
+    run('git', ['remote', 'add', 'origin', remote], f.repo);
+    run('git', ['push', '-q', 'origin', 'main'], f.repo);
+    run('git', ['config', 'core.hooksPath', '.githooks'], f.repo);
+    const env = {
+      ...withoutGitRepositoryEnv(process.env),
+      PATH: `${bin}:${process.env.PATH}`,
+      HOTSHEET_HOOK_TEST_LOG: log,
+    };
+    const remoteMain = () => run('git', ['rev-parse', 'refs/heads/main'], remote).trim();
+    // A milestone-only commit passes pre-commit on whitespace alone, and so does a commit of
+    // one milestone and one group entry.
+    const milestone = '.hotsheet2/milestones/7K3M9P2QXA.json';
+    put(resolve(f.repo, milestone), '{\n  "title": "Toolchain 2.0",\n  "state": "open"\n}\n');
+    run('git', ['add', milestone], f.repo);
+    run('git', ['commit', '-q', '--only', '-m', 'Create milestone Toolchain 2.0', '--', milestone], f.repo, env);
+    put(resolve(f.repo, '.hotsheet2/groups/7K3M9P2QXB.json'), '{\n  "name": "Sprint"\n}\n');
+    put(resolve(f.repo, milestone), '{\n  "title": "Toolchain 2.0",\n  "state": "closed"\n}\n');
+    run('git', ['add', '.hotsheet2'], f.repo);
+    run('git', ['commit', '-q', '-m', 'Registries'], f.repo, env);
+    assert.equal(existsSync(log), false);
+    // Whitespace still fails a milestone-only commit.
+    put(resolve(f.repo, milestone), '{"title": "Bad", "state": "open"}  \n');
+    run('git', ['add', milestone], f.repo);
+    assert.throws(() => run('git', ['commit', '-q', '--only', '-m', 'Bad', '--', milestone], f.repo, env));
+    run('git', ['reset', '-q'], f.repo);
+    run('git', ['checkout', '-q', '--', milestone], f.repo);
+    // The registry-only fast-forward reaches main without the gate or a reservation.
+    run('git', ['push', '-q', 'origin', 'main'], f.repo, env);
+    assert.equal(remoteMain(), run('git', ['rev-parse', 'HEAD'], f.repo).trim());
+    assert.equal(existsSync(log), false);
+    // A file beside the registry directory is not a registry entry: the gate runs and refuses.
+    const published = remoteMain();
+    put(resolve(f.repo, '.hotsheet2/milestones/notes/7K3M9P2QXC.json'), '{}\n');
+    run('git', ['add', '.hotsheet2/milestones/notes/7K3M9P2QXC.json'], f.repo);
+    run('git', ['-c', `core.hooksPath=${noHooks}`, 'commit', '-q', '-m', 'Nested'], f.repo);
+    assert.throws(() => run('git', ['push', '-q', 'origin', 'main'], f.repo, env));
+    assert.equal(remoteMain(), published);
+  } finally {
+    f.dispose();
+  }
+});
+
 test('HS2-0BP0G8 pre-push lets a merge-pending-only push skip the gate but nothing else', () => {
   const f = fixture();
   try {

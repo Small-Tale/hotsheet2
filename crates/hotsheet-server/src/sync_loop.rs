@@ -238,6 +238,10 @@ pub fn sync_registered(state: &AppState, scope: &PassScope) -> Vec<(String, Sync
 /// (HS2-9EGWC4): commit registry changes no write committed (Git was busy, or a hook
 /// refused), fetch the branch's upstream so groups made in other clones appear, and push
 /// unpublished registry commits. Each checkout's status is recorded beside its registry.
+/// The same pass commits and pushes the checkout's milestone registry by the same rules
+/// (HS2-9PYNCN, docs/38 §38.2) after the group pass fetched the upstream; its status is
+/// recorded beside it and read with the milestone list. The returned statuses are the
+/// group registry's.
 pub fn sync_group_registries(
     state: &AppState,
 ) -> Vec<(
@@ -255,6 +259,13 @@ pub fn sync_group_registries(
             let status = hotsheet_ticketing::groups::git_sync::sync_checkout(Path::new(&root));
             if status.state.needs_attention() {
                 tracing::warn!(checkout = %root, "group registry: {}", status.detail);
+            }
+            let milestones = hotsheet_ticketing::groups::git_sync::sync_registry(
+                hotsheet_ticketing::groups::git_sync::RegistryKind::Milestones,
+                Path::new(&root),
+            );
+            if milestones.state.needs_attention() {
+                tracing::warn!(checkout = %root, "milestone registry: {}", milestones.detail);
             }
             (root, status)
         })

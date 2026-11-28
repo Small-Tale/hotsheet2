@@ -3,11 +3,12 @@
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 git diff --cached --check
-# HS2-9EGWC4: Hot Sheet commits its project group registry alone (`git commit --only`, so the
-# index seen here holds just those paths). Group entries are data, not code: whitespace is the
-# whole gate for them, and the web format check (64-78 s measured) would stall every group change.
+# HS2-9EGWC4, HS2-9PYNCN: Hot Sheet commits its project group and milestone registries alone
+# (`git commit --only`, so the index seen here holds just those paths). Registry entries are data,
+# not code: whitespace is the whole gate for them, and the web format check (64-78 s measured)
+# would stall every registry change.
 staged=$(git diff --cached --name-only --no-renames)
-if [[ -n "$staged" ]] && ! grep -qvE '^\.hotsheet2/groups/[^/]+\.json$' <<<"$staged"; then
+if [[ -n "$staged" ]] && ! grep -qvE '^\.hotsheet2/(groups|milestones)/[^/]+\.json$' <<<"$staged"; then
   exit 0
 fi
 (

@@ -480,10 +480,19 @@ fn hs2_1cwd0h_state_names_match_their_serialized_form() {
 
 #[test]
 fn hs2_9egwc4_a_burst_of_background_writes_is_one_commit() {
-    assert_eq!(coalesced_message(&[]), PENDING_COMMIT_MESSAGE);
-    assert_eq!(coalesced_message(&["one".into()]), "one");
     assert_eq!(
-        coalesced_message(&["one".into(), "two".into(), "three".into()]),
+        coalesced_message(RegistryKind::Groups, &[]),
+        PENDING_COMMIT_MESSAGE
+    );
+    assert_eq!(
+        coalesced_message(RegistryKind::Groups, &["one".into()]),
+        "one"
+    );
+    assert_eq!(
+        coalesced_message(
+            RegistryKind::Groups,
+            &["one".into(), "two".into(), "three".into()]
+        ),
         "one (+2 more)"
     );
     let (world, root) = World::new();
@@ -501,7 +510,7 @@ fn hs2_9egwc4_a_burst_of_background_writes_is_one_commit() {
             &format!(".hotsheet2/groups/{id}.json"),
             &format!("{{\n  \"name\": \"{name}\"\n}}\n"),
         );
-        background.submit(&root, &format!("Create group {name}"));
+        background.submit(RegistryKind::Groups, &root, &format!("Create group {name}"));
     }
     background.flush();
     assert_eq!(subjects(&root)[0], "Create group Alpha (+2 more)");
@@ -515,7 +524,7 @@ fn hs2_9egwc4_a_burst_of_background_writes_is_one_commit() {
         &format!(".hotsheet2/groups/{id}.json"),
         "{\"name\":\"Delta\"}\n",
     );
-    background.submit(&root, "Create group Delta");
+    background.submit(RegistryKind::Groups, &root, "Create group Delta");
     background.flush();
     assert_eq!(subjects(&root)[0], "Create group Delta");
 }
@@ -914,4 +923,73 @@ fn hs2_nm6e27_only_a_lost_ref_race_is_retried() {
     ] {
         assert!(!lost_ref_race(other), "{other}");
     }
+}
+
+#[test]
+fn hs2_9pyncn_background_bursts_coalesce_per_registry() {
+    assert_eq!(
+        coalesced_message(RegistryKind::Milestones, &[]),
+        MILESTONE_PENDING_COMMIT_MESSAGE
+    );
+    let (world, root) = World::new();
+    write(
+        &root,
+        ".gitignore",
+        "/.hotsheet2/*\n!/.hotsheet2/groups/\n!/.hotsheet2/milestones/\n",
+    );
+    git_in(&root, &["commit", "-q", "-am", "Track milestones"]);
+    git_in(&root, &["push", "-q"]);
+    let background: &'static Background = Box::leak(Box::new(Background {
+        state: Mutex::new(BackgroundState::default()),
+        changed: Condvar::new(),
+    }));
+    std::thread::spawn(move || background.work());
+    // Interleaved writes to both registries of one checkout: one commit per registry,
+    // each holding only its own files.
+    for name in ["Alpha", "Beta"] {
+        let id = hotsheet_model::new_group_id();
+        write(
+            &root,
+            &format!(".hotsheet2/milestones/{id}.json"),
+            &format!("{{\n  \"title\": \"{name}\",\n  \"state\": \"open\"\n}}\n"),
+        );
+        background.submit(
+            RegistryKind::Milestones,
+            &root,
+            &format!("Create milestone {name}"),
+        );
+        let group = hotsheet_model::new_group_id();
+        write(
+            &root,
+            &format!(".hotsheet2/groups/{group}.json"),
+            &format!("{{\n  \"name\": \"{name}\"\n}}\n"),
+        );
+        background.submit(RegistryKind::Groups, &root, &format!("Create group {name}"));
+    }
+    background.flush();
+    let mut recent: Vec<String> = subjects(&root).into_iter().take(2).collect();
+    recent.sort();
+    assert_eq!(
+        recent,
+        vec![
+            "Create group Alpha (+1 more)",
+            "Create milestone Alpha (+1 more)"
+        ]
+    );
+    for subject in ["HEAD", "HEAD~1"] {
+        let files = git_in(&root, &["show", "--name-only", "--format=", subject]);
+        let dirs: std::collections::BTreeSet<&str> = files
+            .lines()
+            .map(|path| path.rsplit_once('/').unwrap().0)
+            .collect();
+        assert_eq!(dirs.len(), 1, "{subject}: {files}");
+    }
+    assert_eq!(ahead(&root), 0);
+    assert_eq!(world.remote_log().len(), 4);
+    assert_eq!(
+        read_status_of(RegistryKind::Milestones, &root)
+            .unwrap()
+            .state,
+        RegistrySyncState::Synced
+    );
 }

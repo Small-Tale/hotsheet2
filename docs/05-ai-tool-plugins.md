@@ -2618,7 +2618,11 @@ Ticket groups are part of the MCP and CLI surface below (HS2-PDSHNN, HS2-8CDFKR,
 a checkout a name resolved through its group registry; `null` clears on update),
 `hotsheet_query` takes `group` and `has_group`, and `hotsheet_groups` lists, creates,
 renames, ungroups, merges, or migrates groups; the CLI equivalents and the routes are in
-[04](04-core-server-cli.md) §4.3.
+[04](04-core-server-cli.md) §4.3. `hotsheet_milestones` (HS2-9PYNCN) lists, shows, creates,
+edits, closes, and reopens the milestones of the launched or named checkout through the
+checkout-scoped milestone routes, with or without a running server
+([38](38-milestones.md) §38.6); without a checkout it refuses with
+`milestone_registry_required`.
 
 AI tools reach tickets two ways, both over the one core:
 

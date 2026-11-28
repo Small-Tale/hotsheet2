@@ -43,6 +43,7 @@ pub mod machine_home;
 pub mod merge;
 pub mod merge_driver;
 pub mod metrics;
+pub mod milestones;
 pub mod ops;
 pub mod orchestration;
 pub mod overlay;
