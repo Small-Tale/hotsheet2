@@ -1673,4 +1673,4 @@ the exposure warning shown before confirming — still to build (**client work**
 - Claim/lease coordination: [05-ai-tool-plugins.md](05-ai-tool-plugins.md) §5.7.
 - Human assignment & the `assignees` field: [10-assignment-and-collaboration.md](10-assignment-and-collaboration.md).
 - Automatic sync engine + distributed model: [08-distributed-and-remote.md](08-distributed-and-remote.md).
-- Milestones, the `milestone` link and `due_on` (design, HS2-8T71YW): [38-milestones.md](38-milestones.md).
+- Milestones: the per-checkout milestone registry, the ticket `milestone` id and `due_on` (design, HS2-8T71YW): [38-milestones.md](38-milestones.md).
