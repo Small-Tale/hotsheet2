@@ -536,6 +536,7 @@ fn receive_sync(
                 activity: None,
                 assignment: None,
                 turn: None,
+                milestone: None,
             });
             reservation.commit();
             return Ok(Json(WebhookReceipt {
@@ -599,6 +600,7 @@ fn receive_sync(
             activity: None,
             assignment: None,
             turn: None,
+            milestone: None,
         });
     }
     reservation.commit();

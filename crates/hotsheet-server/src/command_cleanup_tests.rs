@@ -57,6 +57,8 @@ fn command_ticket(store: &FsStore, tags: &[&str]) -> hotsheet_model::Ticket {
             up_next: true,
             blocked_by: Vec::new(),
             group: None,
+            due_on: None,
+            milestone: None,
         },
     )
     .unwrap()
@@ -87,6 +89,7 @@ fn event(connection: &str, ticket: &hotsheet_model::Ticket, kind: &str) -> Chang
         activity: None,
         assignment: None,
         turn: None,
+        milestone: None,
     }
 }
 

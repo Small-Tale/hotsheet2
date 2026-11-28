@@ -120,7 +120,7 @@ fn hs2_9pyncn_serverless_milestones_round_trip_through_the_checkout_registry() {
     let p = project();
     assert_eq!(
         p.tool(json!({})),
-        json!({ "registry": true, "milestones": [] })
+        json!({ "registry": true, "time_zone": "UTC", "milestones": [] })
     );
     let created = p.tool(json!({
         "action": "create",
@@ -327,7 +327,16 @@ fn hs2_9pyncn_tool_list_describes_milestones() {
         .clone();
     assert_eq!(
         tool["inputSchema"]["properties"]["action"]["enum"],
-        json!(["list", "show", "create", "edit", "close", "reopen"])
+        json!([
+            "list",
+            "show",
+            "create",
+            "edit",
+            "close",
+            "reopen",
+            "delete",
+            "move_open"
+        ])
     );
     for name in [
         "milestone",
@@ -336,6 +345,7 @@ fn hs2_9pyncn_tool_list_describes_milestones() {
         "due_on",
         "reason",
         "all",
+        "to",
         "checkout",
         "actor_role",
     ] {
@@ -346,4 +356,180 @@ fn hs2_9pyncn_tool_list_describes_milestones() {
     }
     let description = tool["description"].as_str().unwrap();
     assert!(description.contains("milestone_registry_conflict"));
+}
+
+/// The ticket of a checkout create or update answer (`{store, ticket}`) or a bare one.
+fn ticket(value: &Value) -> &Value {
+    value.get("ticket").unwrap_or(value)
+}
+
+fn query_slugs(p: &Project, args: Value) -> Vec<String> {
+    let mut args = args;
+    args["checkout"] = json!("project");
+    let rows = call(&p.backend, "hotsheet_query", args);
+    let rows = rows
+        .as_array()
+        .or_else(|| rows["items"].as_array())
+        .unwrap_or_else(|| panic!("{rows}"))
+        .clone();
+    let mut slugs: Vec<String> = rows
+        .iter()
+        .map(|row| ticket(row)["slug"].as_str().unwrap().to_string())
+        .collect();
+    slugs.sort();
+    slugs
+}
+
+#[test]
+fn hs2_a820c1_serverless_ticket_links_filters_rollups_and_member_workflows() {
+    let p = project();
+    let alpha = p.tool(json!({ "action": "create", "title": "Alpha", "due_on": "2026-01-15" }))
+        ["milestone"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let beta = p.tool(json!({ "action": "create", "title": "Beta" }))["milestone"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let create = |args: Value| {
+        let mut args = args;
+        args["checkout"] = json!("project");
+        args["details"] = json!("Synthetic details.");
+        ticket(&call(&p.backend, "hotsheet_create", args)).clone()
+    };
+    let update = |id: &str, args: Value| {
+        let mut args = args;
+        args["checkout"] = json!("project");
+        args["id"] = json!(id);
+        call(&p.backend, "hotsheet_update", args)
+    };
+    let a = create(json!({ "title": "a", "milestone": "alpha", "due_on": "2026-12-01" }));
+    assert_eq!(a["milestone"], alpha.as_str(), "{a}");
+    assert_eq!(a["due_on"], "2026-12-01");
+    let b = create(json!({ "title": "b" }));
+    let slug = |t: &Value| t["slug"].as_str().unwrap().to_string();
+    let refused = create(json!({ "title": "x", "milestone": "Gamma" }));
+    assert!(
+        refused["error"]
+            .as_str()
+            .unwrap()
+            .contains("milestone_not_found"),
+        "{refused}"
+    );
+
+    // Update links by title without changing updated_at; null clears.
+    let linked = ticket(&update(
+        &slug(&b),
+        json!({ "milestone": "Beta", "due_on": "2027-02-01" }),
+    ))
+    .clone();
+    assert_eq!(linked["milestone"], beta.as_str(), "{linked}");
+    assert_eq!(linked["updated_at"], b["updated_at"]);
+    let bad = update(&slug(&b), json!({ "due_on": "2026-02-30" }));
+    assert!(
+        bad["error"].as_str().unwrap().contains("invalid_due_on"),
+        "{bad}"
+    );
+
+    // Query filters resolve titles through the checkout's registry.
+    assert_eq!(
+        query_slugs(&p, json!({ "milestone": "ALPHA" })),
+        vec![slug(&a)]
+    );
+    assert_eq!(
+        query_slugs(&p, json!({ "milestone": beta })),
+        vec![slug(&b)]
+    );
+    assert_eq!(query_slugs(&p, json!({ "has_milestone": true })).len(), 2);
+    assert_eq!(
+        query_slugs(&p, json!({ "due_before": "2026-01-31" })),
+        vec![slug(&a)],
+        "Alpha's open date lends itself"
+    );
+
+    // The list carries roll-ups and the zone.
+    let listing = p.tool(json!({ "action": "list" }));
+    assert_eq!(listing["time_zone"], "UTC");
+    assert_eq!(listing["milestones"][0]["rollup"]["progress"]["members"], 1);
+    assert_eq!(listing["milestones"][0]["rollup"]["health"], "off_track");
+    let shown = p.tool(json!({ "action": "show", "milestone": "beta" }));
+    assert_eq!(
+        shown["rollup"]["open_members"][0]["slug"],
+        slug(&b).as_str()
+    );
+
+    // Close lists the open tickets; move_open moves them; delete clears members first.
+    let closed = p.tool(json!({ "action": "close", "milestone": "Alpha" }));
+    assert_eq!(
+        closed["open_members"][0]["slug"],
+        slug(&a).as_str(),
+        "{closed}"
+    );
+    let moved = p.tool(json!({ "action": "move_open", "milestone": "Alpha", "to": "Beta" }));
+    assert_eq!(moved["updated"], 1, "{moved}");
+    assert_eq!(query_slugs(&p, json!({ "milestone": "Beta" })).len(), 2);
+    let deleted = p.tool(json!({ "action": "delete", "milestone": "Beta" }));
+    assert_eq!(deleted["updated"], 2, "{deleted}");
+    assert!(
+        !p.root
+            .join(format!(".hotsheet2/milestones/{beta}.json"))
+            .exists()
+    );
+    assert!(query_slugs(&p, json!({ "has_milestone": true })).is_empty());
+    p.refused(
+        json!({ "action": "delete", "milestone": beta }),
+        "milestone_not_found",
+    );
+    p.refused(json!({ "action": "move_open", "milestone": "Alpha" }), "to");
+}
+
+#[test]
+fn hs2_a820c1_tools_forward_links_delete_and_move_open_to_the_server() {
+    let backend = Recording::default();
+    let tool = |args: Value| call(&backend, "hotsheet_milestones", args);
+    tool(json!({ "checkout": "project", "action": "delete", "milestone": "Alpha" }));
+    tool(
+        json!({ "checkout": "project", "action": "move_open", "milestone": "Alpha", "to": "Beta" }),
+    );
+    call(
+        &backend,
+        "hotsheet_update",
+        json!({ "checkout": "project", "id": "AA-1", "milestone": "Alpha", "due_on": null }),
+    );
+    call(
+        &backend,
+        "hotsheet_query",
+        json!({ "checkout": "project", "milestone": "Alpha", "has_milestone": true, "due_before": "2026-12-01" }),
+    );
+    let calls = backend.calls.borrow();
+    let body =
+        |call: &str| -> Value { serde_json::from_str(&call[call.find('{').unwrap()..]).unwrap() };
+    assert!(
+        calls[0].starts_with("DELETE /checkouts/project/milestones/Alpha "),
+        "{}",
+        calls[0]
+    );
+    assert!(calls[1].starts_with("POST /checkouts/project/milestones/Alpha/move-open "));
+    assert_eq!(body(&calls[1])["to"], "Beta");
+    assert!(
+        calls[2].starts_with("PATCH /checkouts/project/tickets/AA-1 "),
+        "{}",
+        calls[2]
+    );
+    assert_eq!(body(&calls[2])["milestone"], "Alpha");
+    assert_eq!(body(&calls[2])["due_on"], Value::Null);
+    assert!(calls[2].contains("\"due_on\":null"), "{}", calls[2]);
+    assert!(
+        calls[3].starts_with("GET /checkouts/project/tickets "),
+        "{}",
+        calls[3]
+    );
+    for pair in [
+        "milestone=Alpha",
+        "has_milestone=true",
+        "due_before=2026-12-01",
+    ] {
+        assert!(calls[3].contains(pair), "{}", calls[3]);
+    }
 }

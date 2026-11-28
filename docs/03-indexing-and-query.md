@@ -569,6 +569,29 @@ query(filter, sort, text?, paging) -> TicketRow[]
   `group:"name with spaces"` match by the same key with the quoting and `\"` escaping of
   `tag:`, `has:group` matches any grouped ticket, and `NOT has:group` finds ungrouped
   tickets. Every list row carries `group` when set.
+  **Milestones and due dates (HS2-A820C1, [38](38-milestones.md) §38.3, §38.6):**
+  `milestone=<id or title>` matches one milestone's tickets (a checkout resolves a title
+  through its registry into `TicketQuery::milestone_ids`; an unknown title matches
+  nothing), `has_milestone=true|false` matches linked or unlinked tickets, and
+  `due_before=<YYYY-MM-DD>` matches tickets whose **effective due** is on or before the
+  date: their own `due_on`, or their open milestone's date (the caller passes the open
+  milestones due by then as `TicketQuery::due_milestone_ids`). The index stores the
+  ticket's own values in `milestone_id` and `due_on` with a partial index on
+  `(store_id, milestone_id)`; schema 27 added them, so an older file is rebuilt on open.
+  The effective due is **not** stored: a store may be linked by several checkouts whose
+  registries differ (checkout-to-store is many-to-many), so it is computed when read from
+  the reading checkout's registry. `Index::milestone_members` lists every linked ticket in
+  any status (Trash and `moved` tombstones included) for the roll-up, and
+  `Index::milestone_id` gives the indexed link before a re-index so a change event can name
+  its old and new milestone. A due date that is not a real date never matches. CLI
+  `ls --milestone/--has-milestone/--no-milestone/--due-before`, server `GET
+/tickets?milestone=&has_milestone=&due_before=` (checkout, store and provider lists), and
+  MCP `hotsheet_query` share the contract, and a provider without the capability reports
+  every ticket unlinked. The saved-view language adds `milestone:<id or "title">`,
+  `has:milestone`, `due:<date`, `due:<=date`, `due:>date`, `due:>=date`, `due:<=7d` (the
+  effective due's deadline instant within N days from now) and `is:overdue` (open, and the
+  effective due's deadline instant passed in the project time zone), read through
+  `ViewQuery::with_milestones`. Every list row carries `milestone` and `due_on` when set.
 - **sort:** priority-then-recency (the worklist order), created, updated, title,
   confidence (least confident first, unscored last; `checkout_order::confidence_rank`
   in memory and `coalesce(latest_confidence,255)` in SQL, so keyset pages agree);

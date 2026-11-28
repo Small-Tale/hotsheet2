@@ -149,7 +149,7 @@ fn hs2_9pyncn_cli_create_edit_close_reopen_commit_each_write_and_skip_repeats() 
     let p = project();
     assert_eq!(
         p.json(&["milestones", "--json"]),
-        serde_json::json!({"registry": true, "milestones": []})
+        serde_json::json!({"registry": true, "time_zone": "UTC", "milestones": []})
     );
     let description = p.dir.path().join("description.md");
     std::fs::write(
@@ -317,6 +317,166 @@ fn hs2_9pyncn_cli_refusals_name_their_codes() {
     let listing: serde_json::Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
     assert_eq!(
         listing,
-        serde_json::json!({"registry": false, "milestones": []})
+        serde_json::json!({"registry": false, "time_zone": "UTC", "milestones": []})
+    );
+}
+
+fn created_slug(stdout: &str) -> String {
+    stdout
+        .strip_prefix("Created ")
+        .and_then(|rest| rest.split_whitespace().next())
+        .unwrap_or_else(|| panic!("{stdout}"))
+        .to_string()
+}
+
+/// The `key: value` frontmatter line of a ticket's file, as `show` prints it.
+fn frontmatter(shown: &str, key: &str) -> Option<String> {
+    shown
+        .lines()
+        .take_while(|line| !line.starts_with("<!--"))
+        .find_map(|line| line.strip_prefix(&format!("{key}: ")))
+        .map(|value| value.trim_matches('\'').to_string())
+}
+
+#[test]
+fn hs2_a820c1_cli_links_tickets_by_title_filters_and_rolls_up() {
+    let p = project();
+    let alpha = created_id(&p.stdout(&["milestone", "create", "Alpha", "--due", "2026-01-15"]));
+    let beta = created_id(&p.stdout(&["milestone", "create", "Beta"]));
+
+    // `new` links by title and sets a due date; an unknown title writes nothing.
+    let a = created_slug(&p.stdout(&[
+        "new",
+        "First",
+        "--details",
+        "x",
+        "--milestone",
+        "alpha",
+        "--due",
+        "2026-12-01",
+    ]));
+    let b = created_slug(&p.stdout(&["new", "Second", "--details", "x"]));
+    let c = created_slug(&p.stdout(&["new", "Third", "--details", "x"]));
+    p.refused(
+        &["new", "Nope", "--milestone", "Gamma"],
+        "milestone_not_found",
+    );
+    p.refused(&["new", "Nope", "--due", "2026-02-30"], "invalid_due_on");
+    let shown = p.stdout(&["show", &a]);
+    assert_eq!(
+        frontmatter(&shown, "milestone"),
+        Some(alpha.clone()),
+        "{shown}"
+    );
+    assert_eq!(frontmatter(&shown, "due_on").as_deref(), Some("2026-12-01"));
+
+    // `edit` links by id or title without changing updated_at; repeats change nothing.
+    let before = frontmatter(&p.stdout(&["show", &b]), "updated_at");
+    p.hs()
+        .args(["edit", &b, "--milestone", &alpha])
+        .assert()
+        .success();
+    p.hs()
+        .args(["edit", &c, "--milestone", "Beta", "--due", "2027-02-01"])
+        .assert()
+        .success();
+    let shown = p.stdout(&["show", &b]);
+    assert_eq!(frontmatter(&shown, "milestone"), Some(alpha.clone()));
+    assert_eq!(
+        frontmatter(&shown, "updated_at"),
+        before,
+        "a link is not content"
+    );
+    p.refused(&["edit", &b, "--milestone", "Gamma"], "milestone_not_found");
+    p.refused(&["edit", &b, "--due", "soon"], "invalid_due_on");
+
+    // `ls` filters by title, id, presence and effective due.
+    let ls = |args: &[&str]| {
+        let mut full = vec!["ls"];
+        full.extend_from_slice(args);
+        let out = p.stdout(&full);
+        let mut slugs: Vec<String> = out
+            .lines()
+            .filter_map(|line| line.split_whitespace().find(|word| word.starts_with("HS-")))
+            .map(str::to_string)
+            .collect();
+        slugs.sort();
+        slugs
+    };
+    let mut ab = vec![a.clone(), b.clone()];
+    ab.sort();
+    assert_eq!(ls(&["--milestone", "ALPHA"]), ab);
+    assert_eq!(ls(&["--milestone", &beta]), vec![c.clone()]);
+    assert_eq!(ls(&["--has-milestone"]).len(), 3);
+    assert!(ls(&["--no-milestone"]).is_empty());
+    // Alpha is due 2026-01-15 and open, so a and b are due by then; c only by its own date.
+    assert_eq!(ls(&["--due-before", "2026-01-31"]), ab);
+    assert_eq!(ls(&["--due-before", "2027-02-01"]).len(), 3);
+    assert!(
+        p.stdout(&["ls", "--milestone", "Alpha"])
+            .contains("[Alpha]")
+    );
+
+    // The list carries roll-ups and the zone; show reads one by title.
+    let listing = p.json(&["milestones", "--json"]);
+    assert_eq!(listing["time_zone"], "UTC");
+    let alpha_row = &listing["milestones"][0];
+    assert_eq!(alpha_row["id"], alpha.as_str());
+    assert_eq!(alpha_row["rollup"]["progress"]["members"], 2);
+    assert_eq!(alpha_row["rollup"]["health"], "off_track");
+    let shown = p.json(&["milestone", "show", "alpha", "--json"]);
+    assert_eq!(shown["rollup"]["open_members"].as_array().unwrap().len(), 2);
+    assert!(p.stdout(&["milestones"]).contains("0 of 2 finished (0%)"));
+
+    // Closing lists the open tickets; move-open moves them; delete clears members first.
+    let closed = p.stdout(&["milestone", "close", "Alpha"]);
+    assert!(closed.contains("2 open tickets remain"), "{closed}");
+    let moved = p.stdout(&["milestone", "move-open", "Alpha", "Beta"]);
+    assert!(moved.contains("Moved 2 open tickets"), "{moved}");
+    assert_eq!(ls(&["--milestone", "Beta"]).len(), 3);
+    let deleted = p.stdout(&["milestone", "delete", "Beta"]);
+    assert!(deleted.contains("cleared it from 3 tickets"), "{deleted}");
+    assert!(!p.file(&beta).exists());
+    assert_eq!(ls(&["--no-milestone"]).len(), 3);
+    p.refused(&["milestone", "delete", &beta], "milestone_not_found");
+
+    // Clearing a date and a link.
+    p.hs()
+        .args(["edit", &c, "--clear-due", "--clear-milestone"])
+        .assert()
+        .success();
+    let shown = p.stdout(&["show", &c]);
+    assert_eq!(frontmatter(&shown, "due_on"), None);
+    assert_eq!(frontmatter(&shown, "milestone"), None);
+}
+
+#[test]
+fn hs2_a820c1_cli_outside_a_checkout_takes_ids_and_lists_them_as_unknown() {
+    let p = project();
+    let bare = |args: &[&str]| p.cli(&p.elsewhere).args(args).assert();
+    bare(&["new", "Titled", "--milestone", "Alpha"])
+        .failure()
+        .stderr(predicate::str::contains("milestone_registry_required"));
+    let out = bare(&["new", "By id", "--milestone", "7K3M9P2QXA"]).success();
+    let slug = created_slug(&String::from_utf8(out.get_output().stdout.clone()).unwrap());
+    let out = bare(&["milestones", "--json"]).success();
+    let listing: serde_json::Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+    assert_eq!(listing["registry"], false);
+    assert_eq!(listing["milestones"][0]["id"], "7K3M9P2QXA");
+    assert_eq!(listing["milestones"][0]["state"], "unknown");
+    assert_eq!(listing["milestones"][0]["rollup"]["progress"]["members"], 1);
+    let out = bare(&["milestone", "show", "7K3M9P2QXA", "--json"]).success();
+    let shown: serde_json::Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+    assert_eq!(shown["title"], "Milestone 7K3M9P2QXA");
+    bare(&["milestone", "delete", "7K3M9P2QXA"])
+        .failure()
+        .stderr(predicate::str::contains("milestone_registry_required"));
+    // Inside the checkout the registry does not name it: still listed, never dropped.
+    let listing = p.json(&["milestones", "--json"]);
+    assert_eq!(listing["milestones"][0]["state"], "unknown");
+    let out = p.stdout(&["ls", "--milestone", "7K3M9P2QXA"]);
+    assert!(
+        out.contains(&slug) && out.contains("[Milestone 7K3M9P2QXA]"),
+        "{out}"
     );
 }

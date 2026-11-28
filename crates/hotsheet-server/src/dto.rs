@@ -53,6 +53,19 @@ pub(crate) struct ListParams {
     pub(crate) group_ids: Vec<String>,
     /// `true` = only grouped tickets; `false` = only ungrouped (HS2-PDSHNN).
     has_group: Option<bool>,
+    /// Only tickets linked to this milestone: an id, or a title a checkout route resolves
+    /// through its registry (HS2-A820C1).
+    pub(crate) milestone: Option<String>,
+    /// The ids a checkout's registry resolves `milestone` to; never read from the request.
+    #[serde(skip)]
+    pub(crate) milestone_ids: Option<Vec<String>>,
+    /// `true` = only tickets with a milestone; `false` = only tickets without.
+    has_milestone: Option<bool>,
+    /// Only tickets whose effective due date is on or before this `YYYY-MM-DD` date.
+    pub(crate) due_before: Option<String>,
+    /// The checkout's open milestones due by `due_before`; never read from the request.
+    #[serde(skip)]
+    pub(crate) due_milestone_ids: Vec<String>,
     /// ISO-8601 `created_at` / `updated_at` range bounds (inclusive).
     created_after: Option<String>,
     created_before: Option<String>,
@@ -172,10 +185,29 @@ impl ListParams {
                 ));
             }
         }
+        let due_before = self
+            .due_before
+            .as_deref()
+            .map(hotsheet_model::validate_due_on)
+            .transpose()
+            .map_err(|error| {
+                ApiError::new(StatusCode::BAD_REQUEST, error.to_string()).with_code(error.code())
+            })?;
+        let milestone_ids = match (self.milestone, self.milestone_ids) {
+            (Some(_), Some(ids)) => Some(ids),
+            (Some(input), None) => Some(hotsheet_ticketing::milestone_project::filter_ids(
+                None, &input,
+            )),
+            (None, _) => None,
+        };
         Ok(TicketQuery {
             group: self.group,
             group_ids: self.group_ids,
             has_group: self.has_group,
+            milestone_ids,
+            has_milestone: self.has_milestone,
+            due_before,
+            due_milestone_ids: self.due_milestone_ids,
             status: opt_parse(self.status.as_deref())?,
             collection: opt_parse(self.collection.as_deref())?,
             priority: opt_parse(self.priority.as_deref())?,
@@ -251,6 +283,16 @@ pub(crate) struct CreateReq {
     /// The route already chose the spelling against its project-wide namespace.
     #[serde(skip)]
     pub(crate) group_resolved: bool,
+    /// The milestone to create the ticket in (HS2-A820C1): an id, or on a checkout route a
+    /// title its registry names. Absent, null, or empty = none.
+    #[serde(default)]
+    pub(crate) milestone: Option<String>,
+    /// The route already resolved `milestone` to an id through its registry.
+    #[serde(skip)]
+    pub(crate) milestone_resolved: bool,
+    /// The ticket's own due date, `YYYY-MM-DD` (HS2-A820C1).
+    #[serde(default)]
+    pub(crate) due_on: Option<String>,
     /// Who is creating the ticket (HS2-9FPHWY), recorded as its `created_by`. Absent is
     /// unspecified, never assumed human or AI.
     #[serde(default)]
@@ -281,6 +323,17 @@ pub(crate) struct UpdateReq {
     /// The route already chose the spelling against its project-wide namespace.
     #[serde(skip)]
     pub(crate) group_resolved: bool,
+    /// Set the milestone (an id, or on a checkout route a title), clear it with JSON null,
+    /// or leave it unchanged when absent (HS2-A820C1). Not a content edit.
+    #[serde(default, deserialize_with = "deserialize_nullable_patch")]
+    pub(crate) milestone: Option<Option<String>>,
+    /// The route already resolved `milestone` to an id through its registry.
+    #[serde(skip)]
+    pub(crate) milestone_resolved: bool,
+    /// Set the ticket's own due date (`YYYY-MM-DD`), clear it with JSON null, or leave it
+    /// unchanged when absent (HS2-A820C1). Not a content edit.
+    #[serde(default, deserialize_with = "deserialize_nullable_patch")]
+    pub(crate) due_on: Option<Option<String>>,
     /// Optional note to append alongside the field update.
     pub(crate) note: Option<String>,
     /// Rating revision. This is a feedback-only update; repeated ratings from the
@@ -349,6 +402,8 @@ impl UpdateReq {
             || self.blocked_by.is_some()
             || self.blocked_reason.is_some()
             || self.group.is_some()
+            || self.milestone.is_some()
+            || self.due_on.is_some()
             || self.note.is_some()
             || self.note_id.is_some()
             || self.edit_feedback_prompt

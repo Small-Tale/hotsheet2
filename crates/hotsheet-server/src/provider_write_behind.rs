@@ -252,6 +252,7 @@ fn emit_operation_event(state: &AppState, connection_id: &str, native_id: &str) 
         activity: None,
         assignment: None,
         turn: None,
+        milestone: None,
     });
 }
 
@@ -470,6 +471,8 @@ fn validate_edit(edit: &QueuedProviderEdit) -> Result<(), ApiError> {
         || patch.blocked_by.is_some()
         || patch.blocked_reason.is_some()
         || patch.group.is_some()
+        || patch.milestone.is_some()
+        || patch.due_on.is_some()
     {
         return Err(ApiError::new(
             StatusCode::BAD_REQUEST,

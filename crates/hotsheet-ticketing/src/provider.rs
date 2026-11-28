@@ -508,6 +508,14 @@ pub struct ProviderCapabilities {
     /// groups (HS2-PDSHNN). A provider without it rejects a group write explicitly.
     #[serde(default)]
     pub groups: bool,
+    /// Tickets carry, change, and are filtered by a project milestone id (HS2-A820C1,
+    /// docs/38 §38.5). A provider without it rejects a milestone write explicitly and
+    /// reports every ticket unlinked.
+    #[serde(default)]
+    pub milestones: bool,
+    /// Tickets carry and change their own `due_on` date (HS2-A820C1, docs/38 §38.5).
+    #[serde(default)]
+    pub due_dates: bool,
     pub query_fields: Vec<String>,
 }
 
@@ -560,6 +568,8 @@ impl ProviderCapabilities {
             watch: true,
             provider_idempotency: false,
             groups: true,
+            milestones: true,
+            due_dates: true,
             query_fields: vec![
                 "status",
                 "priority",
@@ -573,6 +583,8 @@ impl ProviderCapabilities {
                 "claimed",
                 "blocked",
                 "group",
+                "milestone",
+                "due_on",
                 "created_at",
                 "updated_at",
             ]
@@ -600,6 +612,11 @@ pub struct ProviderDraft {
     /// The group to create the ticket in (HS2-PDSHNN). A provider without the `groups`
     /// capability rejects a present value.
     pub group: Option<String>,
+    /// The milestone id to create the ticket in (HS2-A820C1). A provider without the
+    /// `milestones` capability rejects a present value before any request.
+    pub milestone: Option<String>,
+    /// The ticket's own due date (HS2-A820C1). A provider without `due_dates` rejects it.
+    pub due_on: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -624,6 +641,12 @@ pub struct ProviderPatch {
     /// Set, clear (`Some(None)`), or leave the ticket's group (HS2-PDSHNN).
     #[serde(default)]
     pub group: Option<Option<String>>,
+    /// Set, clear (`Some(None)`), or leave the ticket's milestone id (HS2-A820C1).
+    #[serde(default)]
+    pub milestone: Option<Option<String>>,
+    /// Set, clear (`Some(None)`), or leave the ticket's own due date (HS2-A820C1).
+    #[serde(default)]
+    pub due_on: Option<Option<String>>,
     /// Who is making the change (HS2-32QDZ3). The git provider attributes the status
     /// activity it appends; external trackers attribute changes to their own account.
     pub actor: Option<hotsheet_model::NoteActor>,
@@ -872,10 +895,27 @@ pub fn keyset_page_from_native_pages(
     }
 }
 
-/// The `group` and `has_group` filters over a provider row (HS2-PDSHNN). A provider
-/// without the `groups` capability reports every ticket ungrouped, so every adapter can
-/// answer both filters through this one comparison instead of rejecting them.
+/// The `group` and `has_group` filters over a provider row (HS2-PDSHNN), and the
+/// `milestone_ids`, `has_milestone` and `due_before` filters (HS2-A820C1). A provider
+/// without the `groups`, `milestones` or `due_dates` capability reports every ticket
+/// without one, so every adapter answers these filters through this one comparison
+/// instead of rejecting them.
 pub fn provider_group_matches(ticket: &ApiTicket, query: &TicketQuery) -> bool {
+    let milestone = ticket.milestone.as_ref();
+    let milestone_matches = query
+        .milestone_ids
+        .as_ref()
+        .is_none_or(|ids| milestone.is_some_and(|id| ids.contains(id)))
+        && query
+            .has_milestone
+            .is_none_or(|want| milestone.is_some() == want)
+        && query.due_before.as_deref().is_none_or(|date| {
+            crate::ops::due_on_or_before(ticket.due_on.as_deref(), date)
+                || milestone.is_some_and(|id| query.due_milestone_ids.contains(id))
+        });
+    if !milestone_matches {
+        return false;
+    }
     let key = ticket.group.as_deref().map(hotsheet_model::group_value_key);
     query.group.as_deref().is_none_or(|input| {
         key.as_ref().is_some_and(|key| {
@@ -1679,6 +1719,23 @@ impl GitProvider {
         ProviderCapabilities::git()
     }
 
+    /// Refuse a milestone or due-date write the connection cannot hold (HS2-A820C1).
+    fn require_milestone_fields(&self, milestone: bool, due_on: bool) -> Result<(), ProviderError> {
+        let capabilities = self.capabilities();
+        for (requested, supported, capability) in [
+            (milestone, capabilities.milestones, "milestones"),
+            (due_on, capabilities.due_dates, "due_dates"),
+        ] {
+            if requested && !supported {
+                return Err(ProviderError::Unsupported {
+                    connection_id: self.connection_id.clone(),
+                    capability,
+                });
+            }
+        }
+        Ok(())
+    }
+
     fn require_groups(&self) -> Result<(), ProviderError> {
         if self.capabilities().groups {
             return Ok(());
@@ -1853,6 +1910,7 @@ impl TicketProvider for GitProvider {
         let prefix = self.store.metadata()?.ticket_prefix;
         let blocked_by = self.blockers(None, &draft.blocked_by)?;
         let group = self.group_change(draft.group.map(Some))?.flatten();
+        self.require_milestone_fields(draft.milestone.is_some(), draft.due_on.is_some())?;
         let _transfer_guard = if draft.transfer.is_some() {
             Some(self.transfer_lock.lock_or_recover())
         } else {
@@ -1884,6 +1942,8 @@ impl TicketProvider for GitProvider {
                 up_next: draft.up_next,
                 blocked_by,
                 group,
+                milestone: draft.milestone,
+                due_on: draft.due_on,
             },
             draft.created_by,
         )?;
@@ -1918,6 +1978,7 @@ impl TicketProvider for GitProvider {
             .map(|v| self.blockers(Some(&ticket.id), v))
             .transpose()?;
         let group = self.group_change(patch.group)?;
+        self.require_milestone_fields(patch.milestone.is_some(), patch.due_on.is_some())?;
         #[cfg(test)]
         self.before_ticket_lock.run();
         // The token is compared with the ticket read under the ticket transaction, so a
@@ -1942,6 +2003,8 @@ impl TicketProvider for GitProvider {
                 follow_ups: None,
                 blocked_reason: patch.blocked_reason,
                 group,
+                milestone: patch.milestone,
+                due_on: patch.due_on,
             },
             |current| expect_token(native_id, expected_token.as_deref(), current),
         )?;
@@ -2468,6 +2531,10 @@ pub struct TransferOutcome {
     pub source: TicketRef,
     pub destination: TicketRef,
     pub moved: bool,
+    /// Fields the destination cannot hold, dropped rather than failing the transfer
+    /// (HS2-A820C1: `milestone`, `due_on`; docs/38 §38.2 "Copy and move").
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub dropped_fields: Vec<String>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -2696,7 +2763,22 @@ fn copy_locked(
         group: ticket
             .group
             .filter(|value| capabilities.groups && hotsheet_model::is_group_id(value)),
+        // HS2-A820C1: the milestone id and own due date travel only to a destination with
+        // the capability; elsewhere they are dropped and named in the outcome.
+        milestone: ticket.milestone.clone().filter(|_| capabilities.milestones),
+        due_on: ticket.due_on.clone().filter(|_| capabilities.due_dates),
     };
+    let dropped_fields: Vec<String> = [
+        (
+            "milestone",
+            ticket.milestone.is_some() && !capabilities.milestones,
+        ),
+        ("due_on", ticket.due_on.is_some() && !capabilities.due_dates),
+    ]
+    .into_iter()
+    .filter(|(_, dropped)| *dropped)
+    .map(|(field, _)| field.to_string())
+    .collect();
     let created = destination.create(
         MutationContext {
             now: now.clone(),
@@ -2799,6 +2881,7 @@ fn copy_locked(
             native_id: created.native_id,
         },
         moved: false,
+        dropped_fields,
     })
 }
 
@@ -2948,6 +3031,8 @@ mod tests {
             blocked_by,
             transfer: None,
             created_by: None,
+            due_on: None,
+            milestone: None,
         }
     }
 
@@ -3073,6 +3158,8 @@ mod tests {
                         blocked_by: vec![],
                         transfer: None,
                         created_by: None,
+                        due_on: None,
+                        milestone: None,
                     },
                 )
                 .unwrap();
@@ -3294,6 +3381,8 @@ mod tests {
                         blocked_by: vec![],
                         transfer: None,
                         created_by: None,
+                        due_on: None,
+                        milestone: None,
                     },
                 )
                 .unwrap();
@@ -3345,6 +3434,8 @@ mod tests {
                         blocked_by: vec![],
                         transfer: None,
                         created_by: None,
+                        due_on: None,
+                        milestone: None,
                     },
                 )
                 .unwrap();
@@ -3401,6 +3492,8 @@ mod tests {
                         blocked_by: vec![],
                         transfer: None,
                         created_by: None,
+                        due_on: None,
+                        milestone: None,
                     },
                 )
                 .unwrap();
@@ -3445,6 +3538,8 @@ mod tests {
                     blocked_by: vec![],
                     transfer: None,
                     created_by: None,
+                    due_on: None,
+                    milestone: None,
                 },
             )
             .unwrap();
@@ -3546,6 +3641,8 @@ mod tests {
                     blocked_by: vec![],
                     transfer: None,
                     created_by: None,
+                    due_on: None,
+                    milestone: None,
                 },
             )
             .unwrap();
@@ -3615,6 +3712,8 @@ mod tests {
                     blocked_by: vec![],
                     transfer: None,
                     created_by: None,
+                    due_on: None,
+                    milestone: None,
                 },
             )
             .unwrap();
@@ -3672,6 +3771,8 @@ mod tests {
                     blocked_by: vec![],
                     transfer: None,
                     created_by: None,
+                    due_on: None,
+                    milestone: None,
                 },
             )
             .unwrap();
@@ -3729,6 +3830,8 @@ mod tests {
                     blocked_by: vec![],
                     transfer: None,
                     created_by: None,
+                    due_on: None,
+                    milestone: None,
                 },
             )
             .unwrap();
@@ -4059,6 +4162,8 @@ mod tests {
                     blocked_by: vec![],
                     transfer: None,
                     created_by: None,
+                    due_on: None,
+                    milestone: None,
                 },
             )
             .unwrap();
@@ -4207,6 +4312,8 @@ mod tests {
                     blocked_by: vec![],
                     transfer: None,
                     created_by: None,
+                    due_on: None,
+                    milestone: None,
                 },
             )
             .unwrap();
@@ -4567,6 +4674,179 @@ mod tests {
     }
 
     #[test]
+    fn hs2_a820c1_git_tickets_carry_milestones_and_due_dates_without_bumping_updated_at() {
+        let (_dir, provider) = git_provider();
+        let capabilities = provider.descriptor().capabilities;
+        assert!(capabilities.milestones && capabilities.due_dates);
+        let created = provider
+            .create(
+                ctx(Ulid::new(), "2026-11-01T00:00:00Z"),
+                ProviderDraft {
+                    milestone: Some(" 7K3M9P2QXA ".into()),
+                    due_on: Some("2026-12-04".into()),
+                    ..draft("linked", vec![])
+                },
+            )
+            .unwrap();
+        assert_eq!(created.milestone.as_deref(), Some("7K3M9P2QXA"));
+        assert_eq!(created.due_on.as_deref(), Some("2026-12-04"));
+        let patch = |milestone: Option<Option<&str>>, due: Option<Option<&str>>| ProviderPatch {
+            milestone: milestone.map(|value| value.map(str::to_string)),
+            due_on: due.map(|value| value.map(str::to_string)),
+            ..Default::default()
+        };
+        let relinked = provider
+            .update(
+                &created.id,
+                Timestamp::new("2026-11-02T00:00:00Z"),
+                patch(Some(Some("4N8R2T6VWX")), Some(None)),
+            )
+            .unwrap();
+        assert_eq!(relinked.milestone.as_deref(), Some("4N8R2T6VWX"));
+        assert_eq!(relinked.due_on, None);
+        assert_eq!(
+            relinked.updated_at, created.updated_at,
+            "not a content edit"
+        );
+        // Invalid values are refused before anything is written.
+        for bad in [
+            patch(Some(Some("Toolchain 2.0")), None),
+            patch(None, Some(Some("2026-02-30"))),
+        ] {
+            assert!(
+                provider
+                    .update(&created.id, Timestamp::new("2026-11-03T00:00:00Z"), bad)
+                    .is_err()
+            );
+        }
+        assert_eq!(
+            provider.get(&created.id).unwrap().milestone.as_deref(),
+            Some("4N8R2T6VWX")
+        );
+    }
+
+    #[test]
+    fn hs2_a820c1_a_provider_without_the_capabilities_refuses_before_writing() {
+        let (_dir, provider) = git_provider();
+        let existing = provider
+            .create(
+                ctx(Ulid::new(), "2026-11-01T00:00:00Z"),
+                draft("existing", vec![]),
+            )
+            .unwrap();
+        let mut capabilities = ProviderCapabilities::git();
+        capabilities.milestones = false;
+        capabilities.due_dates = false;
+        let provider = provider.with_test_capabilities(capabilities);
+        let refused = |result: Result<ApiTicket, ProviderError>, expected: &str| {
+            assert!(
+                matches!(
+                    &result,
+                    Err(ProviderError::Unsupported { capability, .. }) if *capability == expected
+                ),
+                "{expected}: {result:?}"
+            );
+        };
+        for clear in [Some("7K3M9P2QXA".to_string()), None] {
+            refused(
+                provider.update(
+                    &existing.id,
+                    Timestamp::new("2026-11-01T00:01:00Z"),
+                    ProviderPatch {
+                        milestone: Some(clear.clone()),
+                        ..Default::default()
+                    },
+                ),
+                "milestones",
+            );
+            refused(
+                provider.update(
+                    &existing.id,
+                    Timestamp::new("2026-11-01T00:01:00Z"),
+                    ProviderPatch {
+                        due_on: Some(clear.map(|_| "2026-12-04".to_string())),
+                        ..Default::default()
+                    },
+                ),
+                "due_dates",
+            );
+        }
+        refused(
+            provider.create(
+                ctx(Ulid::new(), "2026-11-01T00:02:00Z"),
+                ProviderDraft {
+                    milestone: Some("7K3M9P2QXA".into()),
+                    ..draft("refused", vec![])
+                },
+            ),
+            "milestones",
+        );
+        assert_eq!(provider.store.list_tickets().unwrap().len(), 1);
+        // An old descriptor without the fields reads as unsupported.
+        let mut json = serde_json::to_value(ProviderCapabilities::git()).unwrap();
+        let object = json.as_object_mut().unwrap();
+        object.remove("milestones");
+        object.remove("due_dates");
+        let old = serde_json::from_value::<ProviderCapabilities>(json).unwrap();
+        assert!(!old.milestones && !old.due_dates);
+    }
+
+    #[test]
+    fn hs2_a820c1_a_copy_carries_milestone_and_due_only_to_a_capable_destination() {
+        for capable in [true, false] {
+            let (_source_dir, source) = git_provider();
+            let destination_dir = tempfile::tempdir().unwrap();
+            let destination_store =
+                FsStore::init(destination_dir.path(), &StoreMetadata::new("DST")).unwrap();
+            let mut capabilities = ProviderCapabilities::git();
+            capabilities.milestones = capable;
+            capabilities.due_dates = capable;
+            let destination = GitProvider::new("destination", destination_store.clone())
+                .with_test_capabilities(capabilities);
+            let source_id = Ulid::new();
+            source
+                .create(
+                    ctx(source_id, "2026-11-01T00:00:00Z"),
+                    ProviderDraft {
+                        milestone: Some("7K3M9P2QXA".into()),
+                        due_on: Some("2026-12-04".into()),
+                        ..draft("linked", vec![])
+                    },
+                )
+                .unwrap();
+            let registry = ProviderRegistry::default();
+            registry.register(Arc::new(source)).unwrap();
+            registry.register(Arc::new(destination)).unwrap();
+            let outcome = copy_between(
+                &registry,
+                TicketRef {
+                    connection_id: "local".into(),
+                    native_id: source_id.to_string(),
+                },
+                "destination",
+                "milestone-copy",
+                Timestamp::new("2026-11-01T00:01:00Z"),
+            )
+            .unwrap();
+            let copied = destination_store.list_tickets().unwrap();
+            assert_eq!(
+                (copied[0].milestone.as_deref(), copied[0].due_on.as_deref()),
+                if capable {
+                    (Some("7K3M9P2QXA"), Some("2026-12-04"))
+                } else {
+                    (None, None)
+                }
+            );
+            let expected: Vec<String> = if capable {
+                Vec::new()
+            } else {
+                vec!["milestone".into(), "due_on".into()]
+            };
+            assert_eq!(outcome.dropped_fields, expected, "the drop is named");
+        }
+    }
+
+    #[test]
     fn transfer_rejects_source_fields_the_destination_cannot_represent() {
         let (_source_dir, source) = git_provider();
         let destination_dir = tempfile::tempdir().unwrap();
@@ -4592,6 +4872,8 @@ mod tests {
                     blocked_by: vec![],
                     transfer: None,
                     created_by: None,
+                    due_on: None,
+                    milestone: None,
                 },
             )
             .unwrap();
@@ -4654,6 +4936,8 @@ mod tests {
                     blocked_by: vec![],
                     transfer: None,
                     created_by: None,
+                    due_on: None,
+                    milestone: None,
                 },
             )
             .unwrap();
@@ -4749,6 +5033,8 @@ mod tests {
             blocked_by: vec![],
             transfer: None,
             created_by: None,
+            due_on: None,
+            milestone: None,
         };
         let request_and_decision = |provider: &GitProvider, id: Ulid| {
             provider
@@ -4848,6 +5134,8 @@ mod tests {
             blocked_by: vec![],
             transfer: None,
             created_by: None,
+            due_on: None,
+            milestone: None,
         };
         source
             .create(ctx(source_id, "2026-08-26T03:00:00Z"), draft())
@@ -5064,6 +5352,8 @@ mod tests {
                     blocked_by: vec![],
                     transfer: None,
                     created_by: Some(creator.clone()),
+                    due_on: None,
+                    milestone: None,
                 },
             )
             .unwrap();
@@ -5112,6 +5402,8 @@ mod tests {
                     blocked_by: vec![],
                     transfer: None,
                     created_by: None,
+                    due_on: None,
+                    milestone: None,
                 },
             )
             .unwrap();
@@ -5303,6 +5595,8 @@ mod tests {
                     blocked_by: vec![],
                     transfer: None,
                     created_by: None,
+                    due_on: None,
+                    milestone: None,
                 },
             )
             .unwrap();
@@ -5394,6 +5688,8 @@ mod tests {
                     blocked_by: vec![],
                     transfer: None,
                     created_by: None,
+                    due_on: None,
+                    milestone: None,
                 },
             )
             .unwrap();
@@ -5438,6 +5734,8 @@ mod tests {
                     blocked_by: vec![],
                     transfer: None,
                     created_by: None,
+                    due_on: None,
+                    milestone: None,
                 },
             )
             .unwrap();
@@ -5514,6 +5812,8 @@ mod tests {
                         blocked_by: vec![],
                         transfer: None,
                         created_by: None,
+                        due_on: None,
+                        milestone: None,
                     },
                 )
                 .unwrap();

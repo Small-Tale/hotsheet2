@@ -324,6 +324,17 @@ pub(crate) async fn create_checkout_ticket(
             groups::resolve_for_checkout(&state, &reference, req.group.take().map(Some))?.flatten();
         req.group_resolved = true;
     }
+    // HS2-A820C1: a milestone title resolves through the checkout's registry; an unknown
+    // title is refused (a link never creates a milestone).
+    if source.provider == "git" && req.milestone.is_some() {
+        req.milestone = crate::routes::milestones::resolve_link_for_checkout(
+            &state,
+            &reference,
+            req.milestone.take().map(Some),
+        )?
+        .flatten();
+        req.milestone_resolved = true;
+    }
     let mut ticket = if source.provider == "git" {
         let entry = state.hosted_source(&source).ok_or_else(|| {
             ApiError::new(
@@ -888,6 +899,15 @@ pub(crate) async fn update_checkout_ticket(
     if matches!(req.group, Some(Some(_))) && req.ai_feedback.is_none() {
         req.group = groups::resolve_for_checkout(&state, &reference, req.group.take())?;
         req.group_resolved = true;
+    }
+    // HS2-A820C1: the milestone resolves through the checkout's registry.
+    if matches!(req.milestone, Some(Some(_))) && req.ai_feedback.is_none() {
+        req.milestone = crate::routes::milestones::resolve_link_for_checkout(
+            &state,
+            &reference,
+            req.milestone.take(),
+        )?;
+        req.milestone_resolved = true;
     }
     let (mut api, ticket) = do_update_with_ticket(&state, &entry, &native_id, req, true)?;
     let feedback_delivery = if notify {

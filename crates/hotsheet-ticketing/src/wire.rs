@@ -67,6 +67,14 @@ pub struct ApiTicket {
     /// provider has no `groups` capability.
     #[serde(default)]
     pub group: Option<String>,
+    /// The ticket's milestone id (HS2-A820C1); omitted when unlinked or when the provider
+    /// has no `milestones` capability.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub milestone: Option<String>,
+    /// The ticket's own due date, `YYYY-MM-DD` (HS2-A820C1); omitted when unset or when the
+    /// provider has no `due_dates` capability.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub due_on: Option<String>,
     pub created_at: String,
     /// Who created the ticket (HS2-9FPHWY): `{"role":"human|ai|system","id":...}`. Omitted
     /// when unknown (older tickets, unspecified callers, and external providers).
@@ -300,6 +308,8 @@ impl ApiTicket {
             follow_up_link_error: None,
             blocked_reason: t.blocked_reason.clone(),
             group: t.group.clone(),
+            milestone: t.milestone.clone(),
+            due_on: t.due_on.clone(),
             created_at: t.created_at.as_str().to_string(),
             created_by: t.created_by.clone(),
             updated_at: t.updated_at.as_str().to_string(),
@@ -436,6 +446,12 @@ pub struct TicketRow {
     /// The ticket's group display name (HS2-PDSHNN); omitted when ungrouped.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub group: Option<String>,
+    /// The ticket's milestone id (HS2-A820C1); omitted when unlinked.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub milestone: Option<String>,
+    /// The ticket's own due date (HS2-A820C1); omitted when unset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub due_on: Option<String>,
     pub created_at: Option<String>,
     /// Who created the ticket (HS2-9FPHWY); omitted when unknown.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -504,6 +520,8 @@ impl From<&Ticket> for TicketRow {
             blocked_by: t.blocked_by.iter().map(|u| u.to_string()).collect(),
             blocked_reason: t.blocked_reason.clone(),
             group: t.group.clone(),
+            milestone: t.milestone.clone(),
+            due_on: t.due_on.clone(),
             created_at: Some(t.created_at.as_str().to_string()),
             created_by: t.created_by.clone(),
             updated_at: Some(t.updated_at.as_str().to_string()),
@@ -557,6 +575,8 @@ impl From<&ApiTicket> for TicketRow {
             blocked_by: t.blocked_by.clone(),
             blocked_reason: t.blocked_reason.clone(),
             group: t.group.clone(),
+            milestone: t.milestone.clone(),
+            due_on: t.due_on.clone(),
             created_at: Some(t.created_at.clone()),
             created_by: t.created_by.clone(),
             updated_at: Some(t.updated_at.clone()),
@@ -668,6 +688,7 @@ pub const PROJECTABLE_FIELDS: &[&str] = &[
     "created_at",
     "created_by",
     "details",
+    "due_on",
     "duplicate_of",
     "feedback_needed",
     "follow_up_link_error",
@@ -676,6 +697,7 @@ pub const PROJECTABLE_FIELDS: &[&str] = &[
     "id",
     "latest_confidence",
     "legacy_number",
+    "milestone",
     "moved_at",
     "moved_to_store",
     "native_id",

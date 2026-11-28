@@ -442,6 +442,7 @@ fn permission_requests_and_unconfigured_events_route_synchronously() {
         activity: None,
         assignment: None,
         turn: None,
+        milestone: None,
     };
     // No configuration: nothing is routed and nothing is written.
     assert!(
@@ -606,6 +607,7 @@ async fn a_claim_routed_after_its_release_still_reports_the_stop() {
         activity: None,
         assignment: None,
         turn: None,
+        milestone: None,
     };
     let events = [event("claimed"), event("updated"), event("released")];
     let state = h.state.clone();
@@ -669,6 +671,7 @@ async fn an_unrenewed_claim_reports_the_project_stalled() {
         activity: None,
         assignment: None,
         turn: None,
+        milestone: None,
     };
     let state = h.state.clone();
     let store = h.store_id.clone();
@@ -758,6 +761,7 @@ async fn rules_match_linked_checkouts_and_use_their_alias() {
             activity: None,
             assignment: None,
             turn: None,
+            milestone: None,
         };
         move || {
             hotsheet_server::notification_router::route_change_event(&state, &event);
@@ -814,6 +818,7 @@ fn claim_event(h: &Harness, kind: &str, id: &str) -> hotsheet_server::ChangeEven
         activity: None,
         assignment: None,
         turn: None,
+        milestone: None,
     }
 }
 

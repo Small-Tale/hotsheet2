@@ -62,7 +62,7 @@ fn hs2_9pyncn_round_trip_writes_the_documented_layout_in_key_order() {
     let wire = serde_json::to_value(&open).unwrap();
     assert_eq!(
         wire,
-        serde_json::json!({"id": open.id, "title": "Bare", "state": "open", "duplicate": false})
+        serde_json::json!({"id": open.id, "title": "Bare", "state": "open", "duplicate": false, "named": true})
     );
 }
 

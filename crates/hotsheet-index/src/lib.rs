@@ -22,8 +22,9 @@ use sha2::{Digest, Sha256};
 /// writing the old projection (21: explicit note kinds, HS2-4ZFB8K; 22: the ticket
 /// creator column, HS2-9FPHWY; 23: group columns, HS2-PDSHNN; 24: `group_key` holds a group
 /// id or a legacy name key, HS2-9KZSD4; 25: the claim host column, HS2-DQJPW0; 26: notes
-/// infer feedback only from a line-start marker, HS2-RG6Z9H).
-const SCHEMA_VERSION: i64 = 26;
+/// infer feedback only from a line-start marker, HS2-RG6Z9H; 27: the milestone link and own
+/// due date columns, HS2-A820C1).
+const SCHEMA_VERSION: i64 = 27;
 
 /// `index_meta` key naming the repository that recorded `head` (HS2-ABV2J3).
 const GIT_OWNER_META: &str = "git_owner";
@@ -82,6 +83,8 @@ CREATE TABLE tickets (
   blocked_reason  TEXT,
   group_name      TEXT,
   group_key       TEXT,
+  milestone_id    TEXT,
+  due_on          TEXT,
   legacy_number   TEXT,
   created_by_json TEXT,
   attachment_names_json TEXT NOT NULL DEFAULT '[]',
@@ -96,6 +99,8 @@ CREATE TABLE tickets (
 CREATE INDEX idx_tickets_status ON tickets(store_id, status);
 CREATE INDEX idx_tickets_group ON tickets(store_id, group_key)
   WHERE group_key IS NOT NULL;
+CREATE INDEX idx_tickets_milestone ON tickets(store_id, milestone_id)
+  WHERE milestone_id IS NOT NULL;
 CREATE INDEX idx_tickets_duplicate_target ON tickets(store_id, duplicate_of)
   WHERE close_reason = 'duplicate';
 CREATE TABLE phase_spans (store_id TEXT NOT NULL, ticket_id TEXT NOT NULL, phase TEXT NOT NULL, duration_ms INTEGER NOT NULL);
@@ -508,8 +513,8 @@ impl Index {
             "INSERT INTO tickets(store_id,id,slug,title,details,category,priority,priority_rank,\
              status,status_rank,close_reason,duplicate_of,closed_at,up_next,tags_json,blocked_by_json,blocked_reason,\
              attachment_names_json,created_at,updated_at,completed_at,verified_at,claimed_by,claim_lease_expires_at,\
-             worker_label,claim_count,file_path,content_hash,feedback_needed,has_media_annotation,legacy_number,claim_eta_at,claim_started_at,latest_confidence,started_phase,started_phase_since,created_by_json,group_name,group_key,claim_host) \
-             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32,?33,?34,?35,?36,?37,?38,?39,?40) \
+             worker_label,claim_count,file_path,content_hash,feedback_needed,has_media_annotation,legacy_number,claim_eta_at,claim_started_at,latest_confidence,started_phase,started_phase_since,created_by_json,group_name,group_key,claim_host,milestone_id,due_on) \
+             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32,?33,?34,?35,?36,?37,?38,?39,?40,?41,?42) \
              ON CONFLICT(store_id,id) DO UPDATE SET \
              slug=excluded.slug,title=excluded.title,details=excluded.details,category=excluded.category,\
              priority=excluded.priority,priority_rank=excluded.priority_rank,status=excluded.status,\
@@ -523,7 +528,8 @@ impl Index {
              legacy_number=excluded.legacy_number,claim_eta_at=excluded.claim_eta_at,claim_started_at=excluded.claim_started_at,\
              latest_confidence=excluded.latest_confidence,started_phase=excluded.started_phase,\
              started_phase_since=excluded.started_phase_since,created_by_json=excluded.created_by_json,\
-             group_name=excluded.group_name,group_key=excluded.group_key,claim_host=excluded.claim_host",
+             group_name=excluded.group_name,group_key=excluded.group_key,claim_host=excluded.claim_host,\
+             milestone_id=excluded.milestone_id,due_on=excluded.due_on",
             params![
                 self.store_id, id, t.slug, t.title, t.details, t.category,
                 enum_str(&t.priority), priority_rank(t.priority) as i64,
@@ -542,6 +548,7 @@ impl Index {
                 t.created_by.as_ref().and_then(|actor| serde_json::to_string(actor).ok()),
                 t.group, t.group.as_deref().map(hotsheet_model::group_value_key),
                 t.claim_host,
+                t.milestone, t.due_on,
             ],
         )?;
 
@@ -1009,6 +1016,36 @@ impl Index {
             .collect())
     }
 
+    /// The milestone id the index holds for one ticket (HS2-A820C1): `None` when the ticket
+    /// is not indexed or names none. Read before a re-index so a change event can name the
+    /// old and new milestone.
+    pub fn milestone_id(&self, id: &Ulid) -> Result<Option<String>, IndexError> {
+        Ok(self
+            .conn
+            .query_row(
+                "SELECT milestone_id FROM tickets WHERE store_id=?1 AND id=?2",
+                params![self.store_id, id.to_string()],
+                |r| r.get::<_, Option<String>>(0),
+            )
+            .optional()?
+            .flatten())
+    }
+
+    /// Every ticket of this store that names a milestone (HS2-A820C1, docs/38 §38.4), in
+    /// every status: live, archived, Trash, and `moved` tombstones, so the roll-up can
+    /// count dropped members and skip tombstones without a store walk.
+    pub fn milestone_members(&self) -> Result<Vec<TicketRow>, IndexError> {
+        let mut rows = Vec::new();
+        for collection in [TicketCollection::All, TicketCollection::Trash] {
+            rows.extend(self.query(&TicketQuery {
+                collection: Some(collection),
+                has_milestone: Some(true),
+                ..TicketQuery::default()
+            })?);
+        }
+        Ok(rows)
+    }
+
     /// Run a structured + full-text query, returning list rows.
     pub fn query(&self, q: &TicketQuery) -> Result<Vec<TicketRow>, IndexError> {
         let mut wheres = vec!["t.store_id = ?".to_string()];
@@ -1150,6 +1187,45 @@ impl Index {
             } else {
                 "t.group_key IS NULL".into()
             });
+        }
+        // Milestone filters (HS2-A820C1): the caller resolved titles to registry ids.
+        if let Some(ids) = &q.milestone_ids {
+            if ids.is_empty() {
+                wheres.push("0".into());
+            } else {
+                wheres.push(format!(
+                    "t.milestone_id IN ({})",
+                    vec!["?"; ids.len()].join(",")
+                ));
+                for id in ids {
+                    args.push(Box::new(id.clone()));
+                }
+            }
+        }
+        if let Some(want) = q.has_milestone {
+            wheres.push(if want {
+                "t.milestone_id IS NOT NULL".into()
+            } else {
+                "t.milestone_id IS NULL".into()
+            });
+        }
+        // Effective due on or before a date (docs/38 §38.3): the own date, which must be
+        // a real `YYYY-MM-DD` date, or an open milestone the caller found due by then.
+        if let Some(date) = &q.due_before {
+            let mut clause = "(t.due_on GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' \
+                 AND date(t.due_on) = t.due_on AND t.due_on <= ?)"
+                .to_string();
+            args.push(Box::new(date.clone()));
+            if !q.due_milestone_ids.is_empty() {
+                clause = format!(
+                    "({clause} OR t.milestone_id IN ({}))",
+                    vec!["?"; q.due_milestone_ids.len()].join(",")
+                );
+                for id in &q.due_milestone_ids {
+                    args.push(Box::new(id.clone()));
+                }
+            }
+            wheres.push(clause);
         }
         // Date-range filters (HS2-T84F9F) — lexical compare on RFC3339 timestamps.
         for (col, val, op) in [
@@ -1358,7 +1434,7 @@ impl Index {
              t.closed_at,t.close_reason,t.duplicate_of,t.claimed_by,t.claim_lease_expires_at,t.worker_label,t.claim_count,\
              t.feedback_needed,t.legacy_number,t.claim_eta_at,t.claim_started_at,t.latest_confidence,t.started_phase,t.started_phase_since,\
              (t.feedback_needed = 1 OR EXISTS (SELECT 1 FROM reviews WHERE store_id=t.store_id AND ticket_id=t.id)),\
-             t.created_by_json,t.group_name,t.claim_host \
+             t.created_by_json,t.group_name,t.claim_host,t.milestone_id,t.due_on \
              FROM {from} WHERE {} ORDER BY {order_clause}{limit}",
             wheres.join(" AND ")
         );
@@ -1387,6 +1463,8 @@ impl Index {
                     blocked_by: json_vec(r.get::<_, String>(9)?),
                     blocked_reason: r.get(10)?,
                     group: r.get(31)?,
+                    milestone: r.get(33)?,
+                    due_on: r.get(34)?,
                     created_at: r.get(11)?,
                     created_by: r
                         .get::<_, Option<String>>(30)?

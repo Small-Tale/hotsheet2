@@ -181,6 +181,9 @@ fn merge_checkout_page(
         params.group_ids =
             crate::routes::groups::filter_ids_for_checkout(state, reference, &input)?;
     }
+    // HS2-A820C1: a milestone title matches the ids the registry gives it, and a due
+    // bound also matches the members of open milestones due by then.
+    crate::routes::milestones::resolve_list_filters(state, reference, &mut params)?;
     let params = &params;
     let checkout = state
         .checkout_registry
@@ -578,6 +581,9 @@ pub(crate) async fn create_corrupt_ticket_repair(
                 follow_up_to: None,
                 group: None,
                 group_resolved: false,
+                milestone: None,
+                milestone_resolved: false,
+                due_on: None,
                 actor: None,
             },
         )?;

@@ -2483,8 +2483,9 @@ fn derived_feedback_projection_is_pinned_to_index_schema_version_hs2_4zfb8k() {
         (SCHEMA_VERSION, projection),
         // 23: the group columns (HS2-PDSHNN); 24: group ids (HS2-9KZSD4); 25: the claim host
         // column (HS2-DQJPW0); 26: notes infer feedback only from a line-start marker, so the
-        // mid-line note no longer needs feedback (HS2-RG6Z9H).
-        (26, vec![true, false, true, false, true, false]),
+        // mid-line note no longer needs feedback (HS2-RG6Z9H); 27: the milestone and due
+        // date columns, projection unchanged (HS2-A820C1).
+        (27, vec![true, false, true, false, true, false]),
         "feedback_needed derivation changed: bump the index SCHEMA_VERSION (HS2-4ZFB8K)"
     );
 }
@@ -2747,4 +2748,216 @@ fn hs2_pdshnn_an_index_from_before_groups_is_rebuilt_with_the_column() {
     assert_eq!(index_ids(&rows), HashSet::from([id.to_string()]));
     assert_eq!(rows[0].group.as_deref(), Some("Sprint"));
     assert_eq!(reopened.group_members().unwrap().len(), 1);
+}
+
+/// HS2-A820C1: the milestone link and own due date are indexed, filtered like the file
+/// scan, and listed by `milestone_members` in every status, through link, relink, clear,
+/// trash, restore, and a move tombstone.
+#[test]
+fn hs2_a820c1_milestone_columns_filters_and_members_follow_the_files() {
+    let (_d, store, ix) = seeded();
+    let (a, b, c) = (
+        ulid("01ARZ3NDEKTSV4RRFFQ69G5FB0"),
+        ulid("01ARZ3NDEKTSV4RRFFQ69G5FB1"),
+        ulid("01ARZ3NDEKTSV4RRFFQ69G5FB2"),
+    );
+    let patch = |id: &Ulid, patch: TicketPatch| {
+        let t = ops::update(&store, id, Timestamp::new("2026-11-01T00:00:00Z"), patch).unwrap();
+        ix.upsert(&t, "p", &format!("h-{}", t.updated_at.as_str()))
+            .unwrap();
+        // Reindex from the file too, so the projection is the one a rebuild produces.
+        t
+    };
+    let link = |id: &Ulid, milestone: Option<&str>, due: Option<&str>| {
+        patch(
+            id,
+            TicketPatch {
+                milestone: Some(milestone.map(str::to_string)),
+                due_on: Some(due.map(str::to_string)),
+                ..Default::default()
+            },
+        )
+    };
+    assert!(ix.milestone_members().unwrap().is_empty(), "empty first");
+    link(&a, Some("7K3M9P2QXA"), Some("2026-12-04"));
+    link(&b, Some("4N8R2T6VWX"), None);
+    // c is completed and linked: still a member (finished).
+    link(&c, Some("7K3M9P2QXA"), Some("2026-11-20"));
+    ix.rebuild_from_store(&store).unwrap();
+
+    let rows = |q: TicketQuery| index_ids(&ix.query(&q).unwrap());
+    let check = |q: TicketQuery, expected: &[&Ulid]| {
+        let expected: HashSet<String> = expected.iter().map(|id| id.to_string()).collect();
+        assert_eq!(rows(q.clone()), expected, "{q:?}");
+        assert_eq!(ops_ids(&store, &q), expected, "file scan agrees: {q:?}");
+    };
+    check(
+        TicketQuery {
+            milestone_ids: Some(vec!["7K3M9P2QXA".into()]),
+            ..Default::default()
+        },
+        &[&a, &c],
+    );
+    check(
+        TicketQuery {
+            milestone_ids: Some(vec![]),
+            ..Default::default()
+        },
+        &[],
+    );
+    check(
+        TicketQuery {
+            has_milestone: Some(false),
+            ..Default::default()
+        },
+        &[],
+    );
+    check(
+        TicketQuery {
+            has_milestone: Some(true),
+            ..Default::default()
+        },
+        &[&a, &b, &c],
+    );
+    // Effective due on or before a date: own dates, plus an open milestone's date.
+    check(
+        TicketQuery {
+            due_before: Some("2026-11-30".into()),
+            ..Default::default()
+        },
+        &[&c],
+    );
+    check(
+        TicketQuery {
+            due_before: Some("2026-12-04".into()),
+            ..Default::default()
+        },
+        &[&a, &c],
+    );
+    check(
+        TicketQuery {
+            due_before: Some("2026-11-30".into()),
+            due_milestone_ids: vec!["4N8R2T6VWX".into()],
+            ..Default::default()
+        },
+        &[&b, &c],
+    );
+
+    let by_id = |id: &Ulid| {
+        ix.query(&TicketQuery::default())
+            .unwrap()
+            .into_iter()
+            .find(|row| row.id == id.to_string())
+    };
+    let row = by_id(&a).unwrap();
+    assert_eq!(
+        (row.milestone.as_deref(), row.due_on.as_deref()),
+        (Some("7K3M9P2QXA"), Some("2026-12-04"))
+    );
+
+    // Relink, then clear: the column follows; a cleared row omits both keys.
+    link(&a, Some("4N8R2T6VWX"), None);
+    link(&a, None, None);
+    let row = serde_json::to_value(by_id(&a).unwrap()).unwrap();
+    assert!(row.get("milestone").is_none() && row.get("due_on").is_none());
+
+    // Trash and restore: a trashed member is still listed (counted as dropped).
+    patch(
+        &b,
+        TicketPatch {
+            status: Some(Status::Deleted),
+            ..Default::default()
+        },
+    );
+    let members = |ix: &Index| {
+        let mut ids: Vec<(String, Option<String>)> = ix
+            .milestone_members()
+            .unwrap()
+            .into_iter()
+            .map(|row| (row.id, row.status))
+            .collect();
+        ids.sort();
+        ids
+    };
+    assert_eq!(
+        members(&ix),
+        vec![
+            (b.to_string(), Some("deleted".into())),
+            (c.to_string(), Some("completed".into())),
+        ]
+    );
+    patch(
+        &b,
+        TicketPatch {
+            status: Some(Status::NotStarted),
+            ..Default::default()
+        },
+    );
+    assert_eq!(members(&ix)[0], (b.to_string(), Some("not_started".into())));
+
+    // A hand-edited due date that is not a date never matches a due filter.
+    let mut odd = store.read_ticket(&a).unwrap();
+    odd.due_on = Some("2026-02-30".into());
+    store.write_ticket(&odd).unwrap();
+    ix.rebuild_from_store(&store).unwrap();
+    check(
+        TicketQuery {
+            due_before: Some("2099-01-01".into()),
+            ..Default::default()
+        },
+        &[&c],
+    );
+}
+
+/// HS2-A820C1: an index file from before the milestone columns (schema 26) is rebuilt, so
+/// the milestone filter and members work without a manual step, and no ticket file is
+/// rewritten.
+#[test]
+fn hs2_a820c1_an_index_from_before_milestones_is_rebuilt_with_the_columns() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init(dir.path().join("store"), &StoreMetadata::new("HS")).unwrap();
+    let id = ulid("01ARZ3NDEKTSV4RRFFQ69G5FB0");
+    ops::create(
+        &store,
+        id,
+        "HS",
+        Timestamp::new("2026-11-01T00:00:00Z"),
+        NewTicket {
+            title: "linked".into(),
+            milestone: Some("7K3M9P2QXA".into()),
+            due_on: Some("2026-12-04".into()),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let file = store.ticket_path(&id);
+    let before = std::fs::read(&file).unwrap();
+    let db = dir.path().join("i.sqlite");
+    drop(Index::open_reconciled(&db, &store).unwrap());
+
+    // Recreate the previous generation's shape: no milestone columns, version 26.
+    let conn = rusqlite::Connection::open(&db).unwrap();
+    conn.execute_batch(
+        "DROP INDEX idx_tickets_milestone; ALTER TABLE tickets DROP COLUMN milestone_id; \
+         ALTER TABLE tickets DROP COLUMN due_on; \
+         UPDATE index_meta SET value='26' WHERE key='schema_version';",
+    )
+    .unwrap();
+    drop(conn);
+
+    let reopened = Index::open_reconciled(&db, &store).unwrap();
+    let rows = reopened
+        .query(&TicketQuery {
+            milestone_ids: Some(vec!["7K3M9P2QXA".into()]),
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(index_ids(&rows), HashSet::from([id.to_string()]));
+    assert_eq!(rows[0].due_on.as_deref(), Some("2026-12-04"));
+    assert_eq!(reopened.milestone_members().unwrap().len(), 1);
+    assert_eq!(
+        std::fs::read(&file).unwrap(),
+        before,
+        "no ticket file rewritten"
+    );
 }

@@ -1139,6 +1139,7 @@ pub(crate) fn repository_change_event(checkout_id: &str) -> ChangeEvent {
         activity: None,
         assignment: None,
         turn: None,
+        milestone: None,
     }
 }
 
@@ -1158,6 +1159,7 @@ pub(crate) fn group_registry_change_event(checkout_id: &str) -> ChangeEvent {
         activity: None,
         assignment: None,
         turn: None,
+        milestone: None,
     }
 }
 
@@ -1237,6 +1239,7 @@ pub(crate) fn milestones_change_event(checkout_id: &str) -> ChangeEvent {
         activity: None,
         assignment: None,
         turn: None,
+        milestone: None,
     }
 }
 
@@ -2114,6 +2117,7 @@ pub(crate) fn watch_loop(
                                 activity: None,
                                 assignment: None,
                                 turn: None,
+                                milestone: None,
                             },
                         );
                     }
@@ -2458,7 +2462,10 @@ pub(crate) fn handle_path_change(target: &WatchTarget, path: &FsPath) -> bool {
     };
     let index = &target.entry.index;
     let repairs = &target.index_repairs;
-    let emit = |kind: &str, id: String, slug: String| {
+    let emit_with = |kind: &str,
+                     id: String,
+                     slug: String,
+                     milestone: Option<crate::events::MilestoneChange>| {
         emit_change(
             &target.event_log,
             &target.events,
@@ -2473,9 +2480,11 @@ pub(crate) fn handle_path_change(target: &WatchTarget, path: &FsPath) -> bool {
                 activity: None,
                 assignment: None,
                 turn: None,
+                milestone,
             },
         );
     };
+    let emit = |kind: &str, id: String, slug: String| emit_with(kind, id, slug, None);
 
     if !path.exists() {
         let local_echo = target.local_write_hashes.with_lock(|writes| {
@@ -2527,10 +2536,18 @@ pub(crate) fn handle_path_change(target: &WatchTarget, path: &FsPath) -> bool {
         return true;
     };
     let file = path.display().to_string();
+    // HS2-A820C1: an external edit (CLI, pull) that moves the ticket between milestones
+    // names both, as a server write does.
+    let previous_milestone = index.with_lock(|index| index.milestone_id(&ticket.id).ok().flatten());
     repairs.write_or_schedule(&target.entry, &target.store_id, ticket.id, |index| {
         index.upsert(&ticket, &file, &hash)
     });
-    emit("changed", ticket.id.to_string(), ticket.slug.clone());
+    emit_with(
+        "changed",
+        ticket.id.to_string(),
+        ticket.slug.clone(),
+        crate::events::MilestoneChange::between(previous_milestone, ticket.milestone.clone()),
+    );
     true
 }
 

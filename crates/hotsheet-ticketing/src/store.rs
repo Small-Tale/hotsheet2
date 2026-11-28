@@ -260,6 +260,9 @@ pub enum StoreError {
     /// with no project group registry (HS2-9KZSD4).
     #[error("group names need a project checkout with a group registry; '{0}' is not a group id")]
     GroupRegistryRequired(String),
+    /// A requested ticket milestone or due date failed validation (HS2-A820C1).
+    #[error(transparent)]
+    MilestoneLink(#[from] hotsheet_model::MilestoneLinkError),
     #[error(transparent)]
     ImageCrop(#[from] crate::image_crop::ImageCropError),
     /// An attachment filename is not one safe path component, so it cannot be joined

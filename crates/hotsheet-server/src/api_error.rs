@@ -152,6 +152,10 @@ impl From<StoreError> for ApiError {
             )
             .with_code(UNSAFE_ATTACHMENT_FILENAME_CODE);
         }
+        // HS2-A820C1: an invalid milestone id or due date keeps its stable code.
+        if let StoreError::MilestoneLink(error) = &e {
+            return ApiError::new(StatusCode::BAD_REQUEST, e.to_string()).with_code(error.code());
+        }
         let status = match &e {
             StoreError::InvalidAnnotations(_)
             | StoreError::InvalidFeedbackResponse(_)

@@ -896,6 +896,34 @@ tombstone is never a member. The full behavior is in
   drops it; a legacy name is not carried
   ([16](16-external-sync-interface.md) §16.4).
 
+### 2.7.2 Milestone links and due dates (HS2-A820C1)
+
+A ticket may name one **milestone** in its optional `milestone` frontmatter field and carry
+its own **due date** in `due_on` ([17](17-ticket-file-format.md) §17.2, §17.4). Milestones
+are not tickets: they are files in the project's milestone registry
+(`<checkout>/.hotsheet2/milestones/<id>.json`, [38](38-milestones.md) §38.2), committed and
+published like the group registry.
+
+- **Resolution.** A checkout route, the CLI inside a linked checkout, and the MCP checkout
+  paths accept a milestone id or title and resolve it through the registry
+  (`hotsheet_ticketing::milestone_project::resolve_link`); an unknown title is refused
+  (`milestone_not_found`), so a link never creates a milestone, and a duplicated title
+  needs the id (`milestone_ambiguous`). A store or connection without a checkout accepts
+  only ids (`milestone_registry_required`).
+- **Unknown ids are kept.** An id the reading project's registry does not name is listed
+  as `Milestone <id>` with `state: unknown` and its members, never dropped.
+- **Not a content edit.** Like `group`, a milestone or due-date change does not bump
+  `updated_at`.
+- **Merge of clones.** Both are last-writer-wins scalars in the semantic merge.
+- **Capabilities.** The Git provider reports `milestones` and `due_dates`; GitHub, GitLab
+  and Jira report neither and refuse such a write before any request until HS2-6BKPP6.
+  A copy or move carries both only to a destination with the capability, and names any
+  dropped field in the outcome's `dropped_fields` ([16](16-external-sync-interface.md)
+  §16.4).
+- **Member rewrites.** Delete Milestone… clears the link from every member and Move Open
+  Tickets to… relinks the unfinished ones, each as one locked write and one commit per
+  store (`FsStore::write_ticket_changes_committing`).
+
 ## 2.8 Where a project's default store lives
 
 Two supported shapes — **both are git repos** (§2.1):

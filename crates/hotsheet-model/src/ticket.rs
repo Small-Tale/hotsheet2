@@ -849,6 +849,23 @@ pub struct Ticket {
         deserialize_with = "crate::group::deserialize_group"
     )]
     pub group: Option<String>,
+    /// The one milestone this ticket belongs to (HS2-A820C1, docs/38 §38.2): a registry id.
+    /// An id the reading project's registry does not name is kept and read as unknown.
+    /// Organization, not content: changing it does not bump `updated_at`.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::milestone_link::deserialize_scalar_text"
+    )]
+    pub milestone: Option<String>,
+    /// The ticket's own due date, `YYYY-MM-DD` (HS2-A820C1, docs/38 §38.3). Its effective
+    /// due is the earlier of this and its open milestone's date. Does not bump `updated_at`.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::milestone_link::deserialize_scalar_text"
+    )]
+    pub due_on: Option<String>,
     pub created_at: Timestamp,
     /// Who created the ticket (HS2-9FPHWY): the acting role and optional stable id of the
     /// creating mutation, in the note-authorship vocabulary. Write-once; absent on tickets

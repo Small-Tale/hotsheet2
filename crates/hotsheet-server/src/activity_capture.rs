@@ -30,6 +30,7 @@ impl AppState {
                 activity: Some(event.clone()),
                 assignment: None,
                 turn: None,
+                milestone: None,
             });
             self.maybe_distill_activity(store, &event);
         }

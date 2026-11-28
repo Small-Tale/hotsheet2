@@ -111,6 +111,8 @@ pub fn ensure_ticket(
                 tags,
                 up_next: true,
                 blocked_by: vec![],
+                due_on: None,
+                milestone: None,
             },
         )?;
         Ok(ticket.slug)
@@ -148,6 +150,8 @@ pub fn ensure_provider_ticket(
             blocked_by: vec![],
             transfer: None,
             created_by: None,
+            due_on: None,
+            milestone: None,
         },
     )?;
     Ok(ticket.slug)

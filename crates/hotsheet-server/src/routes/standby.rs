@@ -57,6 +57,7 @@ fn emit_changed(state: &AppState) {
         assignment: None,
         turn: None,
         live: None,
+        milestone: None,
     });
 }
 

@@ -311,6 +311,7 @@ fn note_strategy_change(state: &AppState, checkout_id: &str) {
         activity: None,
         assignment: None,
         turn: None,
+        milestone: None,
     });
 }
 

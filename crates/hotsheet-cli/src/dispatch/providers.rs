@@ -87,6 +87,8 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
                 transfer: None,
                 // The creating actor is recorded as the ticket's creator (HS2-9FPHWY).
                 created_by: hotsheet_ticketing::actor::note_actor(actor),
+                due_on: None,
+                milestone: None,
             },
         ),
         Cmd::ProviderEdit {

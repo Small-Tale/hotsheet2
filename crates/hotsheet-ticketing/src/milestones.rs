@@ -192,6 +192,9 @@ pub enum MilestoneState {
     Open,
     Closed,
     Conflicted,
+    /// Never stored: an id that tickets name but the project's registry does not (another
+    /// project's store, a registry not yet pulled, a deleted milestone; HS2-A820C1).
+    Unknown,
 }
 
 /// Why a milestone was closed.
@@ -243,6 +246,27 @@ pub struct Milestone {
     /// While conflicted: the repository-relative file and what is wrong with it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub conflict: Option<MilestoneConflict>,
+    /// Whether the project's registry names this id. `false` for an unknown id that
+    /// tickets name, listed as `Milestone <id>` with `state: unknown` (HS2-A820C1).
+    pub named: bool,
+}
+
+impl Milestone {
+    /// The placeholder for an id the registry does not name (docs/38 §38.2 "Unknown ids").
+    pub fn unknown(id: &str) -> Self {
+        Self {
+            id: id.to_string(),
+            title: milestone_placeholder_title(id),
+            description: None,
+            due_on: None,
+            state: MilestoneState::Unknown,
+            closed_reason: None,
+            closed_at: None,
+            duplicate: false,
+            conflict: None,
+            named: false,
+        }
+    }
 }
 
 /// Why a milestone file reads as conflicted.
@@ -473,6 +497,7 @@ impl MilestoneRegistry {
                     file: milestone_file(id),
                     detail,
                 }),
+                named: true,
             },
             Read::Entry(entry) => Milestone {
                 id: id.to_string(),
@@ -488,6 +513,7 @@ impl MilestoneRegistry {
                 closed_at: entry.closed.and_then(|(_, at)| at),
                 duplicate: false,
                 conflict: None,
+                named: true,
             },
         })
     }
@@ -816,44 +842,6 @@ impl MilestoneRegistry {
         }
         Ok(removed)
     }
-}
-
-/// A project's milestone list as every surface returns it (`GET
-/// /checkouts/{reference}/milestones`, `hotsheet-cli milestones --json`, MCP
-/// `hotsheet_milestones` `list`).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct MilestoneListing {
-    /// Whether a project registry was read. Without a checkout there is none, and nothing
-    /// is listed until ticket links name ids (HS2-A820C1).
-    pub registry: bool,
-    pub milestones: Vec<Milestone>,
-    /// How the registry was last committed and published; absent without a registry or
-    /// before the first attempt.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub registry_sync: Option<RegistrySyncStatus>,
-}
-
-/// List `registry`'s milestones: open and conflicted ones, and with `all` closed ones too.
-pub fn listing(
-    registry: Option<&MilestoneRegistry>,
-    all: bool,
-) -> Result<MilestoneListing, MilestoneError> {
-    let Some(registry) = registry else {
-        return Ok(MilestoneListing {
-            registry: false,
-            milestones: Vec::new(),
-            registry_sync: None,
-        });
-    };
-    Ok(MilestoneListing {
-        registry: true,
-        milestones: registry
-            .list()?
-            .into_iter()
-            .filter(|milestone| all || milestone.state != MilestoneState::Closed)
-            .collect(),
-        registry_sync: registry.sync_status(),
-    })
 }
 
 #[cfg(test)]

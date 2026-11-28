@@ -1321,6 +1321,7 @@ pub(crate) fn emit_event(state: &AppState, emission: &Emission) {
         assignment: None,
         turn: None,
         live: None,
+        milestone: None,
     });
 }
 

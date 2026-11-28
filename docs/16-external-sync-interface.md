@@ -124,6 +124,20 @@ list filters are answered for them as for any ungrouped ticket. A queued write-b
 edit cannot carry `group`. A cross-provider copy drops the group when the destination
 lacks the capability, and carries only an id, never a legacy name.
 
+### Milestone links and due dates (HS2-A820C1)
+
+`milestones` and `due_dates` (each default `false` when a stored descriptor predates it)
+mean tickets carry, change and are filtered by a project milestone id, and carry their own
+`due_on` ([02](02-ticket-storage.md) §2.7.2, [38](38-milestones.md) §38.5). The
+Markdown/Git provider reports both. GitHub, GitLab and Jira report neither until
+HS2-6BKPP6: a create or update carrying `milestone` (an id or an explicit clear) fails with
+`provider connection '<id>' does not support 'milestones'`, and one carrying `due_on` with
+`... 'due_dates'`, before any request reaches the tracker; their tickets read with neither,
+and the `milestone` / `has_milestone` / `due_before` list filters are answered for them as
+for unlinked tickets. A queued write-behind edit cannot carry either. A cross-provider copy
+or move carries each only to a destination with the capability, and otherwise drops it and
+names it in the outcome's `dropped_fields`.
+
 **Up Next on GitLab and Jira (HS2-K9H38S).** Only GitHub maps Up Next (its provider-owned
 `up-next` label, below). GitLab and Jira report `up_next: false`: a create or update that
 asks to queue a ticket fails with `provider connection '<id>' does not support 'up_next'`

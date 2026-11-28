@@ -254,6 +254,13 @@ impl AppState {
             let path = entry.store.ticket_path(&t.id).display().to_string();
             let hash = hash_bytes(text.as_bytes());
             let index_started = Instant::now();
+            // HS2-A820C1: the indexed link before this write, so the event names the move.
+            let previous_milestone = entry
+                .index
+                .lock_or_recover()
+                .milestone_id(&t.id)
+                .ok()
+                .flatten();
             let indexed = self.index_write(entry, |index| index.upsert(t, &path, &hash));
             index_time += index_started.elapsed();
             match indexed {
@@ -280,6 +287,7 @@ impl AppState {
                 activity: None,
                 assignment: None,
                 turn: None,
+                milestone: MilestoneChange::between(previous_milestone, t.milestone.clone()),
             });
             event_time += event_started.elapsed();
         }
@@ -320,6 +328,7 @@ impl AppState {
             activity: None,
             assignment: None,
             turn: None,
+            milestone: None,
         });
         entry.freshness.request_verification_if_stale();
         self.schedule_store_worklists(entry);
@@ -375,6 +384,7 @@ impl AppState {
                 activity: None,
                 assignment: None,
                 turn: None,
+                milestone: None,
             });
         }
     }
@@ -408,6 +418,7 @@ impl AppState {
                 activity: None,
                 assignment: None,
                 turn: None,
+                milestone: None,
             });
         }
     }
@@ -497,6 +508,7 @@ impl AppState {
                 activity: None,
                 assignment: None,
                 turn: None,
+                milestone: None,
             });
         }
     }
@@ -518,6 +530,7 @@ impl AppState {
             activity: None,
             assignment: None,
             turn: None,
+            milestone: None,
         });
     }
 
@@ -533,6 +546,7 @@ impl AppState {
             activity: None,
             assignment: None,
             turn: None,
+            milestone: None,
         });
     }
 
@@ -602,6 +616,7 @@ impl AppState {
             activity: None,
             assignment: None,
             turn: Some(envelope),
+            milestone: None,
         });
     }
 }
@@ -634,6 +649,25 @@ pub struct ChangeEvent {
     /// For `kind == "live_state"` (HS2-JTTQMY): the store's complete live snapshot.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub live: Option<Box<crate::live_state::LiveStoreState>>,
+    /// For a ticket change that moved it between milestones (HS2-A820C1, docs/38 §38.6
+    /// "Live updates"): the old and new milestone id, so a client holding either roll-up
+    /// refetches it once. Absent when the link did not change.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub milestone: Option<MilestoneChange>,
+}
+
+/// A ticket's milestone link before and after one change; `null` is no milestone.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct MilestoneChange {
+    pub from: Option<String>,
+    pub to: Option<String>,
+}
+
+impl MilestoneChange {
+    /// The change from `from` to `to`, or `None` when the link is the same.
+    pub fn between(from: Option<String>, to: Option<String>) -> Option<Self> {
+        (from != to).then_some(Self { from, to })
+    }
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -714,6 +748,7 @@ mod event_log_tests {
             activity: None,
             assignment: None,
             turn: None,
+            milestone: None,
         }
     }
 
@@ -1026,6 +1061,60 @@ mod index_repair_tests {
         assert_eq!(state.index_repairs.faults.load(Ordering::SeqCst), 0);
         drop(tx);
         worker.join().unwrap();
+    }
+
+    /// HS2-A820C1: an external edit the store watcher picks up (a CLI write, a pull) names
+    /// the ticket's old and new milestone, as a server write does; a content edit and a
+    /// repeat name none.
+    #[test]
+    fn hs2_a820c1_watcher_events_name_milestone_moves() {
+        let (_root, store, state, _store_id, entry) = fixture();
+        let id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAA").unwrap();
+        let ticket = create(&store, id);
+        state.changed_in(&entry, "created", &ticket);
+        let target = crate::watcher::default_watch_target(&state);
+        let mut cursor = state.event_log.lock_or_recover().seq;
+        let mut external = |change: &dyn Fn(&mut hotsheet_model::Ticket)| {
+            let mut current = store.read_ticket(&id).unwrap();
+            change(&mut current);
+            store.write_ticket(&current).unwrap();
+            assert!(crate::watcher::handle_path_change(
+                &target,
+                &store.ticket_path(&id)
+            ));
+            let (events, _) = state.event_log.lock_or_recover().since(cursor);
+            cursor = state.event_log.lock_or_recover().seq;
+            assert_eq!(events.len(), 1, "{events:?}");
+            events[0].milestone.clone()
+        };
+        let moved = |from: Option<&str>, to: Option<&str>| {
+            Some(super::MilestoneChange {
+                from: from.map(str::to_string),
+                to: to.map(str::to_string),
+            })
+        };
+        assert_eq!(
+            external(&|t| t.milestone = Some("7K3M9P2QXA".into())),
+            moved(None, Some("7K3M9P2QXA"))
+        );
+        assert_eq!(external(&|t| t.title = "renamed".into()), None);
+        assert_eq!(
+            external(&|t| t.milestone = Some("4N8R2T6VWX".into())),
+            moved(Some("7K3M9P2QXA"), Some("4N8R2T6VWX"))
+        );
+        assert_eq!(
+            external(&|t| t.milestone = None),
+            moved(Some("4N8R2T6VWX"), None)
+        );
+        // A server write after an external one compares with the indexed link too.
+        let mut relinked = store.read_ticket(&id).unwrap();
+        relinked.milestone = Some("7K3M9P2QXA".into());
+        state.changed_in(&entry, "updated", &relinked);
+        let (events, _) = state.event_log.lock_or_recover().since(cursor);
+        assert_eq!(
+            events.last().unwrap().milestone,
+            moved(None, Some("7K3M9P2QXA"))
+        );
     }
 
     #[test]

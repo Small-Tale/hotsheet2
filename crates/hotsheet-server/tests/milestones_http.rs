@@ -171,7 +171,7 @@ async fn hs2_9pyncn_checkout_milestone_routes_write_commit_and_announce() {
     let (_, cursor) = p.changed_events(0).await;
     assert_eq!(
         ok(router, "GET", base, None).await,
-        json!({ "registry": true, "milestones": [] })
+        json!({ "registry": true, "time_zone": "UTC", "milestones": [] })
     );
 
     let (status, created) = send(

@@ -872,6 +872,8 @@ impl GitHubProvider {
             warnings: vec![],
             auto_context: vec![],
             created_by: None,
+            due_on: None,
+            milestone: None,
         }
     }
 
@@ -1316,6 +1318,14 @@ impl TicketProvider for GitHubProvider {
         if draft.group.is_some() {
             return self.unsupported("groups");
         }
+        // HS2-A820C1: milestone links and ticket due dates come with HS2-6BKPP6; until
+        // then the write is refused before any request, never dropped.
+        if draft.milestone.is_some() {
+            return self.unsupported("milestones");
+        }
+        if draft.due_on.is_some() {
+            return self.unsupported("due_dates");
+        }
         if !draft.blocked_by.is_empty() {
             return Err(ProviderError::Unsupported {
                 connection_id: self.config.connection_id.clone(),
@@ -1379,6 +1389,14 @@ impl TicketProvider for GitHubProvider {
         // HS2-PDSHNN: no native group mapping yet; never drop the field silently.
         if patch.group.is_some() {
             return self.unsupported("groups");
+        }
+        // HS2-A820C1: milestone links and ticket due dates come with HS2-6BKPP6; until
+        // then the write is refused before any request, never dropped.
+        if patch.milestone.is_some() {
+            return self.unsupported("milestones");
+        }
+        if patch.due_on.is_some() {
+            return self.unsupported("due_dates");
         }
         if patch.blocked_reason.is_some() {
             return self.unsupported("blocked_reason");
@@ -2340,6 +2358,8 @@ fn github_capabilities(attachments: bool) -> ProviderCapabilities {
         .into_iter()
         .map(str::to_string)
         .collect(),
+        due_dates: false,
+        milestones: false,
     }
 }
 
@@ -4178,6 +4198,8 @@ mod tests {
                 },
             }),
             created_by: None,
+            due_on: None,
+            milestone: None,
         };
         let created = provider
             .create(
@@ -4248,6 +4270,44 @@ mod tests {
                     ..
                 })
             ));
+        }
+        assert!(transport.requests.lock_or_recover().is_empty());
+    }
+
+    #[test]
+    fn hs2_a820c1_milestone_and_due_date_writes_are_refused_before_any_request() {
+        let transport = FakeTransport::with(vec![]);
+        let provider = provider(transport.clone());
+        let capabilities = provider.descriptor().capabilities;
+        assert!(!capabilities.milestones && !capabilities.due_dates);
+        for (patch, capability) in [
+            (
+                ProviderPatch {
+                    milestone: Some(Some("7K3M9P2QXA".into())),
+                    ..Default::default()
+                },
+                "milestones",
+            ),
+            (
+                ProviderPatch {
+                    milestone: Some(None),
+                    ..Default::default()
+                },
+                "milestones",
+            ),
+            (
+                ProviderPatch {
+                    due_on: Some(Some("2026-12-04".into())),
+                    ..Default::default()
+                },
+                "due_dates",
+            ),
+        ] {
+            let result = provider.update("42", Timestamp::new("2026-11-01T00:00:00Z"), patch);
+            assert!(
+                matches!(&result, Err(ProviderError::Unsupported { capability: c, .. }) if *c == capability),
+                "{capability}"
+            );
         }
         assert!(transport.requests.lock_or_recover().is_empty());
     }
@@ -4349,6 +4409,8 @@ group: None,
                     blocked_by: vec![],
                     transfer: None,
                     created_by: None,
+                    due_on: None,
+                    milestone: None,
                 },
             )
             .unwrap();

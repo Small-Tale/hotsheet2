@@ -293,6 +293,7 @@ async fn hs2_jttqmy_an_unrenewed_lease_reads_stalled_and_an_unchanged_state_push
             activity: None,
             assignment: None,
             turn: None,
+            milestone: None,
         };
         hotsheet_server::notification_router::route_change_event(&state, &claim);
         let now = time::OffsetDateTime::now_utc();
@@ -924,6 +925,7 @@ fn ticket_event(store: &str, kind: &str, id: &str) -> ChangeEvent {
         activity: None,
         assignment: None,
         turn: None,
+        milestone: None,
     }
 }
 

@@ -137,6 +137,8 @@ fn create_issue(provider: &GitHubProvider, title: &str) -> String {
                 blocked_by: vec![],
                 transfer: None,
                 created_by: None,
+                due_on: None,
+                milestone: None,
             },
         )
         .unwrap()

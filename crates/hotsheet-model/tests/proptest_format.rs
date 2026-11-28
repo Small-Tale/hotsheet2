@@ -241,7 +241,20 @@ fn arb_ticket() -> impl Strategy<Value = Ticket> {
     let group = option::of(scalar())
         .prop_map(|name| name.and_then(|name| hotsheet_model::normalize_group_name_lossy(&name)));
 
-    (core, times, close_coord, collections, group).prop_map(
+    // HS2-A820C1: a stored milestone and due date are single-line trimmed text.
+    let link = (
+        option::of(scalar()),
+        option::of("[0-9]{4}-[0-9]{2}-[0-9]{2}"),
+    )
+        .prop_map(|(milestone, due_on)| {
+            let tidy = |text: String| {
+                let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
+                (!text.is_empty()).then_some(text)
+            };
+            (milestone.and_then(tidy), due_on)
+        });
+
+    (core, times, close_coord, collections, group, link).prop_map(
         |(
             (id, slug, title, category, priority, status, up_next, details),
             (created_at, updated_at, completed_at, verified_at, closed_at, created_by),
@@ -258,6 +271,7 @@ fn arb_ticket() -> impl Strategy<Value = Ticket> {
             ),
             (tags, blocked_by, blocked_reason, assignees, review_requests, external, notes),
             group,
+            (milestone, due_on),
         )| {
             let mut t = Ticket::new(id, slug, title, category, created_at, updated_at);
             t.priority = priority;
@@ -281,6 +295,8 @@ fn arb_ticket() -> impl Strategy<Value = Ticket> {
             t.blocked_by = blocked_by;
             t.blocked_reason = blocked_reason;
             t.group = group;
+            t.milestone = milestone;
+            t.due_on = due_on;
             t.assignees = assignees;
             t.review_requests = review_requests;
             t.external = external;

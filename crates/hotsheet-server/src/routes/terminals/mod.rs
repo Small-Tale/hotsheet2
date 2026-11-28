@@ -774,6 +774,7 @@ pub(crate) fn announce_session_push_gone(state: &AppState, id: &str) {
         activity: None,
         assignment: None,
         turn: None,
+        milestone: None,
     });
 }
 

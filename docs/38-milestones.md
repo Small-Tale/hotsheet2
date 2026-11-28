@@ -4,7 +4,11 @@ Status: **Partial.** The design carries the signed-off answers (HS2-8T71YW). Shi
 milestone registry itself, its Git publication, and its create, list, show, edit, close and
 reopen surfaces (HS2-9PYNCN; §38.2, §38.6 rows marked shipped); the project `time_zone` setting, its
 validation, CLI and HTTP surfaces, the Project Settings → General Time Zone select and the pure
-deadline helpers of §38.3 (HS2-SZF152, `hotsheet_ticketing::project_time_zone`). Everything else is design,
+deadline helpers of §38.3 (HS2-SZF152, `hotsheet_ticketing::project_time_zone`); for the
+Git provider, the ticket `milestone` link and `due_on`, the index columns and filters, the
+`milestones`/`due_dates` capabilities, the roll-up of §38.4, Delete Milestone… and Move Open
+Tickets to…, search terms, live change events, and every CLI, MCP and HTTP surface of §38.6
+(HS2-A820C1). Everything else (the client, external providers, orchestration) is design,
 built by the tickets in §38.11. The maintainer answered every design question on HS2-8T71YW (notes "Maintainer answers" and
 "Maintainer answers, part 2"); this document records those answers and drops the
 alternatives that were not chosen. Implementation is split in §38.11.
@@ -38,8 +42,9 @@ branches), and cross-project roll-ups (Workspace Grid aggregation is HS2-42B2FD)
 ### Milestone registry
 
 **Shipped (HS2-9PYNCN)**: `hotsheet_ticketing::milestones` (format, lock, titles, duplicate
-flag, close and reopen, conflicted state, `.gitignore` line). Delete is built in the registry
-for HS2-A820C1, which clears members first; no surface offers it yet.
+flag, close and reopen, conflicted state, `.gitignore` line). **Shipped (HS2-A820C1)**: Delete
+Milestone… on every surface (`milestone_project::delete_milestone` clears members first),
+and the `unknown` state with `named: false` for ids the registry does not name.
 
 Milestones belong to the **project**, not to a ticket source, exactly like ticket groups
 ([35](35-ticket-groups.md) §35.1, [02](02-ticket-storage.md) §2.7.1). The code checkout keeps
@@ -134,6 +139,10 @@ small. If conflicts prove common, a driver is a follow-up, not a format change.
 
 ### Ids on tickets
 
+**Shipped for Markdown/Git (HS2-A820C1)**: the `milestone` key, its resolution, unknown ids,
+the merge, copy and move ([02](02-ticket-storage.md) §2.7.2, [17](17-ticket-file-format.md)
+§17.4). The external label is HS2-6BKPP6.
+
 A ticket names **at most one** milestone by its registry id:
 
 - **Markdown/Git tickets** carry an optional `milestone` frontmatter key holding the id
@@ -175,6 +184,9 @@ Rules for the link, whatever the source:
 ## 38.3 Due dates and the project time zone
 
 ### Due dates
+
+**Shipped for Markdown/Git (HS2-A820C1)**: ticket `due_on`, the effective due
+(`milestone_rollup::effective_due_on`), and the `due_before` / `due:` / `is:overdue` reads.
 
 - A milestone's date is its registry `due_on`.
 - Every ticket may also carry its own optional `due_on` (`YYYY-MM-DD`): a Git frontmatter key,
@@ -230,6 +242,13 @@ long and still ends at local midnight.
   reads the same word whatever their device zone.
 
 ## 38.4 Progress, risk and clarity
+
+**Shipped (HS2-A820C1)**: `hotsheet_ticketing::milestone_rollup::milestone_rollup`, served by
+every list and show, and by the close response's `open_members`. v1 uses the default
+thresholds below; making them project settings is HS2-G07KZX. The `red_gate` signal is
+computed from a set of members the caller passes; feeding it from orchestration runs is
+HS2-DXZRHA, so it does not appear yet. Tickets closed as `works_as_designed` count as
+dropped with the three reasons below.
 
 One pure function computes the roll-up, `milestone_rollup(milestone, tickets, now,
 time_zone, thresholds)` in `hotsheet-ticketing`, so CLI, MCP, HTTP and the orchestrator
@@ -310,7 +329,8 @@ keeps the control in place, disabled, with that reason.
   missing repository or project label is created on first use.
 - **Filtering.** `milestone:` queries reach the tracker as a label filter where the adapter
   supports label search, and are answered from the index otherwise.
-- **Order of delivery.** Git ships first (HS2-A820C1). The external label mapping and ticket
+- **Order of delivery.** Git ships first (HS2-A820C1, shipped: Git reports both capabilities;
+  GitHub, GitLab and Jira report neither and refuse a write before any request). The external label mapping and ticket
   due dates are their own follow-up (HS2-6BKPP6), sharing the provider-owned label plumbing
   with groups' `hs-group:<id>` (HS2-PQ4A2C). Until it ships, GitHub, GitLab and Jira report
   `milestones: false` and `due_dates: false`, and their tickets read as having neither.
@@ -330,6 +350,16 @@ refusal names its code (`milestone_title_taken`, `milestone_not_found`,
 `milestones_changed` after each write that changed a file; the serverless MCP backend answers
 the same routes from the registry. Roll-ups, delete, move-open, ticket links, filters and the
 time zone in `list` are HS2-A820C1.
+
+**Shipped (HS2-A820C1)**: every remaining row of the table below. List and show return each
+milestone's registry fields plus `rollup` (§38.4), the list adds `time_zone` and the ids
+tickets name that the registry does not (`state: unknown`), and create, edit, close and
+reopen return `{ milestone, changed, open_members }`. Delete and move-open return
+`{ milestone, to?, updated, changed }`. `due_before` (and the CLI `--due-before`) is
+inclusive, like the other `*_before` list bounds. Roll-ups read members from the Git sources
+of the reading checkout (the server from its indexes, the CLI and the serverless MCP backend
+from the stores' files); external sources have no members until HS2-6BKPP6. Client search
+parity for the new terms is HS2-SV5CM3.
 
 | Operation                     | CLI                                                                                        | MCP                                                         | HTTP                                                    |
 | ----------------------------- | ------------------------------------------------------------------------------------------ | ----------------------------------------------------------- | ------------------------------------------------------- |
@@ -356,11 +386,18 @@ time zone in `list` are HS2-A820C1.
 **Search** (saved views and the search field): `milestone:"Toolchain 2.0"` or
 `milestone:7K3M9P2QXA`, `has:milestone`, `due:<2026-12-01`, `due:<=7d`, `is:overdue`.
 
-**Index.** Two derived columns, `milestone_id` and `effective_due_on`; the index rebuilds on
-the schema bump (docs/03 §3.2). `Index::milestone_members` feeds the roll-up. The registry
-itself is read from the checkout, not indexed.
+**Index.** Two columns, `milestone_id` and the ticket's own `due_on` (schema 27); the index
+rebuilds on the schema bump (docs/03 §3.2). `Index::milestone_members` feeds the roll-up. The
+registry itself is read from the checkout, not indexed. Deviation (HS2-A820C1): the design
+named an `effective_due_on` column, but a store can be linked by several checkouts whose
+registries differ (checkout-to-store is many-to-many), so a store-level index cannot hold a
+checkout-dependent value. The effective due is computed when read: `due_before` filters
+match the own date or the open milestones due by then, which the caller resolves from its
+registry.
 
-**Live updates.** A member's ticket change event names its old and new milestone id. A
+**Live updates.** A member's ticket change event names its old and new milestone id
+(`milestone: { from, to }`, shipped in HS2-A820C1 for server writes and for external edits
+the store watcher sees). A
 registry write emits one `milestones_changed` checkout event, and the checkout watcher emits
 it too when a pull changes `.hotsheet2/milestones/`. A client holding a roll-up refetches it
 once. Nothing polls.
@@ -484,7 +521,7 @@ Filed after sign-off; each ticket is a follow-up of HS2-8T71YW and names the app
 | --- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
 | 1   | HS2-9PYNCN | Registry storage and sync: `.hotsheet2/milestones/` format, lock, conflicted state, `.gitignore` line, commit and publish through the group registry machinery, `milestones_changed` (shipped, with the registry's create/list/show/edit/close/reopen surfaces) | —                      |
 | 2   | HS2-SZF152 | Project time zone: shared `time_zone` key, validation, deadline-instant helper, Project Settings → General select                                                                                                                                               | —                      |
-| 3   | HS2-A820C1 | Git model, index, roll-up and surfaces: ticket `milestone` and `due_on`, capabilities, index columns, `milestone_rollup`, CLI, MCP and HTTP per §38.6                                                                                                           | HS2-9PYNCN, HS2-SZF152 |
+| 3   | HS2-A820C1 | Git model, index, roll-up and surfaces: ticket `milestone` and `due_on`, capabilities, index columns, `milestone_rollup`, CLI, MCP and HTTP per §38.6 (shipped)                                                                                                 | HS2-9PYNCN, HS2-SZF152 |
 | 4   | HS2-NSVKGE | Milestones view and inspector, New/Edit/Close/Reopen/Delete dialogs, Move Open Tickets to…, /ux-demo states                                                                                                                                                     | HS2-A820C1             |
 | 5   | HS2-Y9V4NB | Ticket Info tab Milestone section and Due row, composer, bulk edit, context-menu Set Milestone…                                                                                                                                                                 | HS2-A820C1             |
 | 6   | HS2-2CR7H3 | Milestone prerequisite with both rules                                                                                                                                                                                                                          | HS2-A820C1, HS2-9PYNCN |

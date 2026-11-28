@@ -506,6 +506,7 @@ fn emit_terminal_question(state: &AppState, id: &str) {
         activity: None,
         assignment: None,
         turn: None,
+        milestone: None,
     });
 }
 
@@ -879,6 +880,7 @@ pub(crate) async fn connect_terminal_ai(
         activity: None,
         assignment: None,
         turn: None,
+        milestone: None,
     });
     if changed {
         emit_terminal_ai_connection(&state, &id, Some(agent.unwrap_or_default()));
@@ -1020,6 +1022,7 @@ fn emit_terminal_ai_connection(state: &AppState, id: &str, message: Option<Strin
         activity: None,
         assignment: None,
         turn: None,
+        milestone: None,
     });
 }
 
@@ -1035,6 +1038,7 @@ fn emit_terminal_halted(state: &AppState, id: &str, message: Option<String>) {
         activity: None,
         assignment: None,
         turn: None,
+        milestone: None,
     });
 }
 
@@ -1091,6 +1095,7 @@ fn emit_terminal_renamed(state: &AppState, id: &str, name: Option<String>) {
         activity: None,
         assignment: None,
         turn: None,
+        milestone: None,
     });
 }
 
@@ -1180,6 +1185,7 @@ fn emit_feedback_primary(state: &AppState, id: &str) {
         activity: None,
         assignment: None,
         turn: None,
+        milestone: None,
     });
 }
 
@@ -1580,6 +1586,7 @@ pub(crate) async fn resolve_permission(
         activity: None,
         assignment: None,
         turn: None,
+        milestone: None,
     });
     // A chat, session, or always answer is now a remembered rule: other clients' Settings →
     // Permissions lists follow it without polling (HS2-KYK1S7).
@@ -1604,6 +1611,7 @@ pub(crate) async fn resolve_permission(
             activity: None,
             assignment: None,
             turn: None,
+            milestone: None,
         });
     }
     Ok(Json(PermissionResolved {
@@ -1700,6 +1708,7 @@ pub(crate) async fn remember_permission_after_allow(
             activity: None,
             assignment: None,
             turn: None,
+            milestone: None,
         });
     }
     Ok(StatusCode::NO_CONTENT)
@@ -1720,6 +1729,7 @@ pub(crate) fn emit_permission_rules_changed(state: &AppState, project: &str) {
         activity: None,
         assignment: None,
         turn: None,
+        milestone: None,
     });
 }
 

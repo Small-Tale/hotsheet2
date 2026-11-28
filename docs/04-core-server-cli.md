@@ -1105,6 +1105,11 @@ hotsheet milestone create "Toolchain 2.0" --due 2026-12-04 [--description-file n
 hotsheet milestone edit <id or title> [--title …] [--due … | --clear-due] [--description-file …]
 hotsheet milestone close <id or title> [--reason completed|not_planned]   # also `milestone reopen`
 hotsheet milestone show <id or title> [--json]   # each write is committed in the checkout as it returns
+hotsheet milestone delete <id or title>          # clears it from every ticket first (HS2-A820C1)
+hotsheet milestone move-open <from> <to>         # relinks the unfinished tickets of <from>
+hotsheet new "…" --milestone <id or title> [--due 2026-12-15]   # a title never creates a milestone
+hotsheet edit <slug> --milestone <id or title> | --clear-milestone [--due <date> | --clear-due]
+hotsheet ls --milestone <id or title> | --has-milestone | --no-milestone [--due-before <date>]
 hotsheet group migrate                    # explicit, idempotent: legacy group names -> registry ids
 hotsheet show HS-7f3k9q
 hotsheet attach HS-7f3k9q ./proof.png       # stable id + RFC3339 created_at

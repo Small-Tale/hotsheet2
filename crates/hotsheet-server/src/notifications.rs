@@ -126,6 +126,7 @@ impl AppState {
                 activity: None,
                 assignment: None,
                 turn: None,
+                milestone: None,
             });
         }
         notification

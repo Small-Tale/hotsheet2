@@ -737,6 +737,8 @@ fn gitlab_live_trash_delete_restore_and_permission_checked_purge() {
                 blocked_by: vec![],
                 transfer: None,
                 created_by: None,
+                due_on: None,
+                milestone: None,
             },
         )
         .unwrap();

@@ -187,10 +187,11 @@ fn base_tools_list() -> Value {
         },
         {
             "name": "hotsheet_milestones",
-            "description": "Project milestones (docs/38): the registry under the code checkout holds each milestone's title, optional Markdown description, optional due date (YYYY-MM-DD), and open or closed state; every write is committed in the checkout. Needs a checkout (the launched one, or `checkout`); without one it fails with milestone_registry_required. A milestone is named by its id or its title (case and spacing do not matter; a duplicated title needs the id). action=list returns {registry,milestones:[{id,title,description,due_on,state,closed_reason,closed_at,duplicate,conflict}],registry_sync} with open and conflicted milestones (all=true adds closed ones); action=show returns one milestone; action=create makes an open milestone from `title` (+ optional `description`, `due_on`) and returns {milestone,changed}; action=edit changes `title`, `description` or `due_on` (null clears the last two) and returns {milestone,changed}; action=close closes it with `reason` completed (default) or not_planned; action=reopen reopens it. Repeating a write changes and commits nothing (changed=false). Refusal codes: milestone_title_taken, milestone_not_found, milestone_ambiguous, invalid_milestone_title, invalid_due_on, invalid_milestone_close_reason, milestone_registry_conflict (the file holds Git conflict markers or does not parse; resolve it with Git), milestone_registry_required.",
+            "description": "Project milestones (docs/38): the registry under the code checkout holds each milestone's title, optional Markdown description, optional due date (YYYY-MM-DD), and open or closed state; every write is committed in the checkout. Needs a checkout (the launched one, or `checkout`); without one it fails with milestone_registry_required. A milestone is named by its id or its title (case and spacing do not matter; a duplicated title needs the id). action=list returns {registry,time_zone,milestones:[{id,title,description,due_on,state,closed_reason,closed_at,duplicate,conflict,named,rollup}],registry_sync} with open, conflicted and unknown milestones (all=true adds closed ones); `rollup` is derived from the linked tickets: {progress:{members,not_started,started,awaiting_ci,finished,dropped,unavailable,percent},risk:[{ticket,code,detail}] (blocked, stale, low_confidence, red_gate, overdue),clarity:[…] (feedback_needed, no_details),health (done, dropped, off_track, at_risk, unclear, on_track),due_at_ms,overdue,open_members}; an id tickets name that the registry does not is listed as `Milestone <id>` with state unknown. action=show returns one milestone with its rollup; action=create makes an open milestone from `title` (+ optional `description`, `due_on`); action=edit changes `title`, `description` or `due_on` (null clears the last two); action=close closes it with `reason` completed (default) or not_planned (allowed with open tickets: open_members lists them); action=reopen reopens it; these return {milestone,changed,open_members}. action=delete clears the milestone from every ticket first, then deletes it, returning {milestone,updated,changed}; action=move_open relinks every unfinished ticket of `milestone` to `to`, returning {milestone,to,updated,changed}. Link a ticket with hotsheet_update/hotsheet_create `milestone` (id or title; a title never creates a milestone) and set its own date with `due_on`. Repeating a write changes and commits nothing (changed=false). Refusal codes: milestone_title_taken, milestone_not_found, milestone_ambiguous, invalid_milestone_title, invalid_due_on, invalid_milestone_close_reason, milestone_registry_conflict (the file holds Git conflict markers or does not parse; resolve it with Git), milestone_registry_required.",
             "inputSchema": { "type": "object", "properties": {
-                "action": { "type": "string", "enum": ["list", "show", "create", "edit", "close", "reopen"], "description": "defaults to list" },
-                "milestone": str_prop("show/edit/close/reopen: the milestone's id or title"),
+                "action": { "type": "string", "enum": ["list", "show", "create", "edit", "close", "reopen", "delete", "move_open"], "description": "defaults to list" },
+                "milestone": str_prop("show/edit/close/reopen/delete/move_open: the milestone's id or title"),
+                "to": str_prop("move_open: the milestone (id or title) to move the open tickets to"),
                 "title": str_prop("create: the title; edit: the new title (one line, at most 120 characters)"),
                 "description": { "type": ["string", "null"], "description": "create/edit: Markdown description; null (edit) clears it" },
                 "due_on": { "type": ["string", "null"], "description": "create/edit: due date YYYY-MM-DD; null (edit) clears it" },
@@ -219,6 +220,9 @@ fn base_tools_list() -> Value {
                 "blocked": { "type": "boolean", "description": "true = only blocked tickets (a blocker isn't done); false = only unblocked" },
                 "group": str_prop("only tickets in this group: its id, or its name (case and spacing do not matter; names resolve through the checkout's registry)"),
                 "has_group": { "type": "boolean", "description": "true = only grouped tickets; false = only ungrouped" },
+                "milestone": str_prop("only tickets linked to this milestone: its id, or its title (resolved through the checkout's registry)"),
+                "has_milestone": { "type": "boolean", "description": "true = only tickets with a milestone; false = only tickets without" },
+                "due_before": str_prop("only tickets whose effective due date (their own due_on, or their open milestone's date, whichever is earlier) is on or before this YYYY-MM-DD date"),
                 "created_after": str_prop("only tickets created at/after this ISO-8601 time"),
                 "created_before": str_prop("only tickets created at/before this ISO-8601 time"),
                 "updated_after": str_prop("only tickets updated at/after this ISO-8601 time"),
@@ -296,6 +300,8 @@ fn base_tools_list() -> Value {
                 "up_next": { "type": "boolean" },
                 "blocked_by": { "type": "array", "items": { "type": "string" }, "description": "blocker tickets (slug or ULID)" },
                 "group": str_prop("put the ticket in this group: a group id, or a name (with a checkout, resolved through its group registry and created when new)")
+                ,"milestone": str_prop("link the ticket to this milestone: its id, or (with a checkout) its title; an unknown title is refused with milestone_not_found")
+                ,"due_on": str_prop("the ticket's own due date, YYYY-MM-DD")
                 ,"follow_up_to": str_prop("qualified @project/connection:native source ticket; requires checkout")
                 ,"checkout": str_prop("optional checkout id/alias/path"), "store": str_prop("linked store id; required when checkout has multiple stores"), "connection": str_prop("optional ticket-provider connection id")
             }, "required": ["title"] }
@@ -322,6 +328,8 @@ fn base_tools_list() -> Value {
                 "blocked_by": { "type": "array", "items": { "type": "string" }, "description": "replace the blocker set (slug or ULID); [] clears it" },
                 "blocked_reason": { "type": ["string", "null"], "description": "set the freeform block reason, or null to clear it" },
                 "group": { "type": ["string", "null"], "description": "put the ticket in this group (a ticket has at most one): a group id, or a name resolved through the checkout's group registry (created when new); null removes it from its group" },
+                "milestone": { "type": ["string", "null"], "description": "link the ticket to this milestone (a ticket has at most one): its id, or with a checkout its title (never creates one; unknown titles fail with milestone_not_found); null unlinks it. Does not change updated_at. Sources without the milestones capability refuse" },
+                "due_on": { "type": ["string", "null"], "description": "the ticket's own due date YYYY-MM-DD, or null to clear it. Does not change updated_at. Sources without the due_dates capability refuse" },
                 "note": str_prop("Markdown note text to append, or replacement text when note_id is present. AI authors: lead with the outcome; use short sections and bullets for substantial notes; avoid dense prose and raw-log dumps"),
                 "note_kind": str_prop("regular|activity|feedback_needed|feedback_draft|status; explicit selection wins inference; omitted append kind retains legacy inference; with note_id intentionally corrects kind (feedback_draft refused)"),
                 "note_summary": { "type": ["string", "null"], "description": "concise plain-text timeline headline; with note_id, null clears the existing summary" },
@@ -397,6 +405,8 @@ fn base_tools_list() -> Value {
                 "up_next": { "type": "boolean" },
                 "tags": { "type": "array", "items": { "type": "string" }, "description": "replace the tag set on each" },
                 "group": { "type": ["string", "null"], "description": "put each ticket in this group (an id, or a name with a checkout), or null to remove each from its group" },
+                "milestone": { "type": ["string", "null"], "description": "link each ticket to this milestone (an id, or a title with a checkout), or null to unlink each" },
+                "due_on": { "type": ["string", "null"], "description": "set each ticket's own due date YYYY-MM-DD, or null to clear it" },
                 "checkout": str_prop("optional checkout id/alias/path"), "connection": str_prop("optional ticket-provider connection id")
             }, "required": ["ids"] }
         },
@@ -1374,6 +1384,9 @@ fn query_pairs(args: &Value) -> Vec<(String, String)> {
         "blocked",
         "group",
         "has_group",
+        "milestone",
+        "has_milestone",
+        "due_before",
         "created_after",
         "created_before",
         "updated_after",
@@ -1608,9 +1621,14 @@ fn milestones_tool(args: &Value, backend: &dyn Backend) -> Result<Value, String>
         "edit" => backend.send("PATCH", &one()?, &body(&["title", "description", "due_on"])),
         "close" => backend.send("POST", &format!("{}/close", one()?), &body(&["reason"])),
         "reopen" => backend.send("POST", &format!("{}/reopen", one()?), &body(&[])),
+        "delete" => backend.send("DELETE", &one()?, &body(&[])),
+        "move_open" => {
+            arg_str(args, "to")?;
+            backend.send("POST", &format!("{}/move-open", one()?), &body(&["to"]))
+        }
         other => {
             return Err(format!(
-                "unknown action '{other}' (list, show, create, edit, close, or reopen)"
+                "unknown action '{other}' (list, show, create, edit, close, reopen, delete, or move_open)"
             ));
         }
     };
@@ -2137,10 +2155,11 @@ mod core_backend {
             Ok(None)
         }
 
-        /// The milestone routes (HS2-9PYNCN), served from the checkout's registry exactly as
-        /// the server's `routes::milestones` does: `GET|POST /checkouts/{reference}/milestones`,
-        /// `GET|PATCH …/milestones/{milestone}`, and `POST …/{milestone}/close|reopen`. `None`
-        /// when `path` is not a milestone route.
+        /// The milestone routes (HS2-9PYNCN, HS2-A820C1), served from the checkout's registry
+        /// and its stores' files exactly as the server's `routes::milestones` does:
+        /// `GET|POST /checkouts/{reference}/milestones`, `GET|PATCH|DELETE …/{milestone}`, and
+        /// `POST …/{milestone}/close|reopen|move-open`. `None` when `path` is not a milestone
+        /// route.
         fn milestones_request(
             &self,
             method: &str,
@@ -2148,8 +2167,12 @@ mod core_backend {
             query: &[(String, String)],
             body: &Value,
         ) -> Option<Result<Value, BackendError>> {
+            use hotsheet_ticketing::milestone_project::{
+                self as project, MilestoneOpError, MilestoneWriteResult, ProjectMembers,
+                RollupClock,
+            };
             use hotsheet_ticketing::milestones::{
-                self as ms, CloseReason, MilestoneEdit, MilestoneRegistry, MilestoneWrite,
+                CloseReason, MilestoneEdit, MilestoneRegistry, MilestoneWrite,
             };
             let (reference, rest) = path
                 .strip_prefix("/checkouts/")?
@@ -2157,17 +2180,33 @@ mod core_backend {
             let rest = rest.strip_prefix('/').unwrap_or(rest);
             let mut parts = rest.split('/').filter(|part| !part.is_empty());
             let (milestone, verb) = (parts.next(), parts.next());
-            if parts.next().is_some() || !matches!(verb, None | Some("close" | "reopen")) {
+            if parts.next().is_some()
+                || !matches!(verb, None | Some("close" | "reopen" | "move-open"))
+            {
                 return None;
             }
             Some((|| {
-                let reference = decode_checkout_reference(reference)?;
-                let checkout = self
-                    .checkout_registry
-                    .resolve(&reference)
-                    .map_err(checkout_err)?;
+                let (checkout, stores) = self.checkout_context(reference, false)?;
                 let registry = MilestoneRegistry::for_checkout(Path::new(&checkout.root));
-                let write = |write: MilestoneWrite| Ok(to_value(&write));
+                let store_refs: Vec<&FsStore> = stores.iter().collect();
+                let members = || ProjectMembers::scan(&store_refs);
+                let zone =
+                    hotsheet_ticketing::project_time_zone::project_time_zone(&checkout.settings())
+                        .unwrap_or_else(|_| {
+                            hotsheet_ticketing::project_time_zone::ProjectTimeZone::utc()
+                        });
+                let clock = RollupClock::now(zone);
+                let write = |write: MilestoneWrite| {
+                    Ok(to_value(&MilestoneWriteResult::of(
+                        write,
+                        &members(),
+                        &clock,
+                    )))
+                };
+                let op_err = |error: MilestoneOpError| match error {
+                    MilestoneOpError::Milestone(error) => milestone_err(error),
+                    MilestoneOpError::Store(error) => store_err(error),
+                };
                 let resolve = |milestone: &str| -> Result<String, BackendError> {
                     let milestone = decode_checkout_reference(milestone)?;
                     Ok(registry.resolve(&milestone).map_err(milestone_err)?.id)
@@ -2195,7 +2234,7 @@ mod core_backend {
                         let all = query
                             .iter()
                             .any(|(key, value)| key == "all" && value == "true");
-                        ms::listing(Some(&registry), all)
+                        project::listing(Some(&registry), all, &members(), &clock)
                             .map(|listing| to_value(&listing))
                             .map_err(milestone_err)
                     }
@@ -2216,9 +2255,8 @@ mod core_backend {
                     }
                     ("GET", Some(milestone), None) => {
                         let milestone = decode_checkout_reference(milestone)?;
-                        registry
-                            .resolve(&milestone)
-                            .map(|milestone| to_value(&milestone))
+                        project::show(Some(&registry), &members(), &milestone, &clock)
+                            .map(|summary| to_value(&summary))
                             .map_err(milestone_err)
                     }
                     ("PATCH", Some(milestone), None) => {
@@ -2229,6 +2267,30 @@ mod core_backend {
                         };
                         let id = resolve(milestone)?;
                         write(registry.edit(&id, &edit).map_err(milestone_err)?)
+                    }
+                    ("DELETE", Some(milestone), None) => {
+                        let milestone = decode_checkout_reference(milestone)?;
+                        project::delete_milestone(
+                            Some(&registry),
+                            &store_refs,
+                            &members(),
+                            &milestone,
+                        )
+                        .map(|outcome| to_value(&outcome))
+                        .map_err(op_err)
+                    }
+                    ("POST", Some(milestone), Some("move-open")) => {
+                        let milestone = decode_checkout_reference(milestone)?;
+                        let to = text("to")?.ok_or_else(|| bad_request("to is required"))?;
+                        project::move_open_members(
+                            Some(&registry),
+                            &store_refs,
+                            &members(),
+                            &milestone,
+                            &to,
+                        )
+                        .map(|outcome| to_value(&outcome))
+                        .map_err(op_err)
                     }
                     ("POST", Some(milestone), Some("close")) => {
                         let reason = text("reason")?
@@ -2249,6 +2311,69 @@ mod core_backend {
                     }),
                 }
             })())
+        }
+
+        /// The launched checkout's milestone registry, when this backend serves a project.
+        fn milestone_registry(&self) -> Option<hotsheet_ticketing::milestones::MilestoneRegistry> {
+            self.checkout.as_ref().map(|checkout| {
+                hotsheet_ticketing::milestones::MilestoneRegistry::for_checkout(Path::new(
+                    &checkout.root,
+                ))
+            })
+        }
+
+        /// The `milestone` field of a create or update body, resolved to the id to store: an
+        /// id or (with a checkout) a title of a listed milestone; without one, ids only
+        /// (HS2-A820C1). Never creates a milestone.
+        fn milestone_change(&self, body: &Value) -> Result<Option<Option<String>>, BackendError> {
+            let change = match body.get("milestone") {
+                None => return Ok(None),
+                Some(Value::Null) => return Ok(Some(None)),
+                Some(Value::String(input)) => Some(Some(input.clone())),
+                Some(_) => return Err(bad_request("milestone must be a string or null")),
+            };
+            hotsheet_ticketing::milestone_project::resolve_link(
+                self.milestone_registry().as_ref(),
+                change,
+            )
+            .map_err(milestone_err)
+        }
+
+        /// The `due_on` field of a create or update body: a date, null to clear, or absent.
+        fn due_on_change(body: &Value) -> Result<Option<Option<String>>, BackendError> {
+            match body.get("due_on") {
+                None => Ok(None),
+                Some(Value::Null) => Ok(Some(None)),
+                Some(Value::String(date)) if date.trim().is_empty() => Ok(Some(None)),
+                Some(Value::String(date)) => Ok(Some(Some(date.clone()))),
+                Some(_) => Err(bad_request("due_on must be a string or null")),
+            }
+        }
+
+        /// Resolve a query's `milestone` filter to registry ids and its `due_before` bound to
+        /// the open milestones due by then, through the checkout's registry (HS2-A820C1).
+        fn resolve_milestone_filter(
+            q: &mut TicketQuery,
+            checkout: Option<&hotsheet_ticketing::checkouts::Checkout>,
+        ) {
+            let registry = checkout.map(|checkout| {
+                hotsheet_ticketing::milestones::MilestoneRegistry::for_checkout(Path::new(
+                    &checkout.root,
+                ))
+            });
+            // The parsed query holds the raw `milestone` text until it is resolved here.
+            if let Some([input]) = q.milestone_ids.as_deref() {
+                q.milestone_ids = Some(hotsheet_ticketing::milestone_project::filter_ids(
+                    registry.as_ref(),
+                    input,
+                ));
+            }
+            if let Some(date) = q.due_before.clone() {
+                q.due_milestone_ids = hotsheet_ticketing::milestone_project::due_milestone_ids(
+                    registry.as_ref(),
+                    &date,
+                );
+            }
         }
 
         /// The launched checkout's group registry, when this backend serves a project.
@@ -2557,6 +2682,7 @@ mod core_backend {
                 let connection = &connections[request.source];
                 let mut source_query = build_query(query, store.root())?;
                 Self::resolve_group_filter(&mut source_query, Some(checkout));
+                Self::resolve_milestone_filter(&mut source_query, Some(checkout));
                 source_query.limit = None;
                 source_query.page_after = None;
                 source_query.after_key = request.after.cloned().map(|key| AfterKey {
@@ -3023,6 +3149,7 @@ mod core_backend {
                             // merged result is bounded below with checkout-specific errors.
                             let mut source = build_query(&source_query, store.root())?;
                             Self::resolve_group_filter(&mut source, Some(&checkout));
+                            Self::resolve_milestone_filter(&mut source, Some(&checkout));
                             source.limit = Some(order.limit.map_or(max + 1, |limit| limit + 1));
                             for mut row in backend.store_rows(&source, &source_query)? {
                                 if let Some(obj) = row.as_object_mut() {
@@ -3105,6 +3232,7 @@ mod core_backend {
                 // `compact=false` is the server's full provider ticket, notes included.
                 let mut q = build_query(query, self.store.root())?;
                 Self::resolve_group_filter(&mut q, self.checkout.as_ref());
+                Self::resolve_milestone_filter(&mut q, self.checkout.as_ref());
                 let bound =
                     ops::StoreReadBound::new(q.limit).map_err(|e| bad_request(e.to_string()))?;
                 q.limit = Some(bound.fetch_limit());
@@ -3123,6 +3251,7 @@ mod core_backend {
                 // The bounded-response contract for an unpaged store list (HS2-3JEFQT).
                 let mut q = build_query(query, self.store.root())?;
                 Self::resolve_group_filter(&mut q, self.checkout.as_ref());
+                Self::resolve_milestone_filter(&mut q, self.checkout.as_ref());
                 let bound =
                     ops::StoreReadBound::new(q.limit).map_err(|e| bad_request(e.to_string()))?;
                 q.limit = Some(bound.fetch_limit());
@@ -3692,6 +3821,8 @@ mod core_backend {
                     }
                     let new = NewTicket {
                         group: self.group_change(body)?.flatten(),
+                        milestone: self.milestone_change(body)?.flatten(),
+                        due_on: Self::due_on_change(body)?.flatten(),
                         title: str_field(body, "title")
                             .ok_or_else(|| bad_request("title is required"))?,
                         category: str_field(body, "category").unwrap_or_else(|| "issue".into()),
@@ -3961,6 +4092,8 @@ mod core_backend {
                     let actor = body_actor(body)?;
                     let patch = TicketPatch {
                         group: self.group_change(body)?,
+                        milestone: self.milestone_change(body)?,
+                        due_on: Self::due_on_change(body)?,
                         actor: hotsheet_ticketing::actor::note_actor(actor.as_ref()),
                         title: str_field(body, "title"),
                         details: str_field(body, "details"),
@@ -4492,6 +4625,18 @@ mod core_backend {
             blocked: get("blocked").map(|v| v == "true"),
             group: get("group").map(str::to_string),
             has_group: get("has_group").map(|v| v == "true"),
+            // HS2-A820C1: the raw text, resolved through the checkout's registry by
+            // `resolve_milestone_filter`; an id matches as given.
+            milestone_ids: get("milestone").map(|input| vec![input.trim().to_string()]),
+            has_milestone: get("has_milestone").map(|v| v == "true"),
+            due_before: get("due_before")
+                .map(|date| {
+                    hotsheet_model::validate_due_on(date).map_err(|error| BackendError {
+                        status: Some(400),
+                        message: error.to_string(),
+                    })
+                })
+                .transpose()?,
             min_confidence: confidence_bound(get("min_confidence"), "min_confidence")?,
             max_confidence: confidence_bound(get("max_confidence"), "max_confidence")?,
             // Inclusive lexical RFC 3339 bounds, passed through unvalidated exactly as the
@@ -4737,6 +4882,7 @@ mod core_backend {
             | StoreError::StartedPhaseRequiresStarted { .. }
             | StoreError::InvalidGroupName(_)
             | StoreError::GroupRegistryRequired(_)
+            | StoreError::MilestoneLink(_)
             | StoreError::InvalidNoteKindEdit => 400,
             StoreError::Admission(_) => 409,
             error if error.is_io_kind(std::io::ErrorKind::NotFound) => 404,

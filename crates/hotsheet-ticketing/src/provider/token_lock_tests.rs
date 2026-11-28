@@ -33,6 +33,8 @@ fn create(provider: &GitProvider, title: &str, at: &str) -> ApiTicket {
                 blocked_by: vec![],
                 transfer: None,
                 created_by: None,
+                due_on: None,
+                milestone: None,
             },
         )
         .unwrap()

@@ -139,6 +139,8 @@ pub(crate) fn cmd_new(
         follow_up_to,
         project,
         group,
+        milestone,
+        due,
     } = args;
     let priority = priority.as_str();
     let title = title
@@ -148,6 +150,7 @@ pub(crate) fn cmd_new(
     let prefix = store.metadata()?.ticket_prefix;
     let blocked_by = ops::resolve_blockers(&store, None, &blocked_by)?;
     let group = super::groups::resolve_for_store(&store, group.map(Some))?.flatten();
+    let milestone = super::milestones::resolve_link(&store, milestone.map(Some))?.flatten();
     let source = follow_up_to
         .as_deref()
         .map(|id| resolve(&store, id))
@@ -180,6 +183,8 @@ pub(crate) fn cmd_new(
         now_ts(),
         NewTicket {
             group,
+            milestone,
+            due_on: due,
             title,
             category,
             priority: parse_priority(priority)?,
@@ -280,6 +285,21 @@ pub(crate) fn cmd_ls(path: &PathBuf, f: &LsFilters) -> Result<()> {
             None => Vec::new(),
         },
         has_group: f.has_group_filter(),
+        milestone_ids: f
+            .milestone
+            .as_deref()
+            .map(|input| super::milestones::filter_ids(&store, input)),
+        has_milestone: f.has_milestone_filter(),
+        due_before: f
+            .due_before
+            .as_deref()
+            .map(hotsheet_model::validate_due_on)
+            .transpose()?,
+        due_milestone_ids: f
+            .due_before
+            .as_deref()
+            .map(|date| super::milestones::due_milestone_ids(&store, date.trim()))
+            .unwrap_or_default(),
         min_confidence: f.min_confidence,
         max_confidence: f.max_confidence,
         sort: f.sort.parse().map_err(|e: String| anyhow::anyhow!(e))?,
@@ -303,6 +323,7 @@ pub(crate) fn cmd_ls(path: &PathBuf, f: &LsFilters) -> Result<()> {
     } else {
         None
     };
+    let milestone_titles = super::milestones::Titles::for_rows(&store, &tickets);
     for t in &tickets {
         let up = if t.up_next { "*" } else { " " };
         let is_unread =
@@ -330,8 +351,19 @@ pub(crate) fn cmd_ls(path: &PathBuf, f: &LsFilters) -> Result<()> {
                 format!("  {{{name}}}")
             })
             .unwrap_or_default();
+        // HS2-A820C1: a linked ticket names its milestone and its own due date.
+        let milestone = t
+            .milestone
+            .as_deref()
+            .map(|id| format!("  [{}]", milestone_titles.title(id)))
+            .unwrap_or_default();
+        let due = t
+            .due_on
+            .as_deref()
+            .map(|due| format!("  (due {due})"))
+            .unwrap_or_default();
         println!(
-            "{up}{unread} {:<12} {:<12} {}{group}{confidence}",
+            "{up}{unread} {:<12} {:<12} {}{group}{milestone}{due}{confidence}",
             t.slug,
             t.status.as_deref().unwrap_or_default(),
             t.title
@@ -1001,6 +1033,9 @@ pub(crate) fn cmd_edit(
         clear_blocked_reason,
         group,
         group_resolved,
+        milestone,
+        milestone_resolved,
+        due_on,
         up_next,
         no_up_next,
         note,
@@ -1060,8 +1095,15 @@ pub(crate) fn cmd_edit(
     } else {
         super::groups::resolve_for_store(&store, group)?
     };
+    let milestone = if milestone_resolved {
+        milestone
+    } else {
+        super::milestones::resolve_link(&store, milestone)?
+    };
     let patch = TicketPatch {
         group,
+        milestone,
+        due_on,
         actor: hotsheet_ticketing::actor::note_actor(actor),
         title,
         details,
@@ -1190,6 +1232,12 @@ pub(crate) fn cmd_batch(
         let store = FsStore::open(path)?;
         edit.group = super::groups::resolve_for_store(&store, edit.group.take())?;
         edit.group_resolved = true;
+    }
+    // HS2-A820C1: resolve the milestone once too, so an unknown title writes nothing.
+    if matches!(edit.milestone, Some(Some(_))) {
+        let store = FsStore::open(path)?;
+        edit.milestone = super::milestones::resolve_link(&store, edit.milestone.take())?;
+        edit.milestone_resolved = true;
     }
     let mut updated = Vec::new();
     let mut errors = Vec::new();
@@ -1410,6 +1458,13 @@ pub(crate) struct NewArgs {
     /// Put the new ticket in this group (HS2-PDSHNN). An existing group's spelling is reused.
     #[arg(long)]
     group: Option<String>,
+    /// Link the new ticket to this milestone (HS2-A820C1): its id, or inside a checkout its
+    /// title. An unknown title is refused; a link never creates a milestone.
+    #[arg(long)]
+    milestone: Option<String>,
+    /// The ticket's own due date, `YYYY-MM-DD` (HS2-A820C1).
+    #[arg(long)]
+    due: Option<String>,
 }
 
 #[derive(Args)]
@@ -1511,6 +1566,19 @@ pub(crate) struct TicketEditArgs {
     /// Remove the ticket from its group.
     #[arg(long)]
     clear_group: bool,
+    /// Link the ticket to this milestone; a ticket has at most one (HS2-A820C1). An id, or
+    /// inside a checkout a title; an unknown title is refused. Does not change `updated_at`.
+    #[arg(long, conflicts_with = "clear_milestone")]
+    milestone: Option<String>,
+    /// Unlink the ticket from its milestone.
+    #[arg(long)]
+    clear_milestone: bool,
+    /// Set the ticket's own due date, `YYYY-MM-DD` (HS2-A820C1). Does not change `updated_at`.
+    #[arg(long, conflicts_with = "clear_due")]
+    due: Option<String>,
+    /// Clear the ticket's own due date.
+    #[arg(long)]
+    clear_due: bool,
     /// Mark Up Next.
     #[arg(long, conflicts_with = "no_up_next")]
     up_next: bool,
@@ -1619,6 +1687,20 @@ pub(crate) struct LsFilters {
     /// Only tickets that are in no group.
     #[arg(long, conflicts_with = "group")]
     no_group: bool,
+    /// Only tickets linked to this milestone: its id, or inside a checkout its title
+    /// (HS2-A820C1).
+    #[arg(long)]
+    milestone: Option<String>,
+    /// Only tickets linked to a milestone.
+    #[arg(long, conflicts_with = "no_milestone")]
+    has_milestone: bool,
+    /// Only tickets linked to no milestone.
+    #[arg(long, conflicts_with = "milestone")]
+    no_milestone: bool,
+    /// Only tickets whose effective due date (their own, or their open milestone's when
+    /// earlier) is on or before this `YYYY-MM-DD` date.
+    #[arg(long, value_name = "YYYY-MM-DD")]
+    due_before: Option<String>,
     /// Only completed/verified tickets whose derived confidence is at least this (0-100).
     #[arg(long, value_name = "0-100", value_parser = clap::value_parser!(u8).range(0..=100))]
     min_confidence: Option<u8>,
@@ -1642,6 +1724,15 @@ impl LsFilters {
     /// `Some(true)` for `--blocked`, `Some(false)` for `--unblocked`, else `None`.
     fn blocked_filter(&self) -> Option<bool> {
         match (self.blocked, self.unblocked) {
+            (true, _) => Some(true),
+            (_, true) => Some(false),
+            _ => None,
+        }
+    }
+
+    /// `Some(true)` for `--has-milestone`, `Some(false)` for `--no-milestone`, else `None`.
+    fn has_milestone_filter(&self) -> Option<bool> {
+        match (self.has_milestone, self.no_milestone) {
             (true, _) => Some(true),
             (_, true) => Some(false),
             _ => None,
@@ -1692,6 +1783,12 @@ pub(crate) struct TicketEdit {
     group: Option<Option<String>>,
     /// A batch already chose the spelling for its whole selection.
     group_resolved: bool,
+    /// Absent leaves the milestone; `Some(None)` clears it (HS2-A820C1).
+    milestone: Option<Option<String>>,
+    /// A batch already resolved the milestone for its whole selection.
+    milestone_resolved: bool,
+    /// Absent leaves the own due date; `Some(None)` clears it (HS2-A820C1).
+    due_on: Option<Option<String>>,
     up_next: bool,
     no_up_next: bool,
     note: Option<String>,
@@ -1755,6 +1852,17 @@ impl TicketEdit {
                 args.group.map(Some)
             },
             group_resolved: false,
+            milestone: if args.clear_milestone {
+                Some(None)
+            } else {
+                args.milestone.map(Some)
+            },
+            milestone_resolved: false,
+            due_on: if args.clear_due {
+                Some(None)
+            } else {
+                args.due.map(Some)
+            },
             up_next: args.up_next,
             no_up_next: args.no_up_next,
             note,

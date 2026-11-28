@@ -139,6 +139,18 @@ pub(crate) fn do_provider_create(
         )?
         .flatten()
     };
+    // HS2-A820C1: a connection has no registry, so it takes a milestone id; a checkout
+    // route has already resolved titles. A provider without the capability refuses.
+    let milestone = if req.milestone_resolved {
+        req.milestone.clone()
+    } else {
+        crate::routes::milestones::validate_for_connection(
+            provider.as_ref(),
+            req.milestone.clone().map(Some),
+        )?
+        .flatten()
+    };
+    let due_on = req.due_on.clone().filter(|due| !due.trim().is_empty());
     let new = ops::normalize_new_ticket_input(NewTicket {
         group: None,
         title: req.title,
@@ -149,6 +161,8 @@ pub(crate) fn do_provider_create(
         tags: req.tags.unwrap_or_default(),
         up_next: req.up_next.unwrap_or(false),
         blocked_by: Vec::new(),
+        due_on: None,
+        milestone: None,
     });
     let created = provider
         .create(
@@ -158,6 +172,8 @@ pub(crate) fn do_provider_create(
             },
             ProviderDraft {
                 group,
+                milestone,
+                due_on,
                 title: new.title,
                 category: new.category,
                 priority: new.priority,
@@ -464,6 +480,18 @@ pub(crate) fn do_provider_update(
     } else {
         crate::routes::groups::validate_for_connection(provider.as_ref(), req.group.clone())?
     };
+    let milestone = if req.milestone_resolved {
+        req.milestone.clone()
+    } else {
+        crate::routes::milestones::validate_for_connection(
+            provider.as_ref(),
+            req.milestone.clone(),
+        )?
+    };
+    let due_on = req
+        .due_on
+        .clone()
+        .map(|due| due.filter(|due| !due.trim().is_empty()));
     let timestamp = now();
     let edited_at = timestamp.clone();
     let note = req.note.clone();
@@ -477,6 +505,8 @@ pub(crate) fn do_provider_update(
             timestamp.clone(),
             ProviderPatch {
                 group,
+                milestone,
+                due_on,
                 actor: hotsheet_ticketing::actor::note_actor(actor.as_ref()),
                 expected_token: req.expected_token,
                 title: req.title,

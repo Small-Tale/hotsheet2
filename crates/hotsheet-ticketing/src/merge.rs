@@ -89,6 +89,14 @@ pub fn merge_tickets(base: &Ticket, ours: &Ticket, theirs: &Ticket) -> MergeOutc
     );
     // HS2-PDSHNN: one group per ticket, so divergent choices resolve like any scalar.
     m.group = pick3(&base.group, &ours.group, &theirs.group, ours_wins);
+    // HS2-A820C1: one milestone per ticket and one own due date, last writer wins.
+    m.milestone = pick3(
+        &base.milestone,
+        &ours.milestone,
+        &theirs.milestone,
+        ours_wins,
+    );
+    m.due_on = pick3(&base.due_on, &ours.due_on, &theirs.due_on, ours_wins);
     m.completed_at = pick3(
         &base.completed_at,
         &ours.completed_at,
@@ -613,6 +621,48 @@ mod tests {
         // Both chose the same group: no conflict.
         let m = merge_tickets(&base, &ours, &ours.clone()).ticket;
         assert_eq!(m.group.as_deref(), Some("Sprint"));
+    }
+
+    #[test]
+    fn hs2_a820c1_milestone_and_due_on_resolve_last_writer_wins() {
+        let base = base_ticket();
+        // Only one clone linked the ticket: that link survives, from either side.
+        let mut ours = base.clone();
+        ours.milestone = Some("7K3M9P2QXA".into());
+        ours.due_on = Some("2026-12-04".into());
+        for m in [
+            merge_tickets(&base, &ours, &base.clone()).ticket,
+            merge_tickets(&base, &base.clone(), &ours).ticket,
+        ] {
+            assert_eq!(m.milestone.as_deref(), Some("7K3M9P2QXA"));
+            assert_eq!(m.due_on.as_deref(), Some("2026-12-04"));
+        }
+
+        // Two clones chose different milestones and dates: the newer side wins whole,
+        // so the ticket ends in exactly one milestone.
+        let mut theirs = base.clone();
+        theirs.milestone = Some("4N8R2T6VWX".into());
+        theirs.due_on = Some("2027-01-15".into());
+        theirs.updated_at = ts("2026-08-19T02:00:00Z");
+        ours.updated_at = ts("2026-08-19T01:00:00Z");
+        for m in [
+            merge_tickets(&base, &ours, &theirs).ticket,
+            merge_tickets(&base, &theirs, &ours).ticket,
+        ] {
+            assert_eq!(m.milestone.as_deref(), Some("4N8R2T6VWX"));
+            assert_eq!(m.due_on.as_deref(), Some("2027-01-15"));
+        }
+
+        // A clear on one side and no change on the other: the clear wins.
+        let linked = ours.clone();
+        let mut cleared = linked.clone();
+        cleared.milestone = None;
+        cleared.due_on = None;
+        let m = merge_tickets(&linked, &linked.clone(), &cleared).ticket;
+        assert_eq!((m.milestone, m.due_on), (None, None));
+        // Both chose the same values: no conflict.
+        let m = merge_tickets(&base, &ours, &ours.clone()).ticket;
+        assert_eq!(m.milestone.as_deref(), Some("7K3M9P2QXA"));
     }
 
     #[test]

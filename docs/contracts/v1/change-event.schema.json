@@ -27,6 +27,15 @@
       }
     },
     "turn": { "$ref": "#/$defs/turn" },
+    "milestone": {
+      "type": "object",
+      "description": "For a ticket change that moved it between milestones (HS2-A820C1): the old and new milestone id, null for none. Absent when the link did not change.",
+      "required": ["from", "to"],
+      "properties": {
+        "from": { "type": ["string", "null"] },
+        "to": { "type": ["string", "null"] }
+      }
+    },
     "live": {
       "type": "object",
       "description": "For kind live_state (HS2-JTTQMY): the store's complete LiveStoreState snapshot, as GET /stores/{store_id}/live-state returns it.",

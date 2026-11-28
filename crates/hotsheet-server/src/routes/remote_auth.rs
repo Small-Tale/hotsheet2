@@ -103,6 +103,7 @@ fn emit_anonymous(state: &AppState, kind: &str) {
         assignment: None,
         turn: None,
         live: None,
+        milestone: None,
     });
 }
 

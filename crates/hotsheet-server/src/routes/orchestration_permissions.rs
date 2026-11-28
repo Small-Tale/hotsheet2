@@ -74,6 +74,7 @@ fn resolved_event(state: &AppState, request: &hotsheet_aitools::PermissionReques
         activity: None,
         assignment: None,
         turn: None,
+        milestone: None,
     });
 }
 

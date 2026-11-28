@@ -63,6 +63,7 @@ fn emit_advisory_change(state: &AppState, checkout: &str, ticket: &TicketRef) {
         assignment: None,
         turn: None,
         live: None,
+        milestone: None,
     });
 }
 

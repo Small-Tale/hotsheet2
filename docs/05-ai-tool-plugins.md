@@ -2622,7 +2622,11 @@ renames, ungroups, merges, or migrates groups; the CLI equivalents and the route
 edits, closes, and reopens the milestones of the launched or named checkout through the
 checkout-scoped milestone routes, with or without a running server
 ([38](38-milestones.md) §38.6); without a checkout it refuses with
-`milestone_registry_required`.
+`milestone_registry_required`. HS2-A820C1 adds roll-ups to `list` and `show` (with the
+project `time_zone` in `list`), `delete` (clears every member first) and `move_open`, the
+`milestone` and `due_on` fields of `hotsheet_create`, `hotsheet_update` and `hotsheet_batch`
+(a title resolves through the checkout's registry and never creates a milestone), and the
+`milestone`, `has_milestone` and `due_before` filters of `hotsheet_query`.
 
 AI tools reach tickets two ways, both over the one core:
 

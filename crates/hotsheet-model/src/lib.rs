@@ -13,6 +13,7 @@ pub mod feedback_choices;
 pub mod format;
 pub mod group;
 pub mod ids;
+pub mod milestone_link;
 pub mod note_doctor;
 pub mod orchestration_link;
 pub mod ticket;
@@ -29,6 +30,9 @@ pub use group::{
     normalize_group_name, normalize_group_name_lossy,
 };
 pub use ids::{Ulid, derive_slug};
+pub use milestone_link::{
+    MilestoneLinkError, is_milestone_id, parse_due_on, validate_due_on, validate_milestone_id,
+};
 pub use orchestration_link::{OrchestrationLink, OrchestrationRelation};
 pub use ticket::{
     AiFeedback, AiFeedbackRating, AnnotationArrowHead, AnnotationPoint, AnnotationShape,

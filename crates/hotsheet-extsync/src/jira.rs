@@ -646,6 +646,8 @@ impl JiraProvider {
             warnings: vec![],
             auto_context: vec![],
             created_by: None,
+            due_on: None,
+            milestone: None,
         }
     }
 
@@ -887,6 +889,14 @@ impl TicketProvider for JiraProvider {
         if draft.group.is_some() {
             return self.unsupported("groups");
         }
+        // HS2-A820C1: milestone links and ticket due dates come with HS2-6BKPP6; until
+        // then the write is refused before any request, never dropped.
+        if draft.milestone.is_some() {
+            return self.unsupported("milestones");
+        }
+        if draft.due_on.is_some() {
+            return self.unsupported("due_dates");
+        }
         if !draft.blocked_by.is_empty() {
             return self.unsupported("dependencies");
         }
@@ -945,6 +955,14 @@ impl TicketProvider for JiraProvider {
         // HS2-PDSHNN: no native group mapping yet; never drop the field silently.
         if patch.group.is_some() {
             return self.unsupported("groups");
+        }
+        // HS2-A820C1: milestone links and ticket due dates come with HS2-6BKPP6; until
+        // then the write is refused before any request, never dropped.
+        if patch.milestone.is_some() {
+            return self.unsupported("milestones");
+        }
+        if patch.due_on.is_some() {
+            return self.unsupported("due_dates");
         }
         if patch.blocked_reason.is_some() {
             return self.unsupported("blocked_reason");
@@ -1572,6 +1590,8 @@ fn capabilities() -> ProviderCapabilities {
         .into_iter()
         .map(str::to_string)
         .collect(),
+        due_dates: false,
+        milestones: false,
     }
 }
 pub(crate) fn validate_key(value: &str) -> Result<(), ProviderError> {
@@ -3255,6 +3275,8 @@ mod tests {
                     blocked_by: vec![],
                     transfer: None,
                     created_by: None,
+                    due_on: None,
+                    milestone: None,
                 },
             ),
             Err(ProviderError::Unsupported {
@@ -3313,6 +3335,44 @@ mod tests {
                     ..
                 })
             ));
+        }
+        assert!(fake.requests.lock_or_recover().is_empty());
+    }
+
+    #[test]
+    fn hs2_a820c1_milestone_and_due_date_writes_are_refused_before_any_request() {
+        let fake = Arc::new(Fake::default());
+        let provider = provider(fake.clone());
+        let capabilities = provider.descriptor().capabilities;
+        assert!(!capabilities.milestones && !capabilities.due_dates);
+        for (patch, capability) in [
+            (
+                ProviderPatch {
+                    milestone: Some(Some("7K3M9P2QXA".into())),
+                    ..Default::default()
+                },
+                "milestones",
+            ),
+            (
+                ProviderPatch {
+                    milestone: Some(None),
+                    ..Default::default()
+                },
+                "milestones",
+            ),
+            (
+                ProviderPatch {
+                    due_on: Some(Some("2026-12-04".into())),
+                    ..Default::default()
+                },
+                "due_dates",
+            ),
+        ] {
+            let result = provider.update("ENG-9", Timestamp::new("2026-11-01T00:00:00Z"), patch);
+            assert!(
+                matches!(&result, Err(ProviderError::Unsupported { capability: c, .. }) if *c == capability),
+                "{capability}"
+            );
         }
         assert!(fake.requests.lock_or_recover().is_empty());
     }

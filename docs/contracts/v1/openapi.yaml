@@ -6091,6 +6091,24 @@ paths:
           in: query
           schema:
             type: boolean
+        - name: milestone
+          in: query
+          description:
+            Only tickets linked to this milestone, by id or (on a checkout) by title (HS2-A820C1). An unknown title
+            matches nothing.
+          schema:
+            type: string
+        - name: has_milestone
+          in: query
+          schema:
+            type: boolean
+        - name: due_before
+          in: query
+          description:
+            Only tickets whose effective due date (their own `due_on`, or their open milestone's date when earlier) is
+            on or before this YYYY-MM-DD date; `invalid_due_on` otherwise (HS2-A820C1).
+          schema:
+            type: string
         - name: has_attachment
           in: query
           schema:
@@ -11338,6 +11356,24 @@ paths:
           in: query
           schema:
             type: boolean
+        - name: milestone
+          in: query
+          description:
+            Only tickets linked to this milestone, by id or (on a checkout) by title (HS2-A820C1). An unknown title
+            matches nothing.
+          schema:
+            type: string
+        - name: has_milestone
+          in: query
+          schema:
+            type: boolean
+        - name: due_before
+          in: query
+          description:
+            Only tickets whose effective due date (their own `due_on`, or their open milestone's date when earlier) is
+            on or before this YYYY-MM-DD date; `invalid_due_on` otherwise (HS2-A820C1).
+          schema:
+            type: string
         - name: has_attachment
           in: query
           schema:
@@ -19653,8 +19689,9 @@ paths:
       operationId: list_checkout_milestones
       description:
         "The project's milestones from the checkout's milestone registry (HS2-9PYNCN, docs/38 §38.2): open and
-        conflicted milestones in due-date order (undated last), with `all=true` closed ones too, and the registry's
-        publication status."
+        conflicted milestones in due-date order (undated last), then ids tickets name that the registry does not
+        (`unknown`), with `all=true` closed ones too; each with its roll-up over the checkout's Git sources in the
+        project time zone (HS2-A820C1), and the registry's publication status."
       parameters:
         - name: all
           in: query
@@ -19733,14 +19770,16 @@ paths:
           type: string
     get:
       operationId: get_checkout_milestone
-      description: One milestone of the checkout's registry (HS2-9PYNCN).
+      description:
+        One milestone of the checkout's registry with its roll-up (HS2-9PYNCN, HS2-A820C1); an id that tickets name but
+        the registry does not reads as `unknown`.
       responses:
         '200':
           description: Server-owned response.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Milestone'
+                $ref: '#/components/schemas/MilestoneSummary'
         '404':
           description: '`milestone_not_found`: no milestone has that id or title; or the checkout is unknown.'
           content:
@@ -19797,6 +19836,46 @@ paths:
             "`milestone_ambiguous`: several milestones have that title; `milestone_title_taken`: the new title is
             another milestone's; `milestone_registry_conflict`: the milestone's file holds Git conflict markers or does
             not parse."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    delete:
+      operationId: delete_checkout_milestone
+      description:
+        'Delete Milestone… (HS2-A820C1, docs/38 §38.2): clear the link from every ticket in every Git source (one commit
+        per store, each ticket announced with its milestone move), then delete the registry file and announce
+        `milestones_changed`. An unknown id only has its tickets cleared. A conflicted file is refused before any ticket
+        changes. The body is optional.'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReopenMilestone'
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MilestoneMemberOutcome'
+        '404':
+          description: '`milestone_not_found`: no milestone has that id or title; or the checkout is unknown.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description:
+            '`milestone_ambiguous`: several milestones have that title; `milestone_registry_conflict`: the file holds
+            Git conflict markers or does not parse.'
           content:
             application/json:
               schema:
@@ -20230,6 +20309,52 @@ paths:
                 $ref: '#/components/schemas/ApiError'
         '422':
           description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /checkouts/{reference}/milestones/{milestone}/move-open:
+    parameters:
+      - $ref: '#/components/parameters/CheckoutReference'
+      - name: milestone
+        in: path
+        required: true
+        description: The milestone's id, or its title (case and spacing do not matter; a duplicated title needs the id).
+        schema:
+          type: string
+    post:
+      operationId: move_open_checkout_milestone
+      description:
+        'Move Open Tickets to… (HS2-A820C1, docs/38 §38.4): relink every unfinished ticket (not started, started,
+        Backlog) of the milestone to `to`, one write per store. Finished and dropped tickets stay. Moving to itself, or
+        again, changes nothing.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MoveOpenMilestone'
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MilestoneMemberOutcome'
+        '404':
+          description: '`milestone_not_found`: either milestone is unknown; or the checkout is unknown.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: '`milestone_ambiguous`: several milestones have that title.'
           content:
             application/json:
               schema:
@@ -30106,6 +30231,12 @@ components:
         group:
           type: string
           description: Ticket group id (HS2-9KZSD4), or a legacy name not yet migrated; omitted when ungrouped.
+        milestone:
+          type: string
+          description: Milestone registry id (HS2-A820C1); omitted when unlinked.
+        due_on:
+          type: string
+          description: The ticket's own due date, YYYY-MM-DD (HS2-A820C1); omitted when unset.
         created_at:
           anyOf:
             - type: string
@@ -30299,6 +30430,16 @@ components:
           description:
             Ticket group id (HS2-9KZSD4), or a legacy name not yet migrated; null when ungrouped. On write, an id, or on
             a checkout route a name (resolved through the group registry, created when new); JSON null clears it.
+        milestone:
+          anyOf: *a7
+          description:
+            Milestone registry id (HS2-A820C1); absent when unlinked or when the source has no `milestones` capability.
+            On write, an id, or on a checkout route a title its registry names (never creates one); JSON null unlinks.
+            Not a content edit, so `updated_at` does not change.
+        due_on:
+          anyOf: *a7
+          description:
+            The ticket's own due date, YYYY-MM-DD (HS2-A820C1); JSON null clears it on write. Not a content edit.
         created_at:
           type: string
         updated_at:
@@ -30560,6 +30701,14 @@ components:
           description:
             Group to create the ticket in (HS2-PDSHNN). An id, or on a checkout route a name resolved through the group
             registry (HS2-9KZSD4).
+        milestone:
+          anyOf: *a7
+          description:
+            Milestone to create the ticket in (HS2-A820C1). An id, or on a checkout route a title its registry names; an
+            unknown title is refused with `milestone_not_found`.
+        due_on:
+          anyOf: *a7
+          description: The ticket's own due date, YYYY-MM-DD (HS2-A820C1).
       additionalProperties: false
     Actor:
       type: object
@@ -30629,6 +30778,16 @@ components:
           description:
             Ticket group id (HS2-9KZSD4), or a legacy name not yet migrated; null when ungrouped. On write, an id, or on
             a checkout route a name (resolved through the group registry, created when new); JSON null clears it.
+        milestone:
+          anyOf: *a7
+          description:
+            Milestone registry id (HS2-A820C1); absent when unlinked or when the source has no `milestones` capability.
+            On write, an id, or on a checkout route a title its registry names (never creates one); JSON null unlinks.
+            Not a content edit, so `updated_at` does not change.
+        due_on:
+          anyOf: *a7
+          description:
+            The ticket's own due date, YYYY-MM-DD (HS2-A820C1); JSON null clears it on write. Not a content edit.
         note:
           type: string
         ai_feedback:
@@ -31029,6 +31188,16 @@ components:
           description:
             Ticket group id (HS2-9KZSD4), or a legacy name not yet migrated; null when ungrouped. On write, an id, or on
             a checkout route a name (resolved through the group registry, created when new); JSON null clears it.
+        milestone:
+          anyOf: *a7
+          description:
+            Milestone registry id (HS2-A820C1); absent when unlinked or when the source has no `milestones` capability.
+            On write, an id, or on a checkout route a title its registry names (never creates one); JSON null unlinks.
+            Not a content edit, so `updated_at` does not change.
+        due_on:
+          anyOf: *a7
+          description:
+            The ticket's own due date, YYYY-MM-DD (HS2-A820C1); JSON null clears it on write. Not a content edit.
         created_at:
           type: string
         updated_at:
@@ -31234,6 +31403,16 @@ components:
           description:
             Ticket group id (HS2-9KZSD4), or a legacy name not yet migrated; null when ungrouped. On write, an id, or on
             a checkout route a name (resolved through the group registry, created when new); JSON null clears it.
+        milestone:
+          anyOf: *a7
+          description:
+            Milestone registry id (HS2-A820C1); absent when unlinked or when the source has no `milestones` capability.
+            On write, an id, or on a checkout route a title its registry names (never creates one); JSON null unlinks.
+            Not a content edit, so `updated_at` does not change.
+        due_on:
+          anyOf: *a7
+          description:
+            The ticket's own due date, YYYY-MM-DD (HS2-A820C1); JSON null clears it on write. Not a content edit.
         created_at:
           type: string
         updated_at:
@@ -31398,6 +31577,16 @@ components:
           description:
             Ticket group id (HS2-9KZSD4), or a legacy name not yet migrated; null when ungrouped. On write, an id, or on
             a checkout route a name (resolved through the group registry, created when new); JSON null clears it.
+        milestone:
+          anyOf: *a7
+          description:
+            Milestone registry id (HS2-A820C1); absent when unlinked or when the source has no `milestones` capability.
+            On write, an id, or on a checkout route a title its registry names (never creates one); JSON null unlinks.
+            Not a content edit, so `updated_at` does not change.
+        due_on:
+          anyOf: *a7
+          description:
+            The ticket's own due date, YYYY-MM-DD (HS2-A820C1); JSON null clears it on write. Not a content edit.
         note:
           type: string
         ai_feedback:
@@ -31558,6 +31747,16 @@ components:
           description:
             Ticket group id (HS2-9KZSD4), or a legacy name not yet migrated; null when ungrouped. On write, an id, or on
             a checkout route a name (resolved through the group registry, created when new); JSON null clears it.
+        milestone:
+          anyOf: *a7
+          description:
+            Milestone registry id (HS2-A820C1); absent when unlinked or when the source has no `milestones` capability.
+            On write, an id, or on a checkout route a title its registry names (never creates one); JSON null unlinks.
+            Not a content edit, so `updated_at` does not change.
+        due_on:
+          anyOf: *a7
+          description:
+            The ticket's own due date, YYYY-MM-DD (HS2-A820C1); JSON null clears it on write. Not a content edit.
         created_at:
           type: string
         updated_at:
@@ -34000,6 +34199,18 @@ components:
           type: boolean
           description:
             Tickets carry a `group` id and the connection lists, ungroups, and merges groups (HS2-PDSHNN, HS2-9KZSD4).
+        milestones:
+          type: boolean
+          default: false
+          description:
+            Tickets carry, change, and are filtered by a project milestone id (HS2-A820C1). Git supports it; GitHub,
+            GitLab, and Jira refuse a milestone write before any request until HS2-6BKPP6.
+        due_dates:
+          type: boolean
+          default: false
+          description:
+            Tickets carry and change their own `due_on` (HS2-A820C1). Git supports it; remote providers refuse until
+            HS2-6BKPP6.
       additionalProperties: false
     ProviderDescriptor:
       type: object
@@ -38972,6 +39183,16 @@ components:
           description:
             Ticket group id (HS2-9KZSD4), or a legacy name not yet migrated; null when ungrouped. On write, an id, or on
             a checkout route a name (resolved through the group registry, created when new); JSON null clears it.
+        milestone:
+          anyOf: *a7
+          description:
+            Milestone registry id (HS2-A820C1); absent when unlinked or when the source has no `milestones` capability.
+            On write, an id, or on a checkout route a title its registry names (never creates one); JSON null unlinks.
+            Not a content edit, so `updated_at` does not change.
+        due_on:
+          anyOf: *a7
+          description:
+            The ticket's own due date, YYYY-MM-DD (HS2-A820C1); JSON null clears it on write. Not a content edit.
         actor:
           $ref: '#/components/schemas/Actor'
       additionalProperties: false
@@ -39774,13 +39995,15 @@ components:
         - title
         - state
         - duplicate
+        - named
       properties:
         id:
           type: string
           pattern: '^[0-9A-HJKMNP-TV-Z]{10}$'
         title:
           type: string
-          description: The stored title, or the placeholder `Milestone <id>` while the file is conflicted.
+          description:
+            The stored title, or the placeholder `Milestone <id>` while the file is conflicted or the id is unknown.
         description:
           type: string
           description: Markdown; absent when empty.
@@ -39793,6 +40016,10 @@ components:
             - open
             - closed
             - conflicted
+            - unknown
+          description:
+            '`unknown`: tickets name the id but the registry does not (another project, a registry not yet pulled, a
+            deleted milestone); never stored (HS2-A820C1).'
         closed_reason:
           type: string
           enum:
@@ -39818,20 +40045,228 @@ components:
             detail:
               type: string
           additionalProperties: false
+        named:
+          type: boolean
+          description: Whether the project's registry names the id; false for an unknown placeholder (HS2-A820C1).
+      additionalProperties: false
+    MilestoneSummary:
+      type: object
+      description:
+        A milestone with its roll-up (HS2-A820C1, docs/38 §38.4), the `Milestone` fields plus `rollup`, derived from the
+        linked tickets when read.
+      required:
+        - id
+        - title
+        - state
+        - duplicate
+        - named
+        - rollup
+      properties:
+        id:
+          type: string
+          pattern: '^[0-9A-HJKMNP-TV-Z]{10}$'
+        title:
+          type: string
+          description:
+            The stored title, or the placeholder `Milestone <id>` while the file is conflicted or the id is unknown.
+        description:
+          type: string
+          description: Markdown; absent when empty.
+        due_on:
+          type: string
+          description: YYYY-MM-DD.
+        state:
+          type: string
+          enum:
+            - open
+            - closed
+            - conflicted
+            - unknown
+          description:
+            '`unknown`: tickets name the id but the registry does not (another project, a registry not yet pulled, a
+            deleted milestone); never stored (HS2-A820C1).'
+        closed_reason:
+          type: string
+          enum:
+            - completed
+            - not_planned
+          description: Present only while closed.
+        closed_at:
+          type: string
+          description: RFC 3339 UTC; present only while closed.
+        duplicate:
+          type: boolean
+          description: Another milestone has the same title, ignoring case and spacing.
+        conflict:
+          type: object
+          description: Present only while conflicted.
+          required:
+            - file
+            - detail
+          properties:
+            file:
+              type: string
+              description: The milestone's file, relative to the checkout root.
+            detail:
+              type: string
+          additionalProperties: false
+        named:
+          type: boolean
+          description: Whether the project's registry names the id; false for an unknown placeholder (HS2-A820C1).
+        rollup:
+          $ref: '#/components/schemas/MilestoneRollup'
+      additionalProperties: false
+    MilestoneRollup:
+      type: object
+      required:
+        - progress
+        - risk
+        - clarity
+        - health
+        - overdue
+        - open_members
+      properties:
+        progress:
+          type: object
+          required:
+            - members
+            - not_started
+            - started
+            - awaiting_ci
+            - finished
+            - dropped
+            - unavailable
+          properties:
+            members:
+              type: integer
+              description: Linked tickets, excluding dropped ones and moved tombstones.
+            not_started:
+              type: integer
+            started:
+              type: integer
+            awaiting_ci:
+              type: integer
+              description: The started tickets in final_testing.
+            finished:
+              type: integer
+            dropped:
+              type: integer
+              description: In Trash, or closed as not_planned, duplicate, obsolete or works_as_designed.
+            unavailable:
+              type: array
+              items:
+                type: string
+              description: Connection ids of sources that could not be read.
+            percent:
+              type: integer
+              description: finished / members, floored; absent with no members.
+          additionalProperties: false
+        risk:
+          type: array
+          items:
+            $ref: '#/components/schemas/MilestoneSignal'
+          description: blocked, stale, low_confidence, red_gate, overdue.
+        clarity:
+          type: array
+          items:
+            $ref: '#/components/schemas/MilestoneSignal'
+          description: feedback_needed, no_details.
+        health:
+          type: string
+          enum:
+            - done
+            - dropped
+            - off_track
+            - at_risk
+            - unclear
+            - on_track
+        due_at_ms:
+          type: integer
+          description: The deadline instant of the milestone's own date in the project time zone, Unix milliseconds.
+        overdue:
+          type: boolean
+        open_members:
+          type: array
+          items:
+            $ref: '#/components/schemas/MilestoneMemberRef'
+      additionalProperties: false
+    MilestoneSignal:
+      type: object
+      required:
+        - ticket
+        - code
+        - detail
+      properties:
+        ticket:
+          $ref: '#/components/schemas/MilestoneMemberRef'
+        code:
+          type: string
+        detail:
+          type: string
+      additionalProperties: false
+    MilestoneMemberRef:
+      type: object
+      required:
+        - connection_id
+        - id
+        - slug
+        - title
+      properties:
+        connection_id:
+          type: string
+        id:
+          type: string
+        slug:
+          type: string
+        title:
+          type: string
+      additionalProperties: false
+    MilestoneMemberOutcome:
+      type: object
+      description: The outcome of Delete Milestone… or Move Open Tickets to… (HS2-A820C1).
+      required:
+        - milestone
+        - updated
+        - changed
+      properties:
+        milestone:
+          $ref: '#/components/schemas/Milestone'
+        to:
+          $ref: '#/components/schemas/Milestone'
+        updated:
+          type: integer
+          description: Tickets rewritten across every store.
+        changed:
+          type: boolean
+      additionalProperties: false
+    MoveOpenMilestone:
+      type: object
+      required:
+        - to
+      properties:
+        to:
+          type: string
+          description: The milestone to move the open tickets to, by id or title.
+        actor:
+          $ref: '#/components/schemas/Actor'
       additionalProperties: false
     MilestoneListing:
       type: object
       required:
         - registry
+        - time_zone
         - milestones
       properties:
         registry:
           type: boolean
           description: Whether a project milestone registry was read.
+        time_zone:
+          type: string
+          description: The project time zone in effect for due dates (docs/38 §38.3).
         milestones:
           type: array
           items:
-            $ref: '#/components/schemas/Milestone'
+            $ref: '#/components/schemas/MilestoneSummary'
         registry_sync:
           $ref: '#/components/schemas/RegistrySyncStatus'
       additionalProperties: false
@@ -39865,12 +40300,18 @@ components:
       required:
         - milestone
         - changed
+        - open_members
       properties:
         milestone:
-          $ref: '#/components/schemas/Milestone'
+          $ref: '#/components/schemas/MilestoneSummary'
         changed:
           type: boolean
           description: False when the write changed nothing, so nothing was written, committed, or announced.
+        open_members:
+          type: array
+          items:
+            $ref: '#/components/schemas/MilestoneMemberRef'
+          description: The linked tickets still open; Close Milestone… names them (HS2-A820C1).
       additionalProperties: false
     CreateMilestone:
       type: object

@@ -1840,6 +1840,8 @@ mod server_wrapper_tests {
                 tags: vec![],
                 up_next: false,
                 blocked_by: vec![],
+                due_on: None,
+                milestone: None,
             },
         )
         .unwrap();

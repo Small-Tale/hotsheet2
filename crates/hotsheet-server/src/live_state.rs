@@ -448,6 +448,7 @@ pub fn refresh_at(state: &AppState, store: &str, now: OffsetDateTime) -> Option<
             assignment: None,
             turn: None,
             live: Some(Box::new(snapshot.clone())),
+            milestone: None,
         });
     }
     Some(snapshot)

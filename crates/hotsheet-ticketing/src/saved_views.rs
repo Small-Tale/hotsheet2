@@ -275,6 +275,13 @@ enum Term {
     /// `group:name`, holding the normalized comparison key (HS2-44W3TP).
     Group(String),
     HasGroup,
+    /// `milestone:<id or title>` (HS2-A820C1), holding the unquoted value.
+    Milestone(String),
+    HasMilestone,
+    /// `due:<2026-12-01`, `due:<=7d`, ... over the effective due date (HS2-A820C1).
+    Due(DueBound),
+    /// `is:overdue`: open, and its effective due has passed in the project zone.
+    Overdue,
     Is(String),
     HasAttachment,
     HasMediaAnnotation,
@@ -288,7 +295,48 @@ enum Term {
     Text(String),
 }
 
+/// The comparison of a `due:` term.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DueOp {
+    Before,
+    OnOrBefore,
+    After,
+    OnOrAfter,
+}
+
+/// A `due:` bound: a calendar date or a number of days from now (HS2-A820C1).
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum DueBound {
+    Date(DueOp, String),
+    Days(DueOp, u32),
+}
+
+fn due_term(raw: &str) -> Option<DueBound> {
+    let value = strip_prefix_ci(raw, "due:")?.trim();
+    let (op, rest) = [
+        ("<=", DueOp::OnOrBefore),
+        (">=", DueOp::OnOrAfter),
+        ("<", DueOp::Before),
+        (">", DueOp::After),
+    ]
+    .into_iter()
+    .find_map(|(prefix, op)| value.strip_prefix(prefix).map(|rest| (op, rest.trim())))?;
+    if let Some(days) = rest
+        .strip_suffix(['d', 'D'])
+        .and_then(|days| days.parse::<u32>().ok())
+    {
+        return Some(DueBound::Days(op, days));
+    }
+    hotsheet_model::parse_due_on(rest).map(|_| DueBound::Date(op, rest.to_owned()))
+}
+
 fn classify(raw: &str, now: OffsetDateTime) -> Term {
+    if raw.eq_ignore_ascii_case("is:overdue") {
+        return Term::Overdue;
+    }
+    if let Some(bound) = due_term(raw) {
+        return Term::Due(bound);
+    }
     if let Some(state) = lifecycle(raw) {
         return Term::Is(state);
     }
@@ -298,6 +346,7 @@ fn classify(raw: &str, now: OffsetDateTime) -> Term {
             "media-annotation" => return Term::HasMediaAnnotation,
             "commit" => return Term::HasCommit,
             "group" => return Term::HasGroup,
+            "milestone" => return Term::HasMilestone,
             _ => {}
         }
     }
@@ -308,6 +357,13 @@ fn classify(raw: &str, now: OffsetDateTime) -> Term {
         .and_then(|name| hotsheet_model::group_key_of_input(&name))
     {
         return Term::Group(key);
+    }
+    if let Some(value) = strip_prefix_ci(raw, "milestone:")
+        .map(unquote)
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty())
+    {
+        return Term::Milestone(value);
     }
     if let Some(name) = strip_prefix_ci(raw, "tag:")
         .map(unquote)
@@ -411,6 +467,17 @@ pub struct ViewQuery {
     /// The project's group names, so `group:name` matches tickets that store a group
     /// id (HS2-9KZSD4). Without them a name matches only legacy name values and ids.
     group_names: Option<crate::groups::GroupNames>,
+    /// The project's milestones and time zone, so `milestone:<title>`, `due:` and
+    /// `is:overdue` read effective due dates (HS2-A820C1). Without them a title matches
+    /// nothing, only own due dates count, and the zone is UTC.
+    milestones: Option<MilestoneContext>,
+}
+
+/// The milestone registry snapshot and zone a view reads (HS2-A820C1).
+#[derive(Debug, Clone)]
+pub struct MilestoneContext {
+    pub milestones: Vec<crate::milestones::Milestone>,
+    pub zone: jiff::tz::TimeZone,
 }
 
 #[derive(Debug, Clone)]
@@ -466,7 +533,16 @@ impl ViewQuery {
             source: query.to_owned(),
             shape,
             group_names: None,
+            milestones: None,
         }
+    }
+
+    /// Resolve `milestone:` titles and effective due dates through a project's milestone
+    /// registry snapshot, in the project time zone (HS2-A820C1).
+    #[must_use]
+    pub fn with_milestones(mut self, context: MilestoneContext) -> Self {
+        self.milestones = Some(context);
+        self
     }
 
     /// Resolve `group:` terms through a project's group registry snapshot.
@@ -521,6 +597,7 @@ impl ViewQuery {
             now,
             has_commit,
             group_names: self.group_names.as_ref(),
+            milestones: self.milestones.as_ref(),
         };
         match &self.shape {
             Shape::Expression(expr) => eval(expr, &at),
@@ -541,6 +618,59 @@ struct At<'a> {
     now: OffsetDateTime,
     has_commit: &'a dyn Fn() -> bool,
     group_names: Option<&'a crate::groups::GroupNames>,
+    milestones: Option<&'a MilestoneContext>,
+}
+
+impl At<'_> {
+    fn milestone(&self, id: &str) -> Option<&crate::milestones::Milestone> {
+        self.milestones?
+            .milestones
+            .iter()
+            .find(|milestone| milestone.id == id)
+    }
+
+    fn zone(&self) -> jiff::tz::TimeZone {
+        self.milestones
+            .map_or(jiff::tz::TimeZone::UTC, |context| context.zone.clone())
+    }
+
+    /// The ticket's effective due date (docs/38 §38.3).
+    fn effective_due(&self) -> Option<&str> {
+        let t = self.ticket;
+        crate::milestone_rollup::effective_due_on(
+            t.due_on.as_deref(),
+            t.milestone.as_deref().and_then(|id| self.milestone(id)),
+        )
+    }
+
+    fn now_ms(&self) -> i64 {
+        i64::try_from(self.now.unix_timestamp_nanos() / 1_000_000).unwrap_or(i64::MAX)
+    }
+}
+
+fn due_matches(bound: &DueBound, at: &At<'_>) -> bool {
+    let Some(due) = at.effective_due() else {
+        return false;
+    };
+    let compare = |op: DueOp, ordering: std::cmp::Ordering| match op {
+        DueOp::Before => ordering.is_lt(),
+        DueOp::OnOrBefore => ordering.is_le(),
+        DueOp::After => ordering.is_gt(),
+        DueOp::OnOrAfter => ordering.is_ge(),
+    };
+    match bound {
+        DueBound::Date(op, date) => compare(*op, due.cmp(date.as_str())),
+        DueBound::Days(op, days) => {
+            let Some(deadline) = crate::milestone_rollup::due_deadline_ms(Some(due), &at.zone())
+            else {
+                return false;
+            };
+            let limit = at
+                .now_ms()
+                .saturating_add(i64::from(*days).saturating_mul(86_400_000));
+            compare(*op, deadline.cmp(&limit))
+        }
+    }
 }
 
 /// Whether a stored group value is the group `key` names: a legacy name by its key, an
@@ -575,6 +705,28 @@ fn term_matches(raw: &str, at: &At<'_>) -> bool {
             .as_deref()
             .is_some_and(|value| group_term_matches(value, &key, at.group_names)),
         Term::HasGroup => t.group.is_some(),
+        Term::Milestone(value) => t.milestone.as_deref().is_some_and(|id| {
+            id == value
+                || at.milestone(id).is_some_and(|milestone| {
+                    milestone.named
+                        && crate::milestones::milestone_title_key(&milestone.title)
+                            == crate::milestones::milestone_title_key(&value)
+                })
+        }),
+        Term::HasMilestone => t.milestone.is_some(),
+        Term::Due(bound) => due_matches(&bound, at),
+        Term::Overdue => {
+            // Open work as the roll-up counts it: not started, started, or Backlog.
+            matches!(
+                t.status,
+                Status::NotStarted | Status::Started | Status::Backlog
+            ) && t.close_reason.is_none()
+                && at.effective_due().is_some_and(|due| {
+                    crate::milestone_rollup::due_deadline_ms(Some(due), &at.zone()).is_some_and(
+                        |deadline| crate::project_time_zone::is_overdue(deadline, at.now_ms()),
+                    )
+                })
+        }
         Term::Is(state) => is_state(&state, t, now),
         Term::HasAttachment => !t.attachments.is_empty(),
         Term::HasMediaAnnotation => t.attachments.iter().any(|a| !a.annotations.is_empty()),
@@ -765,6 +917,135 @@ mod tests {
         );
         assert!(matches("tag:\"web ui\" and login", &t));
         assert!(matches("\"login page\" or nothing", &t));
+    }
+
+    fn milestone_context(zone: &str) -> MilestoneContext {
+        let named = |id: &str, title: &str, due: Option<&str>, state| {
+            let mut m = crate::milestones::Milestone::unknown(id);
+            m.title = title.into();
+            m.due_on = due.map(str::to_string);
+            m.state = state;
+            m.named = true;
+            m
+        };
+        MilestoneContext {
+            milestones: vec![
+                named(
+                    "7K3M9P2QXA",
+                    "Toolchain 2.0",
+                    Some("2026-11-05"),
+                    crate::milestones::MilestoneState::Open,
+                ),
+                named(
+                    "4N8R2T6VWX",
+                    "Old Release",
+                    Some("2026-10-01"),
+                    crate::milestones::MilestoneState::Closed,
+                ),
+            ],
+            zone: jiff::tz::TimeZone::get(zone).unwrap(),
+        }
+    }
+
+    fn matches_in(query: &str, t: &Ticket, zone: &str, now: &str) -> bool {
+        ViewQuery::parse(query)
+            .with_milestones(milestone_context(zone))
+            .matches(t, at(now))
+    }
+
+    #[test]
+    fn hs2_a820c1_milestone_terms_match_by_id_or_title() {
+        let now = "2026-10-30T00:00:00Z";
+        let mut t = ticket();
+        assert!(!matches_in("has:milestone", &t, "UTC", now));
+        assert!(matches_in("NOT has:milestone", &t, "UTC", now));
+        t.milestone = Some("7K3M9P2QXA".into());
+        for query in [
+            "milestone:7K3M9P2QXA",
+            "milestone:\"toolchain   2.0\"",
+            "MILESTONE:\"Toolchain 2.0\"",
+            "has:milestone",
+            "has:milestone AND tag:docs",
+        ] {
+            assert!(matches_in(query, &t, "UTC", now), "{query}");
+        }
+        assert!(!matches_in("milestone:\"Old Release\"", &t, "UTC", now));
+        assert!(
+            !matches("milestone:\"Toolchain 2.0\"", &t),
+            "a title needs the registry snapshot"
+        );
+        assert!(
+            matches("milestone:7K3M9P2QXA", &t),
+            "an id matches without one"
+        );
+        // An unknown id still matches itself.
+        t.milestone = Some("ZZZZZZZZZZ".into());
+        assert!(matches_in("milestone:ZZZZZZZZZZ", &t, "UTC", now));
+        assert!(!matches_in("milestone:\"Toolchain 2.0\"", &t, "UTC", now));
+    }
+
+    #[test]
+    fn hs2_a820c1_due_terms_read_the_effective_due_date() {
+        let now = "2026-10-30T00:00:00Z";
+        let mut t = ticket();
+        assert!(
+            !matches_in("due:<2099-01-01", &t, "UTC", now),
+            "no due date"
+        );
+        // Own date only.
+        t.due_on = Some("2026-11-20".into());
+        assert!(matches_in("due:<2026-11-21", &t, "UTC", now));
+        assert!(!matches_in("due:<2026-11-20", &t, "UTC", now));
+        assert!(matches_in("due:<=2026-11-20", &t, "UTC", now));
+        assert!(matches_in("due:>=2026-11-20", &t, "UTC", now));
+        assert!(!matches_in("due:>2026-11-20", &t, "UTC", now));
+        // The open milestone's earlier date wins.
+        t.milestone = Some("7K3M9P2QXA".into());
+        assert!(matches_in("due:<=2026-11-05", &t, "UTC", now));
+        assert!(matches_in("due:<=7d", &t, "UTC", now));
+        assert!(!matches_in("due:<=5d", &t, "UTC", now));
+        // A closed milestone lends no date: only the ticket's own counts.
+        t.milestone = Some("4N8R2T6VWX".into());
+        assert!(!matches_in("due:<=2026-11-05", &t, "UTC", now));
+        t.due_on = None;
+        assert!(!matches_in("due:<2099-01-01", &t, "UTC", now));
+        // Malformed bounds are plain text, never a due filter.
+        assert!(!matches_in("due:<soon", &t, "UTC", now));
+    }
+
+    #[test]
+    fn hs2_a820c1_is_overdue_uses_the_project_zone_and_open_status() {
+        let mut t = ticket();
+        t.due_on = Some("2026-11-05".into());
+        // The deadline is the end of the day in the project zone.
+        assert!(!matches_in("is:overdue", &t, "UTC", "2026-11-05T23:59:59Z"));
+        assert!(matches_in("is:overdue", &t, "UTC", "2026-11-06T00:00:01Z"));
+        // Berlin (UTC+1) ends Nov 5 at 23:00 UTC; Los Angeles (UTC-8) at 08:00 UTC Nov 6.
+        assert!(matches_in(
+            "is:overdue",
+            &t,
+            "Europe/Berlin",
+            "2026-11-05T23:30:00Z"
+        ));
+        assert!(!matches_in(
+            "is:overdue",
+            &t,
+            "America/Los_Angeles",
+            "2026-11-06T07:00:00Z"
+        ));
+        assert!(matches_in(
+            "is:overdue",
+            &t,
+            "America/Los_Angeles",
+            "2026-11-06T08:00:01Z"
+        ));
+        // Finished or closed tickets are never overdue.
+        t.status = Status::Completed;
+        assert!(!matches_in("is:overdue", &t, "UTC", "2027-01-01T00:00:00Z"));
+        t.status = Status::Backlog;
+        assert!(matches_in("is:overdue", &t, "UTC", "2027-01-01T00:00:00Z"));
+        t.close_reason = Some(CloseReason::NotPlanned);
+        assert!(!matches_in("is:overdue", &t, "UTC", "2027-01-01T00:00:00Z"));
     }
 
     #[test]

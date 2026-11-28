@@ -169,6 +169,17 @@ pub struct TicketQuery {
     pub group_ids: Vec<String>,
     /// `Some(true)` = only grouped tickets; `Some(false)` = only ungrouped (HS2-PDSHNN).
     pub has_group: Option<bool>,
+    /// Only tickets linked to one of these milestone ids (HS2-A820C1). A caller with the
+    /// project's registry resolves a title to its id first; `Some(vec![])` matches nothing.
+    pub milestone_ids: Option<Vec<String>>,
+    /// `Some(true)` = only tickets with a milestone; `Some(false)` = only tickets without.
+    pub has_milestone: Option<bool>,
+    /// Only tickets whose effective due date is on or before this `YYYY-MM-DD` date
+    /// (HS2-A820C1, docs/38 §38.3): their own `due_on` is, or they belong to one of
+    /// `due_milestone_ids`, the open milestones of the reading project due by then.
+    pub due_before: Option<String>,
+    /// With `due_before`: the open milestones whose own date is on or before it.
+    pub due_milestone_ids: Vec<String>,
     /// Half-open `created_at` / `updated_at` range filters (ISO-8601 strings; inclusive
     /// lower, inclusive upper — lexical compare works on RFC3339). Custom-view dimensions.
     pub created_after: Option<String>,
@@ -339,6 +350,20 @@ pub fn query(store: &FsStore, q: &TicketQuery) -> Result<Vec<Ticket>, StoreError
                     .is_some_and(|value| keys.contains(&hotsheet_model::group_value_key(value)))
             })
             && q.has_group.is_none_or(|want| t.group.is_some() == want)
+            && q.milestone_ids.as_ref().is_none_or(|ids| {
+                t.milestone
+                    .as_ref()
+                    .is_some_and(|milestone| ids.contains(milestone))
+            })
+            && q.has_milestone
+                .is_none_or(|want| t.milestone.is_some() == want)
+            && q.due_before.as_deref().is_none_or(|date| {
+                due_on_or_before(t.due_on.as_deref(), date)
+                    || t
+                        .milestone
+                        .as_ref()
+                        .is_some_and(|milestone| q.due_milestone_ids.contains(milestone))
+            })
             && q.created_after
                 .as_deref()
                 .is_none_or(|a| t.created_at.as_str() >= a)
@@ -594,6 +619,12 @@ pub fn priority_rank(p: Priority) -> u8 {
     }
 }
 
+/// Whether a stored own due date is a calendar date on or before `date` (HS2-A820C1).
+/// A hand-edited value that is not a date is never due.
+pub fn due_on_or_before(due_on: Option<&str>, date: &str) -> bool {
+    due_on.is_some_and(|due| hotsheet_model::parse_due_on(due).is_some() && due <= date)
+}
+
 // ---- create ----------------------------------------------------------------------
 
 /// Fields for a new ticket. `title` + `category` are the essentials; the rest default.
@@ -610,6 +641,11 @@ pub struct NewTicket {
     pub blocked_by: Vec<Ulid>,
     /// The group to create the ticket in (HS2-PDSHNN); empty text means ungrouped.
     pub group: Option<String>,
+    /// The milestone id to create the ticket in (HS2-A820C1); callers with a project
+    /// registry resolve a title to its id first.
+    pub milestone: Option<String>,
+    /// The ticket's own due date, `YYYY-MM-DD` (HS2-A820C1).
+    pub due_on: Option<String>,
 }
 
 /// Expand leading `[tag]` title shorthand for every core-backed creation path.
@@ -760,6 +796,16 @@ pub fn create_by(
         Some(name) => hotsheet_model::normalize_group_name(name)?,
         None => None,
     };
+    let milestone = new
+        .milestone
+        .as_deref()
+        .map(hotsheet_model::validate_milestone_id)
+        .transpose()?;
+    let due_on = new
+        .due_on
+        .as_deref()
+        .map(hotsheet_model::validate_due_on)
+        .transpose()?;
     let mut t = Ticket::new(
         id,
         derive_slug(&id, prefix),
@@ -776,6 +822,8 @@ pub fn create_by(
     t.up_next = new.up_next && t.status.is_active();
     t.blocked_by = new.blocked_by;
     t.group = group;
+    t.milestone = milestone;
+    t.due_on = due_on;
     t.created_by = created_by;
     store.write_ticket_committing(&t)?;
     Ok(t)
@@ -805,6 +853,11 @@ pub struct TicketPatch {
     /// (HS2-PDSHNN). Callers that know the store's other groups pass the spelling
     /// [`crate::groups::resolve_group_change`] chose.
     pub group: Option<Option<String>>,
+    /// Absent leaves the milestone link unchanged; present `None` clears it (HS2-A820C1).
+    /// Holds a milestone id: callers with a project registry resolve titles first.
+    pub milestone: Option<Option<String>>,
+    /// Absent leaves the own due date unchanged; present `None` clears it (HS2-A820C1).
+    pub due_on: Option<Option<String>>,
     /// Who is making the change; stamped on the status-transition activity it produces
     /// (HS2-32QDZ3). Never a field change by itself.
     pub actor: Option<hotsheet_model::NoteActor>,
@@ -844,6 +897,28 @@ pub fn update_if<E: From<StoreError>>(
         Some(None) => Some(None),
         None => None,
     };
+    let milestone = patch
+        .milestone
+        .map(|value| {
+            value
+                .as_deref()
+                .map(hotsheet_model::validate_milestone_id)
+                .transpose()
+        })
+        .transpose()
+        .map_err(StoreError::from)
+        .map_err(E::from)?;
+    let due_on = patch
+        .due_on
+        .map(|value| {
+            value
+                .as_deref()
+                .map(hotsheet_model::validate_due_on)
+                .transpose()
+        })
+        .transpose()
+        .map_err(StoreError::from)
+        .map_err(E::from)?;
     store.with_ticket_transaction(|| {
         let mut t = store.read_ticket(id)?;
         precondition(&t)?;
@@ -852,6 +927,12 @@ pub fn update_if<E: From<StoreError>>(
         let previous_phase = t.started_phase;
         if let Some(v) = group {
             t.group = v;
+        }
+        if let Some(v) = milestone {
+            t.milestone = v;
+        }
+        if let Some(v) = due_on {
+            t.due_on = v;
         }
         if let Some(v) = patch.title {
             t.title = v;
@@ -1044,6 +1125,9 @@ fn has_substantive_change(before: &Ticket, after: &Ticket) -> bool {
     before.priority = after.priority;
     // Grouping is organization, like the queue flag (HS2-PDSHNN).
     before.group.clone_from(&after.group);
+    // So are the milestone link and the own due date (HS2-A820C1, docs/38 §38.2-§38.3).
+    before.milestone.clone_from(&after.milestone);
+    before.due_on.clone_from(&after.due_on);
     before.updated_at = after.updated_at.clone();
     before != after
 }

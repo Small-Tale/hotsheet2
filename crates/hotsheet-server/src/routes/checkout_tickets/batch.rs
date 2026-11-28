@@ -128,6 +128,27 @@ pub(crate) async fn batch_update_checkout_tickets(
             item.update.group_resolved = true;
         }
     }
+    // HS2-A820C1: resolve each requested milestone once through the registry, so an
+    // unknown title refuses the batch before the first write.
+    let mut resolved_milestones = BTreeMap::<String, Option<Option<String>>>::new();
+    for item in &mut items {
+        if let Some(Some(input)) = &item.update.milestone {
+            let value = match resolved_milestones.get(input) {
+                Some(value) => value.clone(),
+                None => {
+                    let value = crate::routes::milestones::resolve_link_for_checkout(
+                        &state,
+                        &reference,
+                        Some(Some(input.clone())),
+                    )?;
+                    resolved_milestones.insert(input.clone(), value.clone());
+                    value
+                }
+            };
+            item.update.milestone = value;
+            item.update.milestone_resolved = true;
+        }
+    }
     let admission_time = started.elapsed();
     let stores = items
         .iter()

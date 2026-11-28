@@ -646,6 +646,7 @@ pub(crate) async fn save_custom_views(
         activity: None,
         assignment: None,
         turn: None,
+        milestone: None,
     });
     Ok(Json(views))
 }
@@ -681,6 +682,7 @@ pub(crate) async fn save_checkout_custom_views(
         activity: None,
         assignment: None,
         turn: None,
+        milestone: None,
     });
     Ok(Json(views))
 }
@@ -896,6 +898,7 @@ pub(crate) async fn acknowledge_notification(
         activity: None,
         assignment: None,
         turn: None,
+        milestone: None,
     });
     Ok(Json(notification))
 }

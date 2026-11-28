@@ -2109,6 +2109,8 @@ async fn hs2_533pp8_a_live_github_answer_reaches_the_ai_that_asked() {
                 blocked_by: vec![],
                 transfer: None,
                 created_by: None,
+                due_on: None,
+                milestone: None,
             },
         )
         .unwrap();

@@ -524,6 +524,7 @@ pub(crate) async fn delete_checkout_ticket_attachment(
                 activity: None,
                 assignment: None,
                 turn: None,
+                milestone: None,
             });
             return Ok(Json(ResolvedTicket {
                 store: source.connection_id,
@@ -682,6 +683,7 @@ pub(crate) async fn update_checkout_ticket_attachment_markup(
             activity: None,
             assignment: None,
             turn: None,
+            milestone: None,
         });
         return Ok(Json(ResolvedTicket {
             store: source.connection_id,

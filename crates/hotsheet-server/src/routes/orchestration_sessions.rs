@@ -210,6 +210,7 @@ pub(crate) fn note_session_change(state: &AppState, terminal_id: &str) {
             activity: None,
             assignment: None,
             turn: None,
+            milestone: None,
         });
     });
 }

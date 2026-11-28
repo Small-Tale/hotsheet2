@@ -889,6 +889,7 @@ pub(crate) fn note_orchestration_change(state: &AppState, owner: &str) {
         activity: None,
         assignment: None,
         turn: None,
+        milestone: None,
     });
 }
 
@@ -1155,6 +1156,7 @@ fn announce_terminal_orchestrator(state: &AppState, terminal_id: &str) {
         activity: None,
         assignment: None,
         turn: None,
+        milestone: None,
     });
 }
 

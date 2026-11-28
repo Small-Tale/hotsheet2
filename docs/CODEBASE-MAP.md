@@ -1692,26 +1692,48 @@ create|rename|ungroup|merge|migrate` and finds the registry from the working dir
   `ProviderCapabilities.groups` is true for Markdown/Git only. The web client's real-app
   coverage is `clients/web/tests/ticket-groups.spec.ts`.
 
-Milestones (HS2-9PYNCN, [38-milestones.md](38-milestones.md); registry only so far):
+Milestones (HS2-9PYNCN, HS2-A820C1, [38-milestones.md](38-milestones.md); the client is HS2-NSVKGE and HS2-Y9V4NB):
 
 - `crates/hotsheet-ticketing/src/milestones.rs` is the project milestone registry, one
   committed file per milestone under `<checkout>/.hotsheet2/milestones/<id>.json`: the fixed
   key order with unknown keys kept, `milestones.lock`, title normalization and uniqueness
   (`milestone_title_taken`), `duplicate` flags, close and reopen, the `conflicted` read state
-  that refuses writes (`milestone_registry_conflict`), `listing` (the shared list shape), and
-  `MilestoneError::code`. Tests: `milestones/tests.rs` (format, rules, lock) and
+  that refuses writes (`milestone_registry_conflict`), the `unknown` placeholder state
+  (`Milestone::unknown`, `named: false`), and `MilestoneError::code`. Tests: `milestones/tests.rs` (format, rules, lock) and
   `milestones/git_tests.rs` (publication, two clones). It publishes through
   `groups/git_sync.rs`, whose `RegistryKind` (groups, milestones) names each registry's
   directory, status file (`.hotsheet2/milestones-sync.json`) and wording; only groups keep
   a remote overlay, and status listeners fire for groups only (HS2-BXKWB4).
+- Ticket links (HS2-A820C1): `hotsheet-model/src/milestone_link.rs` (the `milestone` and
+  `due_on` frontmatter keys on `Ticket`, id and date validation, tolerant reads);
+  `merge.rs` resolves both as last-writer-wins; `ops.rs` (`TicketPatch`/`NewTicket` fields,
+  `TicketQuery::milestone_ids`/`has_milestone`/`due_before`/`due_milestone_ids`, neither
+  field bumps `updated_at`); `provider.rs` (`ProviderCapabilities::milestones`/`due_dates`,
+  draft and patch fields, copy `dropped_fields`); the GitHub, GitLab and Jira adapters
+  refuse both before any request. The index (schema 27) stores `milestone_id` and `due_on`,
+  with `Index::milestone_members` and `Index::milestone_id`.
+- `crates/hotsheet-ticketing/src/milestone_rollup.rs` is the pure roll-up
+  (`milestone_rollup`, `effective_due_on`, `due_deadline_ms`; tests
+  `milestone_rollup_tests.rs`); `milestone_project.rs` is the project layer every surface
+  calls: `ProjectMembers` (from indexes or a file scan), `listing`/`show` with roll-ups and
+  unknown ids, `resolve_link`, `filter_ids`, `due_milestone_ids`, `delete_milestone`,
+  `move_open_members` (tests `milestone_project_tests.rs`). `saved_views.rs` reads
+  `milestone:`, `has:milestone`, `due:` and `is:overdue` through `ViewQuery::with_milestones`.
 - `crates/hotsheet-server/src/routes/milestones.rs` serves `GET|POST
-/checkouts/{ref}/milestones`, `GET|PATCH …/milestones/{milestone}` and `POST
-…/{milestone}/close|reopen`, announcing `milestones_changed` (`AppState::announce_milestones_changed`);
+/checkouts/{ref}/milestones`, `GET|PATCH|DELETE …/milestones/{milestone}` and `POST
+…/{milestone}/close|reopen|move-open` with roll-ups from the checkout's indexes, plus the
+  ticket-link resolution the ticket routes share (`resolve_link_for_checkout`,
+  `resolve_link_for_store`, `resolve_list_filters`), announcing `milestones_changed`
+  (`AppState::announce_milestones_changed`); ticket change events carry `milestone: {from,
+to}` (`events::MilestoneChange`, from `changed_many_in` and the store watcher);
   `watcher.rs` announces it too when `.hotsheet2/milestones/` changes on disk
   (`milestone_registry_fingerprint`); `sync_loop::sync_group_registries` also runs the
-  milestone pass. Tests: `crates/hotsheet-server/tests/milestones_http.rs`.
+  milestone pass. Tests: `crates/hotsheet-server/tests/milestones_http.rs` and
+  `milestone_links_http.rs` (links, filters, roll-ups, delete, move-open, refusals).
 - `crates/hotsheet-cli/src/dispatch/milestones.rs` provides `milestones` and `milestone
-create|show|edit|close|reopen` (registry found like the group registry; tests
+create|show|edit|close|reopen|delete|move-open`, and the resolution `new/edit --milestone`,
+  `--due` and `ls --milestone/--has-milestone/--no-milestone/--due-before` use (registry
+  found like the group registry; tests
   `crates/hotsheet-cli/tests/milestones.rs`); MCP `hotsheet_milestones` in
   `crates/hotsheet-mcp/src/lib.rs` calls the same routes, which the serverless backend answers
   in `CoreBackend::milestones_request` (tests `crates/hotsheet-mcp/tests/milestones.rs`).

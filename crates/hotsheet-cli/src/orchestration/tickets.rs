@@ -455,6 +455,8 @@ impl OrchestrationRuntime {
                     }),
                     created_by: hotsheet_ticketing::actor::note_actor(request.actor.as_ref()),
                     group: None,
+                    due_on: None,
+                    milestone: None,
                 },
             )
             .map_err(op_error)?;

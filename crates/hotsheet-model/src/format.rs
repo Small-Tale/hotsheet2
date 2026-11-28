@@ -41,6 +41,8 @@ const KNOWN_KEYS: &[&str] = &[
     "orchestration_links",
     "blocked_reason",
     "group",
+    "milestone",
+    "due_on",
     "created_at",
     "created_by",
     "updated_at",
@@ -1329,6 +1331,56 @@ mod tests {
     }
 
     #[test]
+    fn hs2_a820c1_milestone_and_due_on_round_trip_and_old_files_read_neither() {
+        // A file written before the keys existed reads with neither and writes neither.
+        let old = parse_file(&group_file("")).expect("parses");
+        assert_eq!(
+            (old.milestone.as_deref(), old.due_on.as_deref()),
+            (None, None)
+        );
+        let old_text = to_file_string(&old);
+        assert!(!old_text.contains("milestone") && !old_text.contains("due_on"));
+
+        let mut linked = old.clone();
+        linked.milestone = Some("7K3M9P2QXA".into());
+        linked.due_on = Some("2026-12-04".into());
+        let text = to_file_string(&linked);
+        assert!(text.contains("milestone: 7K3M9P2QXA\n"), "{text}");
+        assert!(text.contains("due_on: 2026-12-04\n") || text.contains("due_on: '2026-12-04'\n"));
+        let parsed = parse_file(&text).unwrap();
+        assert_eq!(parsed, linked);
+        assert!(parsed.extra.is_empty());
+
+        // Clearing omits the keys again.
+        let mut cleared = parsed;
+        cleared.milestone = None;
+        cleared.due_on = None;
+        assert_eq!(to_file_string(&cleared), old_text);
+    }
+
+    #[test]
+    fn hs2_a820c1_unknown_milestone_values_are_kept_and_odd_shapes_read_unset() {
+        for (line, milestone) in [
+            // An id this project's registry may not name is kept verbatim.
+            ("milestone: ZZZZZZZZZZ\n", Some("ZZZZZZZZZZ")),
+            // Hand-edited text is kept too; surfaces read it as an unknown milestone.
+            ("milestone: \"  Toolchain   2.0 \"\n", Some("Toolchain 2.0")),
+            ("milestone: 42\n", Some("42")),
+            ("milestone: null\n", None),
+            ("milestone: \"  \"\n", None),
+            ("milestone:\n- a\n", None),
+        ] {
+            let parsed = parse_file(&group_file(line)).expect("a milestone never fails a ticket");
+            assert_eq!(parsed.milestone.as_deref(), milestone, "{line:?}");
+            assert!(!parsed.extra.contains_key("milestone"));
+        }
+        // A hand-edited due date that is not a date is kept as written, not dropped.
+        let parsed = parse_file(&group_file("due_on: next friday\n")).unwrap();
+        assert_eq!(parsed.due_on.as_deref(), Some("next friday"));
+        assert!(to_file_string(&parsed).contains("due_on: next friday\n"));
+    }
+
+    #[test]
     fn unknown_frontmatter_keys_are_preserved() {
         let id = ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV");
         let text = format!(
@@ -1867,6 +1919,8 @@ mod tests {
             operation_id: Some("o".into()),
         }];
         t.group = Some("g".into());
+        t.milestone = Some("7K3M9P2QXA".into());
+        t.due_on = Some("2026-12-04".into());
         t.claimed_by = Some("w".into());
         t.claim_lease_expires_at = Some("x".into());
         t.worker_label = Some("w".into());

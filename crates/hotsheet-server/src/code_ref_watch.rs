@@ -231,6 +231,7 @@ fn watch_refs(
                 activity: None,
                 assignment: None,
                 turn: None,
+                milestone: None,
             },
         );
     });

@@ -100,8 +100,15 @@ pub(crate) fn do_create(
     } else {
         groups::resolve_for_write(req.group.map(Some))?.flatten()
     };
+    let milestone = if req.milestone_resolved {
+        req.milestone
+    } else {
+        crate::routes::milestones::resolve_link_for_store(req.milestone.map(Some))?.flatten()
+    };
     let new = NewTicket {
         group,
+        milestone,
+        due_on: req.due_on.filter(|due| !due.trim().is_empty()),
         title: req.title,
         category: req.category.unwrap_or_else(|| "issue".to_string()),
         priority: opt_parse(req.priority.as_deref())?.unwrap_or_default(),
@@ -231,8 +238,17 @@ pub(crate) fn do_update_with_ticket(
     } else {
         groups::resolve_for_write(req.group)?
     };
+    let milestone = if req.milestone_resolved {
+        req.milestone
+    } else {
+        crate::routes::milestones::resolve_link_for_store(req.milestone)?
+    };
     let patch = TicketPatch {
         group,
+        milestone,
+        due_on: req
+            .due_on
+            .map(|due| due.filter(|due| !due.trim().is_empty())),
         actor: hotsheet_ticketing::actor::note_actor(actor.as_ref()),
         title: req.title,
         details: req.details,
@@ -422,6 +438,7 @@ pub(crate) fn do_assign(
             requested_by: requested_by.clone(),
         }),
         turn: None,
+        milestone: None,
     });
     for (recipient, action) in newly_assigned
         .iter()
@@ -775,6 +792,12 @@ pub(crate) async fn batch_update(
     if matches!(req.update.group, Some(Some(_))) {
         req.update.group = groups::resolve_for_write(req.update.group.take())?;
         req.update.group_resolved = true;
+    }
+    // HS2-A820C1: the same for the milestone; a store takes milestone ids only.
+    if matches!(req.update.milestone, Some(Some(_))) {
+        req.update.milestone =
+            crate::routes::milestones::resolve_link_for_store(req.update.milestone.take())?;
+        req.update.milestone_resolved = true;
     }
     let mut updated = Vec::new();
     let mut errors = Vec::new();

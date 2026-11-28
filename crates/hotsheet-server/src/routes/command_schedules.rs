@@ -63,6 +63,7 @@ fn emit_changed(state: &AppState, checkout: &str, command_id: &str) {
         activity: None,
         assignment: None,
         turn: None,
+        milestone: None,
     });
 }
 
@@ -602,6 +603,9 @@ fn create_occurrence_ticket(
         group: None,
         group_resolved: false,
         actor: None,
+        due_on: None,
+        milestone: None,
+        milestone_resolved: false,
     };
     if source.provider == "git" {
         let entry = state.hosted_source(source).ok_or_else(|| {

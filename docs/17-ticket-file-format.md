@@ -38,6 +38,8 @@ fields) + a **Markdown body** (`details`) + an optional `## Notes` section. See
 | `orchestration_links`                                                                    | list<{target_id, connection_id, native_id?, relation, operation_id?}>                                                                        | no (def `[]`)  | shared | Links from an orchestration ticket to tickets in declared targets (HS2-AZ15GA, [26](26-orchestration-projects.md) §26.3); `relation` is `planned`, `observed`, `created` or `validated`; never a slug, origin or path           |
 | `blocked_reason`                                                                         | string                                                                                                                                       | no             | shared | Free-text "waiting on"                                                                                                                                                                                                          |
 | `group`                                                                                  | string                                                                                                                                       | no             | shared | The one ticket group this ticket belongs to (HS2-PDSHNN): a group id from the project's registry (HS2-9KZSD4), or a legacy name; absent = ungrouped; see §17.4                                                                  |
+| `milestone`                                                                              | string (milestone id)                                                                                                                        | no             | shared | The one milestone this ticket belongs to (HS2-A820C1): a registry id from the project's milestone registry; absent = none; see §17.4                                                                                            |
+| `due_on`                                                                                 | string (`YYYY-MM-DD`)                                                                                                                        | no             | shared | The ticket's own due date (HS2-A820C1); its effective due also reads its open milestone's date; see §17.4                                                                                                                       |
 | `created_at`                                                                             | RFC3339                                                                                                                                      | yes            | shared |                                                                                                                                                                                                                                 |
 | `created_by`                                                                             | { role:`human\|ai\|system`, id:string? } \| null                                                                                             | no             | shared | Who created the ticket (HS2-9FPHWY), from the creating call's actor; write-once. Absent on older tickets and for unspecified callers, which mean unknown, never human or AI.                                                    |
 | `updated_at`                                                                             | RFC3339                                                                                                                                      | yes            | shared | Drives last-writer-wins merges (§2.7)                                                                                                                                                                                           |
@@ -380,6 +382,18 @@ fields and continue using the v3 shape guard unless another feature raises the v
   The key is omitted when the ticket is ungrouped. It is an ordinary optional field, so it
   needs no schema guard: a reader that predates it keeps the key as an unknown
   frontmatter key and writes it back unchanged.
+- **`milestone` and `due_on` are kept, never fatal (HS2-A820C1,
+  [38](38-milestones.md) §38.2, §38.3).** `milestone` holds a milestone id (the group id
+  shape) from the project's registry (`<checkout>/.hotsheet2/milestones/<id>.json`); an id
+  the reading project's registry does not name is kept verbatim and read as an unknown
+  milestone, never dropped. `due_on` is a calendar date `YYYY-MM-DD`; writers reject any
+  other value (`invalid_due_on`), and writers without a registry accept only ids
+  (`milestone_registry_required`). The parser keeps any scalar as trimmed single-line text
+  (so a hand-edited value is preserved, and a `due_on` that is not a date is simply never
+  due) and reads a list, mapping, empty text or `null` as unset. Both keys are omitted when
+  unset and need no schema guard: files written before them read with neither, and an
+  older reader keeps them as unknown keys. Neither changes `updated_at`, and the semantic
+  merge resolves each as a last-writer-wins scalar.
 
 ## 17.5 Cross-references
 

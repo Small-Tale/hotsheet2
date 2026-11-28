@@ -539,6 +539,8 @@ fn ensure_ticket(
                 tags: vec![REPAIR_TAG.to_string()],
                 up_next: true,
                 blocked_by: vec![],
+                milestone: None,
+                due_on: None,
             },
         )?;
         Ok((ticket.id, ticket.slug))

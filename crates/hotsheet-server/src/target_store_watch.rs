@@ -227,6 +227,7 @@ fn watch_scoped_tickets(
                     activity: None,
                     assignment: None,
                     turn: None,
+                    milestone: None,
                 },
             );
         }

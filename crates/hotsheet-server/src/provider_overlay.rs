@@ -489,6 +489,8 @@ mod tests {
                     blocked_by: vec![],
                     transfer: None,
                     created_by: None,
+                    due_on: None,
+                    milestone: None,
                 },
             )
             .unwrap()

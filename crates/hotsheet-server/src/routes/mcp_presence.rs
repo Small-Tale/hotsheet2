@@ -133,6 +133,7 @@ pub(crate) fn emit_transitions(state: &AppState, transitions: &[Transition]) {
             activity: None,
             assignment: None,
             turn: None,
+            milestone: None,
         });
     }
 }

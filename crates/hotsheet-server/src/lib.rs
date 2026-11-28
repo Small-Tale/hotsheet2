@@ -612,6 +612,7 @@ impl AppState {
                     activity: None,
                     assignment: None,
                     turn: None,
+                    milestone: None,
                 };
                 emit_change(&log, &events, ev);
             });
@@ -634,6 +635,7 @@ impl AppState {
                         activity: None,
                         assignment: None,
                         turn: None,
+                        milestone: None,
                     },
                 );
             });
@@ -659,6 +661,7 @@ impl AppState {
                         activity: None,
                         assignment: None,
                         turn: None,
+                        milestone: None,
                     },
                 );
             }));
@@ -1825,7 +1828,8 @@ pub fn app(state: AppState) -> Router {
         .route(
             "/checkouts/{reference}/milestones/{milestone}",
             get(routes::milestones::get_checkout_milestone)
-                .patch(routes::milestones::edit_checkout_milestone),
+                .patch(routes::milestones::edit_checkout_milestone)
+                .delete(routes::milestones::delete_checkout_milestone),
         )
         .route(
             "/checkouts/{reference}/milestones/{milestone}/close",
@@ -1834,6 +1838,10 @@ pub fn app(state: AppState) -> Router {
         .route(
             "/checkouts/{reference}/milestones/{milestone}/reopen",
             post(routes::milestones::reopen_checkout_milestone),
+        )
+        .route(
+            "/checkouts/{reference}/milestones/{milestone}/move-open",
+            post(routes::milestones::move_open_checkout_milestone),
         )
         .route("/setup/{tool}", post(setup_tool))
         // Multi-store (HS2-87): list/register hosted stores + store-scoped ticket routes

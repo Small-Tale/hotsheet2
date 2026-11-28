@@ -179,6 +179,8 @@ group: None,
                 blocked_by: vec![],
                 transfer: None,
                 created_by: None,
+                due_on: None,
+                milestone: None,
             },
         )
         .unwrap();
@@ -332,6 +334,8 @@ fn ai_author_round_trip(
                 blocked_by: vec![],
                 transfer: None,
                 created_by: None,
+                due_on: None,
+                milestone: None,
             },
         )
         .unwrap();
