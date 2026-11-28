@@ -432,6 +432,10 @@ the Rust server separate. Developer ID signing instructions are in
 
 ## Requirements summary (synthesized status view)
 
+Scheduled AI command delivery uses a durable retry budget for the exact occurrence.
+Invalid configurations stop delivery, and unconfirmed accepted turns await
+reconciliation without automatic replay (HS2-NAB1DA, [client behavior](06-clients.md)).
+
 HS2-DJWTB0 adds transfer admission checks: both selected external
 sources are checked for disabled metadata before construction and again before ticket
 I/O, including persisted-policy/injected-object collisions. An isolated authenticated

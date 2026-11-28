@@ -129,6 +129,16 @@ pub enum OccurrenceOutcome {
     DeliveryUncertain,
 }
 
+/// Durable automatic retry state for one failed scheduled delivery (HS2-NAB1DA).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DeliveryRetry {
+    pub failure_count: u8,
+    /// Earliest next automatic attempt. A failed record with no deadline has stopped.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retry_after_ms: Option<i64>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct OccurrenceResult {
@@ -146,6 +156,10 @@ pub struct OccurrenceResult {
     /// retroactively. New records use Some(false) until completion is observed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub turn_completed: Option<bool>,
+    /// Earlier records have no saved backoff. An old failed occurrence can attempt once
+    /// immediately and begins counting failures when that attempt finishes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delivery_retry: Option<DeliveryRetry>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -168,6 +182,18 @@ impl OccurrenceResult {
     /// The durable occurrence key: `YYYY-MM-DD`, or `YYYY-MM-DDTHH:mm` for sub-day kinds.
     pub fn key(&self) -> String {
         occurrence_key(&self.occurrence_date, self.occurrence_time.as_deref())
+    }
+
+    pub fn delivery_due(&self, now_ms: i64) -> bool {
+        match self.outcome {
+            OccurrenceOutcome::DeliveryPending => true,
+            OccurrenceOutcome::DeliveryFailed => self.delivery_retry.is_none_or(|retry| {
+                retry
+                    .retry_after_ms
+                    .is_some_and(|retry_at| now_ms >= retry_at)
+            }),
+            _ => false,
+        }
     }
 }
 

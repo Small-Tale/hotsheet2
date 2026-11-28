@@ -39,6 +39,10 @@ impl ApiError {
         self.code = Some(code);
         self
     }
+
+    pub(crate) fn has_code(&self, code: &str) -> bool {
+        self.code == Some(code)
+    }
     /// Attach one identifier field, such as `request_id`, beside `code`.
     pub(crate) fn with_field(mut self, name: &'static str, value: impl Into<String>) -> Self {
         self.field = Some((name, value.into()));

@@ -32459,6 +32459,22 @@ components:
         turn_completed:
           type: boolean
           description: The host observed successful completion of the accepted provider turn.
+        delivery_retry:
+          type: object
+          required: [failure_count]
+          description: Durable automatic retry state for the exact occurrence (HS2-NAB1DA).
+          properties:
+            failure_count:
+              type: integer
+              minimum: 1
+              maximum: 3
+            retry_after_ms:
+              type: integer
+              format: int64
+              description:
+                Earliest next automatic attempt in Unix milliseconds. A failed occurrence with no deadline has stopped
+                retrying.
+          additionalProperties: false
       additionalProperties: false
     CommandScheduleView:
       type: object

@@ -4,6 +4,7 @@ use crate::api_error::ApiError;
 use crate::dto::CreateReq;
 use crate::events::ChangeEvent;
 use crate::routes::checkout_tickets::checkout_source_for_create;
+use crate::routes::permissions::{DRIVE_PREPARE_FAILED, DrivenTurnCompletion};
 use crate::routes::project_tools::checkout_settings;
 use crate::routes::providers::{do_provider_create, provider_for};
 use crate::routes::ticket_writes::do_create;
@@ -13,7 +14,8 @@ use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use hotsheet_ticketing::command_schedules::{
-    self, CommandSchedule, OccurrenceResult, Recurrence, ScheduleAction, ScheduleRecord,
+    self, CommandSchedule, DeliveryRetry, OccurrenceOutcome, OccurrenceResult, Recurrence,
+    ScheduleAction, ScheduleRecord,
 };
 use hotsheet_ticketing::commands::{self, CommandDefinition, CommandKind};
 use hotsheet_ticketing::{ApiTicket, Scope, Settings, TicketQuery, ops};
@@ -438,6 +440,7 @@ pub(crate) async fn run_ai(
                 ticket_id: &ticket.qualified_id,
                 ticket_slug: &ticket.slug,
                 occurrence_date: None,
+                now_ms: Timestamp::now().as_millisecond(),
             },
         )
         .await
@@ -454,7 +457,7 @@ pub(crate) async fn run_ai(
                 note_manual_failure(&state, &reference, &ticket.qualified_id, "ticket_claimed");
                 (AiRunDelivery::Failed, Some("ticket_claimed"), None)
             }
-            DeliveryAttempt::Failed(reason) => {
+            DeliveryAttempt::Failed(DeliveryFailure { reason, .. }) => {
                 note_manual_failure(&state, &reference, &ticket.qualified_id, reason);
                 (AiRunDelivery::Failed, Some(reason), None)
             }
@@ -495,14 +498,17 @@ fn watch_manual_turn(
     state: &AppState,
     reference: &str,
     ticket_id: &str,
-    completed: tokio::sync::oneshot::Receiver<bool>,
+    completed: tokio::sync::oneshot::Receiver<DrivenTurnCompletion>,
     worker: String,
 ) {
     let state = state.clone();
     let reference = reference.to_owned();
     let ticket_id = ticket_id.to_owned();
     tokio::spawn(async move {
-        if completed.await == Ok(true) {
+        if matches!(
+            completed.await,
+            Ok(DrivenTurnCompletion::Succeeded | DrivenTurnCompletion::Interrupted)
+        ) {
             return;
         }
         note_manual_failure(&state, &reference, &ticket_id, "ai_turn_failed");
@@ -749,6 +755,7 @@ fn process_sub_day(
                         turn_completed: (schedule.effective_action(command.action)
                             != ScheduleAction::CreateTicket)
                             .then_some(false),
+                        delivery_retry: None,
                     });
                     if record.history.len() > command_schedules::HISTORY_LIMIT {
                         record.history.remove(0);
@@ -853,6 +860,7 @@ pub(crate) fn process_checkout(
                     turn_completed: (schedule.effective_action(command.action)
                         != ScheduleAction::CreateTicket)
                         .then_some(false),
+                    delivery_retry: None,
                 });
                 if record.history.len() > command_schedules::HISTORY_LIMIT {
                     record.history.remove(0);
@@ -884,11 +892,47 @@ pub(crate) fn process_checkout(
 /// A refused claim is not a delivery failure: another worker owns the exact ticket.
 enum DeliveryAttempt {
     Accepted {
-        completed: tokio::sync::oneshot::Receiver<bool>,
+        completed: tokio::sync::oneshot::Receiver<DrivenTurnCompletion>,
         worker: String,
     },
     AwaitClaim,
-    Failed(&'static str),
+    Failed(DeliveryFailure),
+}
+
+#[derive(Clone, Copy)]
+struct DeliveryFailure {
+    reason: &'static str,
+    retryable: bool,
+}
+
+impl DeliveryFailure {
+    fn retry(reason: &'static str) -> DeliveryAttempt {
+        DeliveryAttempt::Failed(Self {
+            reason,
+            retryable: true,
+        })
+    }
+
+    fn stop(reason: &'static str) -> DeliveryAttempt {
+        DeliveryAttempt::Failed(Self {
+            reason,
+            retryable: false,
+        })
+    }
+
+    fn from_api(reason: &'static str, error: ApiError) -> DeliveryAttempt {
+        if error.has_code(DRIVE_PREPARE_FAILED) {
+            return Self::retry(reason);
+        }
+        match error.status {
+            StatusCode::BAD_REQUEST
+            | StatusCode::UNAUTHORIZED
+            | StatusCode::FORBIDDEN
+            | StatusCode::METHOD_NOT_ALLOWED
+            | StatusCode::UNPROCESSABLE_ENTITY => Self::stop(reason),
+            _ => Self::retry(reason),
+        }
+    }
 }
 
 fn selected_ai(
@@ -990,23 +1034,31 @@ struct DeliveryTarget<'a> {
     /// is a manual or headless run of the command (HS2-17Y2EC), which has no occurrence
     /// ledger to update.
     occurrence_date: Option<&'a str>,
+    now_ms: i64,
 }
 
 async fn deliver_one(state: &AppState, target: DeliveryTarget<'_>) -> DeliveryAttempt {
-    let defaults = match permissions::effective_ai_settings(state, Some(target.settings)).await {
-        Ok(defaults) => defaults,
-        Err(_) => return DeliveryAttempt::Failed("ai_provider_unavailable"),
-    };
-    let (tool, model, effort) = selected_ai(target.command, &defaults);
     let (entry, native_id) =
         match claims::checkout_claim_entry(state, target.reference, target.ticket_id) {
             Ok(owner) => owner,
-            Err(_) => return DeliveryAttempt::Failed("ticket_source_unavailable"),
+            Err(error) => return DeliveryFailure::from_api("ticket_source_unavailable", error),
         };
     let ticket = match entry.resolve(&native_id) {
         Ok(Some(ticket)) => ticket,
-        _ => return DeliveryAttempt::Failed("ticket_unavailable"),
+        Ok(None) => return DeliveryFailure::stop("ticket_unavailable"),
+        Err(_) => return DeliveryFailure::retry("ticket_unavailable"),
     };
+    if !ticket.status.is_active() {
+        return DeliveryFailure::stop("ticket_inactive");
+    }
+    let defaults = match permissions::effective_ai_settings(state, Some(target.settings)).await {
+        Ok(defaults) => defaults,
+        Err(error) if error.status == StatusCode::NOT_FOUND => {
+            return DeliveryFailure::stop("ai_provider_unavailable");
+        }
+        Err(error) => return DeliveryFailure::from_api("ai_provider_unavailable", error),
+    };
+    let (tool, model, effort) = selected_ai(target.command, &defaults);
     let source = multistore::store_url_id(&entry.store);
     let (connection_id, session_id) = delivery_connection(
         state,
@@ -1044,7 +1096,7 @@ async fn deliver_one(state: &AppState, target: DeliveryTarget<'_>) -> DeliveryAt
         Err(ops::OpError::WrongWorker { .. } | ops::OpError::ClaimUnavailable { .. }) => {
             return DeliveryAttempt::AwaitClaim;
         }
-        Err(_) => return DeliveryAttempt::Failed("ticket_claim_failed"),
+        Err(_) => return DeliveryFailure::retry("ticket_claim_failed"),
     }
     // HS2-NR0VRF: commit the ambiguity boundary before sending a turn. If the
     // host dies after this write, restart must not replay a possibly sent prompt.
@@ -1056,8 +1108,7 @@ async fn deliver_one(state: &AppState, target: DeliveryTarget<'_>) -> DeliveryAt
                 &target.command.id,
                 occurrence_date,
                 target.ticket_id,
-                command_schedules::OccurrenceOutcome::DeliveryDispatching,
-                false,
+                DeliveryChange::Dispatching(target.now_ms),
             ),
             Ok(Some(_))
         )
@@ -1065,7 +1116,7 @@ async fn deliver_one(state: &AppState, target: DeliveryTarget<'_>) -> DeliveryAt
         if let Ok(ticket) = ops::release(&entry.store, &ticket.id, crate::now(), &worker, false) {
             state.changed_in(&entry, "released", &ticket);
         }
-        return DeliveryAttempt::Failed("occurrence_changed");
+        return DeliveryAttempt::AwaitClaim;
     }
     let prompt = format!(
         "$hotsheet Work the exact ticket {} (qualified id {}) now. Read its full details and notes before acting. The ticket is already claimed by this AI session.",
@@ -1087,13 +1138,43 @@ async fn deliver_one(state: &AppState, target: DeliveryTarget<'_>) -> DeliveryAt
     .await;
     match delivered {
         Ok(completed) => DeliveryAttempt::Accepted { completed, worker },
-        Err(_) => {
+        Err(error) => {
             if let Ok(ticket) = ops::release(&entry.store, &ticket.id, crate::now(), &worker, false)
             {
                 state.changed_in(&entry, "released", &ticket);
             }
-            DeliveryAttempt::Failed("ai_handoff_failed")
+            DeliveryFailure::from_api("ai_handoff_failed", error)
         }
+    }
+}
+
+enum DeliveryChange {
+    Dispatching(i64),
+    Accepted,
+    Failed {
+        failure: DeliveryFailure,
+        now_ms: i64,
+        accepted: bool,
+    },
+    Uncertain,
+}
+
+/// Persist at most two retries for any occurrence. Backoff uses the wall clock so
+/// restart keeps the same budget and cannot immediately resend a failed turn.
+fn delivery_retry(
+    previous: Option<DeliveryRetry>,
+    failure: DeliveryFailure,
+    now_ms: i64,
+) -> DeliveryRetry {
+    let failure_count = previous.map_or(1, |retry| retry.failure_count.saturating_add(1));
+    let retry_after_ms = match (failure.retryable, failure_count) {
+        (true, 1) => Some(now_ms.saturating_add(60_000)),
+        (true, 2) => Some(now_ms.saturating_add(300_000)),
+        _ => None,
+    };
+    DeliveryRetry {
+        failure_count,
+        retry_after_ms,
     }
 }
 
@@ -1104,9 +1185,8 @@ fn set_delivery_outcome(
     command_id: &str,
     occurrence_date: &str,
     ticket_id: &str,
-    outcome: command_schedules::OccurrenceOutcome,
-    allow_delivered: bool,
-) -> Result<Option<command_schedules::OccurrenceOutcome>, ApiError> {
+    change: DeliveryChange,
+) -> Result<Option<OccurrenceResult>, ApiError> {
     for _ in 0..4 {
         let prior = records(settings)?;
         let mut next = prior.clone();
@@ -1121,33 +1201,42 @@ fn set_delivery_outcome(
         else {
             return Ok(None);
         };
-        let allowed = match outcome {
-            command_schedules::OccurrenceOutcome::DeliveryDispatching => matches!(
-                item.outcome,
-                command_schedules::OccurrenceOutcome::DeliveryPending
-                    | command_schedules::OccurrenceOutcome::DeliveryFailed
-            ),
-            command_schedules::OccurrenceOutcome::Delivered => {
-                item.outcome == command_schedules::OccurrenceOutcome::DeliveryDispatching
+        match change {
+            DeliveryChange::Dispatching(now_ms) if item.delivery_due(now_ms) => {
+                item.outcome = OccurrenceOutcome::DeliveryDispatching;
+                item.turn_completed = Some(false);
+                if let Some(retry) = &mut item.delivery_retry {
+                    retry.retry_after_ms = None;
+                }
             }
-            command_schedules::OccurrenceOutcome::DeliveryFailed => {
-                matches!(
-                    item.outcome,
-                    command_schedules::OccurrenceOutcome::DeliveryPending
-                        | command_schedules::OccurrenceOutcome::DeliveryFailed
-                        | command_schedules::OccurrenceOutcome::DeliveryDispatching
-                ) || (allow_delivered
-                    && item.outcome == command_schedules::OccurrenceOutcome::Delivered)
+            DeliveryChange::Accepted if item.outcome == OccurrenceOutcome::DeliveryDispatching => {
+                item.outcome = OccurrenceOutcome::Delivered;
             }
-            _ => false,
-        };
-        if !allowed {
-            return Ok(None);
+            DeliveryChange::Failed {
+                failure,
+                now_ms,
+                accepted,
+            } if if accepted {
+                item.outcome == OccurrenceOutcome::Delivered && item.turn_completed == Some(false)
+            } else {
+                item.outcome == OccurrenceOutcome::DeliveryDispatching || item.delivery_due(now_ms)
+            } =>
+            {
+                item.outcome = OccurrenceOutcome::DeliveryFailed;
+                item.delivery_retry = Some(delivery_retry(item.delivery_retry, failure, now_ms));
+            }
+            DeliveryChange::Uncertain
+                if item.outcome == OccurrenceOutcome::Delivered
+                    && item.turn_completed == Some(false) =>
+            {
+                item.outcome = OccurrenceOutcome::DeliveryUncertain;
+                item.delivery_retry = None;
+            }
+            _ => return Ok(None),
         }
-        let previous = item.outcome;
-        item.outcome = outcome;
+        let updated = item.clone();
         if write_records(settings, &prior, &next).is_ok() {
-            return Ok(Some(previous));
+            return Ok(Some(updated));
         }
     }
     Err(ApiError::new(
@@ -1182,6 +1271,7 @@ fn mark_turn_completed(
             return Ok(false);
         }
         item.turn_completed = Some(true);
+        item.delivery_retry = None;
         if write_records(settings, &prior, &next).is_ok() {
             return Ok(true);
         }
@@ -1226,6 +1316,7 @@ fn reconcile_interrupted_checkout(state: &AppState, reference: &str) -> Result<(
                     } else {
                         item.outcome = command_schedules::OccurrenceOutcome::DeliveryUncertain;
                     }
+                    item.delivery_retry = None;
                     if !completed {
                         if let Some(id) = &item.ticket_id {
                             uncertain.push(id.clone());
@@ -1275,19 +1366,42 @@ fn note_delivery_uncertain(state: &AppState, reference: &str, ticket_id: &str) {
             }),
             ..ops::NoteMetadataInput::default()
         },
-        "The host restarted while this scheduled AI turn may have been running. Inspect this exact ticket and the provider session before resuming; the scheduler will not send the prompt again automatically.".into(),
+        "The host could not confirm whether this scheduled AI turn finished. Inspect this exact ticket and the provider session before resuming. The scheduler will not send the prompt again automatically.".into(),
     ) {
         state.changed_in(&entry, "note_added", &ticket);
     }
 }
 
-fn note_delivery_failure(state: &AppState, reference: &str, ticket_id: &str, reason: &str) {
+fn note_delivery_failure(
+    state: &AppState,
+    reference: &str,
+    ticket_id: &str,
+    failure: DeliveryFailure,
+    retry: DeliveryRetry,
+) {
+    if failure.reason == "ticket_inactive"
+        || (retry.failure_count > 1 && retry.retry_after_ms.is_some())
+    {
+        return;
+    }
     let Ok((entry, native_id)) = claims::checkout_claim_entry(state, reference, ticket_id) else {
         return;
     };
     let Ok(Some(ticket)) = entry.resolve(&native_id) else {
         return;
     };
+    let (summary, guidance) = if retry.retry_after_ms.is_some() {
+        (
+            "Scheduled AI delivery will retry",
+            "The scheduler will retry this same ticket after a delay.",
+        )
+    } else {
+        (
+            "Scheduled AI delivery stopped",
+            "Automatic retries have stopped. Review the failure and resume this exact ticket manually.",
+        )
+    };
+    let reason = failure.reason;
     let note = ops::add_note_with_metadata(
         &entry.store,
         &ticket.id,
@@ -1295,16 +1409,14 @@ fn note_delivery_failure(state: &AppState, reference: &str, ticket_id: &str, rea
         crate::now(),
         hotsheet_model::NoteKind::Regular,
         ops::NoteMetadataInput {
-            summary: Some("Scheduled AI delivery will retry".into()),
+            summary: Some(summary.into()),
             actor: Some(hotsheet_model::NoteActor {
                 role: hotsheet_model::AttachmentActorRole::System,
                 id: Some("hotsheet-command-scheduler".into()),
             }),
             ..ops::NoteMetadataInput::default()
         },
-        format!(
-            "The scheduled AI command could not be delivered ({reason}). This same ticket will be retried."
-        ),
+        format!("The scheduled AI command could not be delivered ({reason}). {guidance}"),
     );
     if let Ok(ticket) = note {
         state.changed_in(&entry, "note_added", &ticket);
@@ -1312,88 +1424,91 @@ fn note_delivery_failure(state: &AppState, reference: &str, ticket_id: &str, rea
 }
 
 async fn deliver_pending(state: &AppState, reference: &str) -> Result<(), ApiError> {
+    deliver_pending_at(state, reference, Timestamp::now().as_millisecond()).await
+}
+
+async fn deliver_pending_at(
+    state: &AppState,
+    reference: &str,
+    now_ms: i64,
+) -> Result<(), ApiError> {
     let (checkout, settings) = checkout_settings(state, reference)?;
     let definitions = commands::from_settings(&settings).map_err(invalid)?;
     for record in records(&settings)? {
-        let command = definitions.iter().find(|command| {
+        let Some(command) = definitions.iter().find(|command| {
             command.id == record.schedule.command_id && command.kind == CommandKind::Ai
-        });
+        }) else {
+            continue;
+        };
         // Resolve at delivery time (HS2-17Y2EC): an inheriting schedule follows its command's
         // current action, and an occurrence whose command is gone waits until it returns.
-        let action = record
-            .schedule
-            .effective_action(command.and_then(|command| command.action));
+        let action = record.schedule.effective_action(command.action);
         if action == ScheduleAction::CreateTicket {
             continue;
         }
-        for item in record.history.iter().filter(|item| {
-            matches!(
-                item.outcome,
-                command_schedules::OccurrenceOutcome::DeliveryPending
-                    | command_schedules::OccurrenceOutcome::DeliveryFailed
-            )
-        }) {
+        for item in record
+            .history
+            .iter()
+            .filter(|item| item.delivery_due(now_ms))
+        {
             let Some(ticket_id) = item.ticket_id.as_deref() else {
                 continue;
             };
             let Some(ticket_slug) = item.ticket_slug.as_deref() else {
                 continue;
             };
-            let result = if let Some(command) = command {
-                deliver_one(
-                    state,
-                    DeliveryTarget {
-                        reference,
-                        project: &checkout.root,
-                        settings: &settings,
-                        command,
-                        action,
-                        ticket_id,
-                        ticket_slug,
-                        occurrence_date: Some(&item.key()),
-                    },
-                )
-                .await
-            } else {
-                DeliveryAttempt::Failed("ai_command_unavailable")
-            };
-            let (outcome, reason, completed) = match result {
-                DeliveryAttempt::Accepted { completed, worker } => (
-                    command_schedules::OccurrenceOutcome::Delivered,
-                    None,
-                    Some((completed, worker)),
-                ),
+            let occurrence_date = item.key();
+            let result = deliver_one(
+                state,
+                DeliveryTarget {
+                    reference,
+                    project: &checkout.root,
+                    settings: &settings,
+                    command,
+                    action,
+                    ticket_id,
+                    ticket_slug,
+                    occurrence_date: Some(&occurrence_date),
+                    now_ms,
+                },
+            )
+            .await;
+            let (change, failure, completed) = match result {
+                DeliveryAttempt::Accepted { completed, worker } => {
+                    (DeliveryChange::Accepted, None, Some((completed, worker)))
+                }
                 DeliveryAttempt::AwaitClaim => continue,
-                DeliveryAttempt::Failed(reason) => (
-                    command_schedules::OccurrenceOutcome::DeliveryFailed,
-                    Some(reason),
+                DeliveryAttempt::Failed(failure) => (
+                    DeliveryChange::Failed {
+                        failure,
+                        now_ms: now_ms.max(Timestamp::now().as_millisecond()),
+                        accepted: false,
+                    },
+                    Some(failure),
                     None,
                 ),
             };
-            let previous = set_delivery_outcome(
+            let updated = set_delivery_outcome(
                 &settings,
                 &record.schedule.command_id,
-                &item.key(),
+                &occurrence_date,
                 ticket_id,
-                outcome,
-                false,
+                change,
             )?;
-            if previous.is_some() {
+            if let Some(updated) = updated {
                 emit_changed(state, &checkout.id, &record.schedule.command_id);
-            }
-            if let (Some(reason), Some(previous)) = (reason, previous) {
-                if previous != command_schedules::OccurrenceOutcome::DeliveryFailed {
-                    note_delivery_failure(state, reference, ticket_id, reason);
+                if let (Some(failure), Some(retry)) = (failure, updated.delivery_retry) {
+                    note_delivery_failure(state, reference, ticket_id, failure, retry);
                 }
             }
             if let Some((completed, worker)) = completed {
                 let state = state.clone();
                 let reference = reference.to_owned();
                 let command_id = record.schedule.command_id.clone();
-                let occurrence_date = item.key();
                 let ticket_id = ticket_id.to_owned();
                 tokio::spawn(async move {
-                    if completed.await == Ok(true) {
+                    let completion = completed.await;
+                    if completion == Ok(DrivenTurnCompletion::Succeeded) {
                         if let Ok((checkout, settings)) = checkout_settings(&state, &reference) {
                             if let Ok(true) = mark_turn_completed(
                                 &settings,
@@ -1406,23 +1521,32 @@ async fn deliver_pending(state: &AppState, reference: &str) -> Result<(), ApiErr
                         }
                     } else {
                         if let Ok((checkout, settings)) = checkout_settings(&state, &reference) {
-                            if let Ok(Some(previous)) = set_delivery_outcome(
+                            let failure = DeliveryFailure {
+                                reason: "ai_turn_failed",
+                                retryable: true,
+                            };
+                            let change = match completion {
+                                Ok(DrivenTurnCompletion::Failed) => DeliveryChange::Failed {
+                                    failure,
+                                    now_ms: now_ms.max(Timestamp::now().as_millisecond()),
+                                    accepted: true,
+                                },
+                                _ => DeliveryChange::Uncertain,
+                            };
+                            if let Ok(Some(updated)) = set_delivery_outcome(
                                 &settings,
                                 &command_id,
                                 &occurrence_date,
                                 &ticket_id,
-                                command_schedules::OccurrenceOutcome::DeliveryFailed,
-                                true,
+                                change,
                             ) {
                                 emit_changed(&state, &checkout.id, &command_id);
-                                if previous != command_schedules::OccurrenceOutcome::DeliveryFailed
-                                {
+                                if let Some(retry) = updated.delivery_retry {
                                     note_delivery_failure(
-                                        &state,
-                                        &reference,
-                                        &ticket_id,
-                                        "ai_turn_failed",
+                                        &state, &reference, &ticket_id, failure, retry,
                                     );
+                                } else {
+                                    note_delivery_uncertain(&state, &reference, &ticket_id);
                                 }
                             }
                         }
@@ -1542,12 +1666,14 @@ mod tests {
         turns: Arc<Mutex<Vec<String>>>,
         fail_prepare_once: Arc<AtomicBool>,
         fail_turn_once: Arc<AtomicBool>,
+        lose_turn_once: Arc<AtomicBool>,
     }
 
     struct ScheduledPreparedDrive {
         tool: String,
         turns: Arc<Mutex<Vec<String>>>,
         fail_turn_once: Arc<AtomicBool>,
+        lose_turn_once: Arc<AtomicBool>,
     }
 
     impl ClientDriveBackend for ScheduledFakeDrive {
@@ -1570,6 +1696,7 @@ mod tests {
                 tool: request.tool,
                 turns: self.turns.clone(),
                 fail_turn_once: self.fail_turn_once.clone(),
+                lose_turn_once: self.lose_turn_once.clone(),
             }))
         }
     }
@@ -1587,6 +1714,9 @@ mod tests {
             _on_event: &mut dyn FnMut(&hotsheet_aitools::TurnEvent),
         ) -> Result<hotsheet_aitools::TurnDone, String> {
             self.turns.lock().unwrap().push(request.prompt.into());
+            if self.lose_turn_once.swap(false, Ordering::SeqCst) {
+                return Err("synthetic provider connection lost during turn".into());
+            }
             if self.fail_turn_once.swap(false, Ordering::SeqCst) {
                 return Ok(hotsheet_aitools::TurnDone {
                     reason: hotsheet_aitools::DoneReason::failed(1, "synthetic provider limit"),
@@ -1933,13 +2063,23 @@ mod tests {
             ticket
                 .notes
                 .iter()
-                .any(|note| note.text.contains("same ticket will be retried"))
+                .any(|note| note.text.contains("will retry this same ticket"))
         );
         let recovered = AppState::new(store.clone(), "synthetic-secret".into())
             .unwrap()
             .with_checkout_registry(root.path().join("checkouts.json"));
         let recovered = with_scheduled_backend(recovered, backend.clone());
-        deliver_pending(&recovered, &checkout).await.unwrap();
+        let retry = records(&settings).unwrap()[0].history[0]
+            .delivery_retry
+            .unwrap();
+        let retry_at = retry.retry_after_ms.unwrap();
+        deliver_pending_at(&recovered, &checkout, retry_at - 1)
+            .await
+            .unwrap();
+        assert_eq!(backend.preparations.lock().unwrap().len(), 1);
+        deliver_pending_at(&recovered, &checkout, retry_at)
+            .await
+            .unwrap();
         assert_eq!(
             records(&settings).unwrap()[0].history[0].outcome,
             command_schedules::OccurrenceOutcome::Delivered
@@ -2063,15 +2203,8 @@ mod tests {
         let state = with_scheduled_backend(state, backend.clone());
         let (ticket_id, _) = due_ticket(&state, &checkout, &settings, ScheduleAction::NewAiSession);
         deliver_pending(&state, &checkout).await.unwrap();
-        tokio::time::timeout(std::time::Duration::from_secs(3), async {
-            while records(&settings).unwrap()[0].history[0].outcome
-                != command_schedules::OccurrenceOutcome::DeliveryFailed
-            {
-                tokio::task::yield_now().await;
-            }
-        })
-        .await
-        .unwrap();
+        let item =
+            wait_for_failed_delivery(&settings, &store, OccurrenceOutcome::DeliveryFailed).await;
         let ticket = ops::query(&store, &TicketQuery::default())
             .unwrap()
             .remove(0);
@@ -2082,7 +2215,13 @@ mod tests {
                 .iter()
                 .any(|note| note.text.contains("ai_turn_failed"))
         );
-        deliver_pending(&state, &checkout).await.unwrap();
+        deliver_pending_at(
+            &state,
+            &checkout,
+            item.delivery_retry.unwrap().retry_after_ms.unwrap(),
+        )
+        .await
+        .unwrap();
         assert_eq!(
             records(&settings).unwrap()[0].history[0].outcome,
             command_schedules::OccurrenceOutcome::Delivered
@@ -2095,6 +2234,177 @@ mod tests {
         );
         assert_eq!(
             ops::query(&store, &TicketQuery::default()).unwrap().len(),
+            1
+        );
+    }
+
+    async fn wait_for_failed_delivery(
+        settings: &Settings,
+        store: &FsStore,
+        outcome: OccurrenceOutcome,
+    ) -> OccurrenceResult {
+        tokio::time::timeout(std::time::Duration::from_secs(3), async {
+            loop {
+                let item = records(settings).unwrap()[0].history[0].clone();
+                let ticket = ops::query(store, &TicketQuery::default())
+                    .unwrap()
+                    .remove(0);
+                if item.outcome == outcome && ticket.claimed_by.is_none() {
+                    return item;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap()
+    }
+
+    #[tokio::test]
+    async fn hs2_nab1da_legacy_failed_turn_exhausts_budget_on_exact_ticket_with_two_notes() {
+        let (_root, state, checkout, settings, store) = fixture();
+        let backend = ScheduledFakeDrive::default();
+        let state = with_scheduled_backend(state, backend.clone());
+        let (ticket_id, _) = due_ticket(&state, &checkout, &settings, ScheduleAction::NewAiSession);
+        let mut stored = records(&settings).unwrap();
+        stored[0].history[0].outcome = OccurrenceOutcome::DeliveryFailed;
+        stored[0].history[0].turn_completed = None;
+        settings
+            .set(command_schedules::SETTING, json!(stored), Scope::Local)
+            .unwrap();
+
+        let mut due_at = Timestamp::now().as_millisecond();
+        for failure_count in 1..=3 {
+            backend.fail_turn_once.store(true, Ordering::SeqCst);
+            deliver_pending_at(&state, &checkout, due_at).await.unwrap();
+            let item =
+                wait_for_failed_delivery(&settings, &store, OccurrenceOutcome::DeliveryFailed)
+                    .await;
+            let retry = item.delivery_retry.unwrap();
+            assert_eq!(item.ticket_id.as_deref(), Some(ticket_id.as_str()));
+            assert_eq!(retry.failure_count, failure_count);
+            assert_eq!(
+                backend.turns.lock().unwrap().len(),
+                usize::from(failure_count)
+            );
+            if let Some(retry_at) = retry.retry_after_ms {
+                deliver_pending_at(&state, &checkout, retry_at - 1)
+                    .await
+                    .unwrap();
+                assert_eq!(
+                    backend.turns.lock().unwrap().len(),
+                    usize::from(failure_count)
+                );
+                due_at = retry_at;
+            } else {
+                assert_eq!(failure_count, 3);
+            }
+        }
+        reconcile_interrupted_checkout(&state, &checkout).unwrap();
+        deliver_pending_at(&state, &checkout, i64::MAX)
+            .await
+            .unwrap();
+        assert_eq!(backend.turns.lock().unwrap().len(), 3);
+        let mut tickets = ops::query(&store, &TicketQuery::default()).unwrap();
+        assert_eq!(tickets.len(), 1);
+        let notes = tickets.remove(0).notes;
+        let delivery_notes: Vec<_> = notes
+            .iter()
+            .filter(|note| note.text.contains("ai_turn_failed"))
+            .collect();
+        assert_eq!(delivery_notes.len(), 2);
+        assert!(delivery_notes[0].text.contains("will retry"));
+        assert!(delivery_notes[1].text.contains("retries have stopped"));
+    }
+
+    #[tokio::test]
+    async fn hs2_nab1da_lost_accepted_turn_is_reconciled_without_replay() {
+        let (_root, state, checkout, settings, store) = fixture();
+        let backend = ScheduledFakeDrive::default();
+        backend.lose_turn_once.store(true, Ordering::SeqCst);
+        let state = with_scheduled_backend(state, backend.clone());
+        let (ticket_id, _) = due_ticket(&state, &checkout, &settings, ScheduleAction::NewAiSession);
+        deliver_pending(&state, &checkout).await.unwrap();
+        let item =
+            wait_for_failed_delivery(&settings, &store, OccurrenceOutcome::DeliveryUncertain).await;
+        assert_eq!(item.ticket_id.as_deref(), Some(ticket_id.as_str()));
+        assert_eq!(item.delivery_retry, None);
+        reconcile_interrupted_checkout(&state, &checkout).unwrap();
+        deliver_pending_at(&state, &checkout, i64::MAX)
+            .await
+            .unwrap();
+        assert_eq!(backend.turns.lock().unwrap().len(), 1);
+        let ticket = ops::query(&store, &TicketQuery::default())
+            .unwrap()
+            .remove(0);
+        assert_eq!(
+            ticket
+                .notes
+                .iter()
+                .filter(|note| note.text.contains("will not send the prompt again"))
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn hs2_nab1da_configuration_errors_stop_without_consuming_retry_wakeups() {
+        let DeliveryAttempt::Failed(failure) = DeliveryFailure::from_api(
+            "ai_handoff_failed",
+            ApiError::new(StatusCode::BAD_REQUEST, "invalid configured model"),
+        ) else {
+            panic!("expected a typed failure");
+        };
+        assert_eq!(delivery_retry(None, failure, 0).retry_after_ms, None);
+
+        let DeliveryAttempt::Failed(failure) = DeliveryFailure::from_api(
+            "ai_handoff_failed",
+            ApiError::new(StatusCode::BAD_REQUEST, "temporary prepare error")
+                .with_code(DRIVE_PREPARE_FAILED),
+        ) else {
+            panic!("expected a typed failure");
+        };
+        let first = delivery_retry(None, failure, 0);
+        assert_eq!(first.retry_after_ms, Some(60_000));
+        assert_eq!(
+            delivery_retry(Some(first), failure, 60_000).retry_after_ms,
+            Some(360_000)
+        );
+    }
+
+    #[tokio::test]
+    async fn hs2_nab1da_missing_provider_stops_without_claiming_or_replaying() {
+        let (_root, state, checkout, settings, store) = fixture();
+        let backend = ScheduledFakeDrive::default();
+        let state = state
+            .with_ai_tool_discovery(std::time::Duration::from_secs(3600), |_, _, _| Vec::new())
+            .with_client_drive_backend(Arc::new(backend.clone()));
+        let (ticket_id, _) = due_ticket(&state, &checkout, &settings, ScheduleAction::NewAiSession);
+        deliver_pending(&state, &checkout).await.unwrap();
+        deliver_pending_at(&state, &checkout, i64::MAX)
+            .await
+            .unwrap();
+        let record = records(&settings).unwrap().remove(0);
+        let item = &record.history[0];
+        assert_eq!(item.ticket_id.as_deref(), Some(ticket_id.as_str()));
+        assert_eq!(item.outcome, OccurrenceOutcome::DeliveryFailed);
+        assert_eq!(
+            item.delivery_retry,
+            Some(DeliveryRetry {
+                failure_count: 1,
+                retry_after_ms: None
+            })
+        );
+        assert!(backend.preparations.lock().unwrap().is_empty());
+        let ticket = ops::query(&store, &TicketQuery::default())
+            .unwrap()
+            .remove(0);
+        assert!(ticket.claimed_by.is_none());
+        assert_eq!(
+            ticket
+                .notes
+                .iter()
+                .filter(|note| note.text.contains("ai_provider_unavailable"))
+                .count(),
             1
         );
     }

@@ -1315,7 +1315,7 @@ pub(crate) struct ScheduledDriveTurn {
 pub(crate) async fn send_scheduled_drive_turn(
     state: &AppState,
     request: ScheduledDriveTurn,
-) -> Result<tokio::sync::oneshot::Receiver<bool>, ApiError> {
+) -> Result<tokio::sync::oneshot::Receiver<DrivenTurnCompletion>, ApiError> {
     if state.client_drives.get(&request.connection_id).is_err() {
         let _ = create_drive_connection(
             State(state.clone()),
@@ -1350,6 +1350,14 @@ pub(crate) async fn send_scheduled_drive_turn(
     Ok(receiver)
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DrivenTurnCompletion {
+    Succeeded,
+    Failed,
+    Interrupted,
+    Uncertain,
+}
+
 pub(crate) async fn send_drive_turn(
     State(state): State<AppState>,
     Path(id): Path<String>,
@@ -1362,7 +1370,7 @@ async fn send_drive_turn_inner(
     state: AppState,
     id: String,
     request: SendDriveTurnReq,
-    completed: Option<tokio::sync::oneshot::Sender<bool>>,
+    completed: Option<tokio::sync::oneshot::Sender<DrivenTurnCompletion>>,
 ) -> Result<(StatusCode, Json<client_drive::ClientConnectionInfo>), ApiError> {
     if request.content.trim().is_empty() {
         return Err(ApiError::new(
@@ -1578,10 +1586,16 @@ async fn send_drive_turn_inner(
             thread_state.emit_drive_updated(&info);
         }
         if let Some(completed) = completed {
-            let succeeded = result
-                .as_ref()
-                .is_ok_and(|done| done.reason.failure_message().is_none());
-            let _ = completed.send(succeeded);
+            use hotsheet_aitools::DoneReason;
+            let outcome = match result {
+                Ok(done) => match done.reason {
+                    DoneReason::Completed => DrivenTurnCompletion::Succeeded,
+                    DoneReason::Failed { .. } => DrivenTurnCompletion::Failed,
+                    DoneReason::Interrupted => DrivenTurnCompletion::Interrupted,
+                },
+                Err(_) => DrivenTurnCompletion::Uncertain,
+            };
+            let _ = completed.send(outcome);
         }
     });
     Ok((StatusCode::ACCEPTED, Json(info)))
@@ -1625,13 +1639,18 @@ pub(crate) async fn interrupt_drive_turn(
     Ok((StatusCode::ACCEPTED, Json(info)))
 }
 
+pub(crate) const DRIVE_PREPARE_FAILED: &str = "drive_prepare_failed";
+
 fn client_drive_api_error(error: client_drive::ClientDriveError) -> ApiError {
     use client_drive::ClientDriveError as Error;
     let status = match error {
         Error::NotFound(_) => StatusCode::NOT_FOUND,
         Error::Conflict(_) => StatusCode::CONFLICT,
         Error::Unsupported(_) => StatusCode::METHOD_NOT_ALLOWED,
-        Error::Prepare(_) => StatusCode::BAD_REQUEST,
+        Error::Prepare(_) => {
+            return ApiError::new(StatusCode::BAD_REQUEST, error.to_string())
+                .with_code(DRIVE_PREPARE_FAILED);
+        }
         Error::Unavailable | Error::Persistence(_) => StatusCode::INTERNAL_SERVER_ERROR,
     };
     ApiError::new(status, error.to_string())

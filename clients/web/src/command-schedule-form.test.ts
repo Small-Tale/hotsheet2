@@ -114,6 +114,13 @@ describe('HS2-17663F command schedule form', () => {
     });
     expect(view.history[0]?.outcome).toBe('delivery_uncertain');
     expect(() => parseScheduleView({ ...view, history: [{ ...view.history[0], turn_completed: 'yes' }] })).toThrow();
+    const failed = { ...view.history[0], outcome: 'delivery_failed' };
+    const delayed = { ...failed, delivery_retry: { failure_count: 1, retry_after_ms: 1_803_000_000_000 } };
+    const stopped = { ...failed, delivery_retry: { failure_count: 3 } };
+    expect(parseScheduleView({ ...view, history: [delayed, stopped] }).history).toEqual([delayed, stopped]);
+    expect(() =>
+      parseScheduleView({ ...view, history: [{ ...stopped, delivery_retry: { failure_count: '3' } }] }),
+    ).toThrow();
   });
 });
 

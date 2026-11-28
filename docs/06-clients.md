@@ -1284,11 +1284,15 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   reports it as `effective_action`.
   Before either auto-start handoff, the host claims the exact recorded ticket under
   the selected session worker identity. A claim held by another worker leaves the
-  ticket pending for retry. A failed handoff or failed provider turn is recorded in the
-  occurrence history and on that ticket, then retried using its existing identity after
-  a later wake or host restart. Before sending a turn, the host durably records that
+  ticket pending without spending a retry. A retryable handoff or confirmed turn failure
+  uses the same qualified ticket for up to two retries, at least one minute after the first
+  failure and five minutes after the second. The occurrence keeps its failure count and
+  next eligible attempt across restart. A known invalid tool configuration or unsupported
+  capability stops automatic delivery immediately. The scheduler records the first retry
+  and terminal failure on that ticket and leaves it open for deliberate recovery
+  (HS2-NAB1DA). Before sending a turn, the host durably records that
   dispatch has begun. It records successful provider completion separately from handoff
-  acceptance. After a crash, a dispatch whose completion cannot be proven becomes
+  acceptance. If a restart or a lost turn connection leaves completion unconfirmed, it becomes
   `delivery_uncertain` on the same qualified occurrence ticket; the scheduler does not
   send it again. A person or agent inspects that ticket and the provider session before
   resuming work (HS2-NR0VRF). The schedule editor is tracked by HS2-17663F.

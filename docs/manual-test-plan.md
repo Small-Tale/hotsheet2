@@ -806,6 +806,13 @@ and a new session in the second. A held ticket claim must leave delivery pending
 resume after the holder releases it. This live-provider check supplements the hermetic
 real-store and fake-drive regressions without copying customer content.
 
+For HS2-NAB1DA, use a disposable project and a provider configuration that rejects
+handoff before sending. Confirm the ticket receives one stopped note and is still
+available for manual work. The scripted real-store test covers the one- and five-minute
+retry boundaries, the third failure, and the two-note limit without waiting on a live
+provider. Keep the interrupted-turn check separate because delivery may already have
+reached its provider.
+
 ### AI command click starts a live session (HS2-17Y2EC)
 
 With a synthetic AI command and an installed provider, set the command's Action to

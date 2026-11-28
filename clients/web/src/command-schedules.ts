@@ -110,6 +110,11 @@ export interface ScheduleView {
     ticket_id?: string;
     ticket_slug?: string;
     turn_completed?: boolean;
+    delivery_retry?: {
+      failure_count: number;
+      /** A failed occurrence with no deadline has stopped retrying. */
+      retry_after_ms?: number;
+    };
   }>;
   unavailable?: string;
 }
@@ -144,6 +149,7 @@ export function parseScheduleView(value: unknown): ScheduleView {
   if (!Array.isArray(history)) throw new Error('Invalid command schedule history response');
   for (const entry of history) {
     const item = object(entry, 'command schedule history');
+    const retry = item.delivery_retry === undefined ? undefined : object(item.delivery_retry, 'command delivery retry');
     if (
       typeof item.occurrence_date !== 'string' ||
       (item.occurrence_time !== undefined && typeof item.occurrence_time !== 'string') ||
@@ -158,7 +164,10 @@ export function parseScheduleView(value: unknown): ScheduleView {
       ].includes(String(item.outcome)) ||
       (item.ticket_id !== undefined && typeof item.ticket_id !== 'string') ||
       (item.ticket_slug !== undefined && typeof item.ticket_slug !== 'string') ||
-      (item.turn_completed !== undefined && typeof item.turn_completed !== 'boolean')
+      (item.turn_completed !== undefined && typeof item.turn_completed !== 'boolean') ||
+      (retry !== undefined &&
+        (!Number.isSafeInteger(retry.failure_count) ||
+          (retry.retry_after_ms !== undefined && !Number.isSafeInteger(retry.retry_after_ms))))
     )
       throw new Error('Invalid command schedule history response');
   }
