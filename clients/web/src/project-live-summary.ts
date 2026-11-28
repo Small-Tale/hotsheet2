@@ -5,6 +5,7 @@ import { hostHealthCallouts } from './host-health';
 import {
   aggregateLiveStates,
   etaOverrunMs,
+  progressAgeForWord,
   progressAgeMs,
   ticketsUpdatedPerHour,
   tokensPerMinute,
@@ -63,6 +64,11 @@ export interface ProjectLiveSummary {
   workersExpected: number;
   /** Time since the most recent progress across the project's stores; absent before any. */
   progressAgeMs?: number;
+  /**
+   * Time since the most recent progress in the stores that show `activity` (HS2-PPZQX9), the age every
+   * surface pairs with the state word; absent before any.
+   */
+  activityProgressAgeMs?: number;
   waiting: number;
   /** The claim furthest past its ETA; absent while every claim is on time. */
   overrun?: ProjectLiveOverrun;
@@ -87,9 +93,11 @@ export function projectLiveSummary(states: readonly LiveStoreState[], nowMs: num
       return ms === undefined ? [] : [{ slug: claim.slug, title: claim.title, ms }];
     })
     .sort((a, b) => b.ms - a.ms);
+  const activity = worstLiveWord(states.map((state) => ({ ...state, state: state.activity.word })));
+  const activityAge = progressAgeForWord(states, activity, nowMs, (state) => state.activity.word);
   return {
     state: worstLiveWord(states),
-    activity: worstLiveWord(states.map((state) => ({ ...state, state: state.activity.word }))),
+    activity,
     tokensPerMinute: states.reduce((sum, state) => sum + tokensPerMinute(state, nowMs), 0),
     tokensPeakPerMinute: aggregate.tokensPeakPerMinute,
     ticketsUpdatedPerHour: states.reduce((sum, state) => sum + ticketsUpdatedPerHour(state, nowMs), 0),
@@ -97,6 +105,7 @@ export function projectLiveSummary(states: readonly LiveStoreState[], nowMs: num
     workersLive: aggregate.workersLive,
     workersExpected: aggregate.workersExpected,
     ...(ages.length ? { progressAgeMs: Math.min(...ages) } : {}),
+    ...(activityAge === undefined ? {} : { activityProgressAgeMs: activityAge }),
     waiting: aggregate.waiting,
     ...(overruns[0] ? { overrun: overruns[0] } : {}),
     overrunCount: overruns.length,
@@ -117,11 +126,14 @@ export function liveStateDescription(summary: ProjectLiveSummary): string {
   return `${LIVE_WORD_LABELS[summary.activity]} · ${workers}`;
 }
 
-/** The last-progress phrase, e.g. `last progress 2m ago`, or `no progress yet`. */
+/**
+ * The last-progress phrase paired with the state word, e.g. `last progress 2m ago`, or
+ * `no progress yet`: the progress of the stores that show that word (HS2-PPZQX9).
+ */
 export function lastProgressDescription(summary: ProjectLiveSummary): string {
-  return summary.progressAgeMs === undefined
+  return summary.activityProgressAgeMs === undefined
     ? 'no progress yet'
-    : `last progress ${formatGlanceDuration(summary.progressAgeMs)} ago`;
+    : `last progress ${formatGlanceDuration(summary.activityProgressAgeMs)} ago`;
 }
 
 /**

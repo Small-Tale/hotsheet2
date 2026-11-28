@@ -445,8 +445,11 @@ fn record_ready(
     }
     persist(state, inner);
     if added > 0 {
-        // Tokens per minute moved in the project store (HS2-JTTQMY, HS2-B4EQ87).
-        crate::live_state::touch(state, &crate::multistore::store_url_id(&target.store));
+        // Tokens per minute moved in the project store (HS2-JTTQMY, HS2-B4EQ87), and a new
+        // response, the session's own or a background subagent's, is progress (HS2-PPZQX9).
+        let store = crate::multistore::store_url_id(&target.store);
+        crate::notification_router::note_usage_progress(state, &store);
+        crate::live_state::touch(state, &store);
     }
     Ok(added)
 }

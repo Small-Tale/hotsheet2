@@ -195,7 +195,7 @@ function expandedContent(summary: ProjectLiveSummary) {
         'state',
         LIVE_STATE_ICONS[summary.activity],
         liveStateDescription(summary),
-        summary.progressAgeMs === undefined ? '' : `${formatGlanceDuration(summary.progressAgeMs)} ago`,
+        summary.activityProgressAgeMs === undefined ? '' : `${formatGlanceDuration(summary.activityProgressAgeMs)} ago`,
       )}
       {summary.waiting > 0 &&
         detailRow('waiting', LIVE_STATE_ICONS.waiting_on_you, 'Needs you', String(summary.waiting))}

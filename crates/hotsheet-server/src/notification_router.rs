@@ -360,6 +360,21 @@ fn track_activity(
     messages
 }
 
+/// A model response was recorded for `store` (HS2-PPZQX9): a terminal session's own
+/// message, one of its background subagents' messages, or a driven turn's usage. It counts
+/// as progress, so a session that mostly waits on background agents keeps last progress
+/// current and the live word agrees with it. The caller rebuilds the live state next.
+pub(crate) fn note_usage_progress(state: &AppState, store: &str) {
+    let next = state
+        .notification_delivery
+        .activity
+        .lock_or_recover()
+        .progress(store, now());
+    if let Some(at) = next {
+        schedule_activity_check(state, store, at);
+    }
+}
+
 /// The tracker's live read of `store`, seeding it from the index first (HS2-JTTQMY).
 pub(crate) fn live_activity(state: &AppState, store: &str, at: OffsetDateTime) -> LiveActivity {
     let seeded = state

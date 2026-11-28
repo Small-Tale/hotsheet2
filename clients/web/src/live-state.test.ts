@@ -9,6 +9,7 @@ import {
   gaugeFraction,
   isNewerLiveState,
   pausedUntilMs,
+  progressAgeForWord,
   progressAgeMs,
   ticketsUpdatedPerHour,
   TOKEN_HOURS,
@@ -141,6 +142,21 @@ describe('live state helpers (HS2-JTTQMY)', () => {
     expect(progressAgeMs(state, NOW)).toBe(2 * MINUTE);
     expect(progressAgeMs({ ...state, activity: { ...state.activity, last_progress_ms: null } }, NOW)).toBeUndefined();
     expect(progressAgeMs(state, NOW - 3 * MINUTE)).toBe(0);
+    // HS2-PPZQX9: a word's age comes only from the stores showing it, freshest first.
+    const stalled = {
+      ...state,
+      store: 'b',
+      state: 'stalled' as const,
+      activity: { ...state.activity, word: 'stalled' as const, last_progress_ms: NOW - 34 * MINUTE },
+    };
+    const never = { ...stalled, store: 'c', activity: { ...stalled.activity, last_progress_ms: null } };
+    expect(progressAgeForWord([state, stalled, never], 'stalled', NOW)).toBe(34 * MINUTE);
+    expect(progressAgeForWord([state, stalled], 'active', NOW)).toBe(2 * MINUTE);
+    expect(progressAgeForWord([state, never], 'stalled', NOW)).toBeUndefined();
+    expect(progressAgeForWord([state], 'halted', NOW)).toBeUndefined();
+    const waiting = { ...stalled, state: 'waiting_on_you' as const };
+    expect(progressAgeForWord([waiting], 'stalled', NOW, (s) => s.activity.word)).toBe(34 * MINUTE);
+    expect(progressAgeForWord([waiting], 'stalled', NOW)).toBeUndefined();
     const claim = state.claims[0];
     expect(etaOverrunMs(claim, NOW)).toBe(MINUTE);
     expect(etaOverrunMs(claim, NOW - 2 * MINUTE)).toBeUndefined();

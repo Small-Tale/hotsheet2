@@ -3853,8 +3853,25 @@ async fn hs2_jw6n67_claude_subagent_usage_is_recorded_once_and_resumes_after_res
         StatusCode::NO_CONTENT
     );
     assert_eq!(recorded(), [1, 2]);
+    // HS2-PPZQX9: the agent's response after the parent stopped is the store's progress.
+    let store_id = hotsheet_server::multistore::store_url_id(&store);
+    let before_ms = (time::OffsetDateTime::now_utc().unix_timestamp_nanos() / 1_000_000) as i64;
     append(&agent("a2"), "a2-2", 4, true, Some("end_turn"));
     until(&[1, 2, 4]).await;
+    let live = hotsheet_server::live_state::refresh_at(
+        &first_state,
+        &store_id,
+        time::OffsetDateTime::now_utc(),
+    )
+    .unwrap();
+    assert!(
+        live.activity
+            .last_progress_ms
+            .is_some_and(|at| at >= before_ms),
+        "a background agent's response is progress: {:?}",
+        live.activity.last_progress_ms
+    );
+    assert_eq!(serde_json::to_value(live.activity.word).unwrap(), "active");
     // The old agent appends again: only its new message counts.
     append(&agent("old"), "old-2", 5, true, Some("end_turn"));
     until(&[1, 2, 4, 5]).await;
