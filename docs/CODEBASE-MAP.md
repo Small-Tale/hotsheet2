@@ -1691,3 +1691,27 @@ create|rename|ungroup|merge|migrate` and finds the registry from the working dir
   the MCP tool is `hotsheet_groups`.
   `ProviderCapabilities.groups` is true for Markdown/Git only. The web client's real-app
   coverage is `clients/web/tests/ticket-groups.spec.ts`.
+
+Milestones (HS2-9PYNCN, [38-milestones.md](38-milestones.md); registry only so far):
+
+- `crates/hotsheet-ticketing/src/milestones.rs` is the project milestone registry, one
+  committed file per milestone under `<checkout>/.hotsheet2/milestones/<id>.json`: the fixed
+  key order with unknown keys kept, `milestones.lock`, title normalization and uniqueness
+  (`milestone_title_taken`), `duplicate` flags, close and reopen, the `conflicted` read state
+  that refuses writes (`milestone_registry_conflict`), `listing` (the shared list shape), and
+  `MilestoneError::code`. Tests: `milestones/tests.rs` (format, rules, lock) and
+  `milestones/git_tests.rs` (publication, two clones). It publishes through
+  `groups/git_sync.rs`, whose `RegistryKind` (groups, milestones) names each registry's
+  directory, status file (`.hotsheet2/milestones-sync.json`) and wording; only groups keep
+  a remote overlay, and status listeners fire for groups only (HS2-BXKWB4).
+- `crates/hotsheet-server/src/routes/milestones.rs` serves `GET|POST
+/checkouts/{ref}/milestones`, `GET|PATCH …/milestones/{milestone}` and `POST
+…/{milestone}/close|reopen`, announcing `milestones_changed` (`AppState::announce_milestones_changed`);
+  `watcher.rs` announces it too when `.hotsheet2/milestones/` changes on disk
+  (`milestone_registry_fingerprint`); `sync_loop::sync_group_registries` also runs the
+  milestone pass. Tests: `crates/hotsheet-server/tests/milestones_http.rs`.
+- `crates/hotsheet-cli/src/dispatch/milestones.rs` provides `milestones` and `milestone
+create|show|edit|close|reopen` (registry found like the group registry; tests
+  `crates/hotsheet-cli/tests/milestones.rs`); MCP `hotsheet_milestones` in
+  `crates/hotsheet-mcp/src/lib.rs` calls the same routes, which the serverless backend answers
+  in `CoreBackend::milestones_request` (tests `crates/hotsheet-mcp/tests/milestones.rs`).

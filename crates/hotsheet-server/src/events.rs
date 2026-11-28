@@ -430,6 +430,24 @@ impl AppState {
         }
     }
 
+    /// Tell clients that the milestone registry of the code checkout at `checkout_root`
+    /// changed through this server (HS2-9PYNCN, docs/38 §38.6): a milestone created, edited,
+    /// closed, or reopened. One replayable `milestones_changed` event per checkout registered
+    /// at that root, so a client holding milestones refetches them once. Edits from other
+    /// processes and pulls reach clients through the checkout's repository watcher. Carries no
+    /// titles or paths.
+    pub fn announce_milestones_changed(&self, checkout_root: &FsPath) {
+        let Ok(checkouts) = self.checkout_registry.list() else {
+            return;
+        };
+        for checkout in checkouts
+            .into_iter()
+            .filter(|checkout| same_path(FsPath::new(&checkout.root), checkout_root))
+        {
+            self.emit(crate::watcher::milestones_change_event(&checkout.id));
+        }
+    }
+
     /// Announce every group registry publication state change in this process
     /// ([`Self::announce_group_registry_sync`]) until the returned guard drops (HS2-1CWD0H).
     /// The server holds it for its run; the changes come from the background committer about

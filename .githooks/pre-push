@@ -10,9 +10,10 @@ main_remote_sha=''
 last_remote_ref=''
 last_local_sha=''
 last_remote_sha=''
-# HS2-9EGWC4: Hot Sheet publishes its project group registry (`.hotsheet2/groups/*.json`) by
-# itself. A fast-forward whose new commits touch only those data files, with no merge, skips the
-# gate and the main-integration window; anything else takes the normal path below.
+# HS2-9EGWC4, HS2-9PYNCN: Hot Sheet publishes its project group and milestone registries
+# (`.hotsheet2/groups/*.json`, `.hotsheet2/milestones/*.json`) by itself. A fast-forward whose
+# new commits touch only those data files, with no merge, skips the gate and the main-integration
+# window; anything else takes the normal path below.
 registry_only=1
 # HS2-12K3FN: a push whose every update deletes a non-main branch (the local side is the zero
 # SHA) sends no commits or tree, so it has nothing to gate. `coordination merge-pending-prune`
@@ -30,7 +31,7 @@ registry_only_update() {
   [[ -z "$(git rev-list --merges "$remote_sha..$local_sha")" ]] || return 1
   paths=$(git log --format= --name-only --no-renames "$remote_sha..$local_sha")
   [[ -n "${paths//[[:space:]]/}" ]] || return 1
-  ! grep -qvE '^(\.hotsheet2/groups/[^/]+\.json)?$' <<<"$paths"
+  ! grep -qvE '^(\.hotsheet2/(groups|milestones)/[^/]+\.json)?$' <<<"$paths"
 }
 while read -r local_ref local_sha remote_ref remote_sha; do
   total_updates=$((total_updates + 1))

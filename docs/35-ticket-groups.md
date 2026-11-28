@@ -311,7 +311,10 @@ writes it.
 ## 35.7 Publishing the registry (HS2-9EGWC4)
 
 The registry lives in the code checkout, so Hot Sheet commits and publishes it the way the
-ticket store publishes tickets, without disturbing anything else in that checkout.
+ticket store publishes tickets, without disturbing anything else in that checkout. The
+milestone registry (`.hotsheet2/milestones/`, [38](38-milestones.md) §38.2, HS2-9PYNCN) is
+published by the same machinery and rules, with its own status file; commits of either
+registry count as registry-only commits for the push below.
 
 - **Commit.** Every registry write (create, rename, a placeholder's name, migration),
   from the app, the server, the CLI, or MCP, is committed in the checkout. The commit

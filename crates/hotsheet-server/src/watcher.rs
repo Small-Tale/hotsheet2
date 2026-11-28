@@ -1222,6 +1222,76 @@ fn announce_group_registry_change(
     }
 }
 
+/// Tell clients that a checkout's milestone registry changed on disk (HS2-9PYNCN, docs/38
+/// §38.6): a milestone file written by this server, by the CLI or MCP, or by a pull
+/// (`.hotsheet2/milestones/`). Carries no titles or paths.
+pub(crate) fn milestones_change_event(checkout_id: &str) -> ChangeEvent {
+    ChangeEvent {
+        live: None,
+        cursor: None,
+        store: checkout_id.to_string(),
+        kind: "milestones_changed".to_string(),
+        id: checkout_id.to_string(),
+        slug: String::new(),
+        message: None,
+        activity: None,
+        assignment: None,
+        turn: None,
+    }
+}
+
+/// The milestone registry's on-disk state: each file's name, length, and modification time.
+pub(crate) fn milestone_registry_fingerprint(
+    root: &FsPath,
+) -> Vec<(String, u64, Option<SystemTime>)> {
+    let mut entries: Vec<(String, u64, Option<SystemTime>)> =
+        std::fs::read_dir(root.join(hotsheet_ticketing::milestones::MILESTONE_REGISTRY_DIR))
+            .map(|dir| {
+                dir.filter_map(Result::ok)
+                    .filter_map(|entry| {
+                        let meta = std::fs::metadata(entry.path()).ok()?;
+                        Some((
+                            entry.file_name().to_string_lossy().into_owned(),
+                            meta.len(),
+                            meta.modified().ok(),
+                        ))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+    entries.sort();
+    entries
+}
+
+/// Whether a filesystem event touches the milestone registry directory.
+fn touches_milestone_registry(root: &FsPath, result: &hotsheet_jobs::watch::Delivery) -> bool {
+    let Ok(event) = result else {
+        return false;
+    };
+    let registry =
+        path_spellings(&root.join(hotsheet_ticketing::milestones::MILESTONE_REGISTRY_DIR));
+    event
+        .paths
+        .iter()
+        .any(|path| registry.iter().any(|dir| path.starts_with(dir)))
+}
+
+/// Announce `milestones_changed` when the milestone registry's fingerprint moved since
+/// `previous`.
+fn announce_milestones_change(
+    root: &FsPath,
+    previous: &mut Vec<(String, u64, Option<SystemTime>)>,
+    checkout_id: &str,
+    events: &broadcast::Sender<ChangeEvent>,
+    event_log: &Arc<Mutex<EventLog>>,
+) {
+    let next = milestone_registry_fingerprint(root);
+    if next != *previous {
+        *previous = next;
+        emit_change(event_log, events, milestones_change_event(checkout_id));
+    }
+}
+
 /// Monitor a checkout for working-tree, index, commit, and upstream changes. Setup always
 /// happens off the request path. Native filesystem events trigger a Git status fingerprint,
 /// and only a changed fingerprint is announced, so ignored build output never reaches
@@ -1701,6 +1771,7 @@ pub(crate) fn run_native_repository_monitor_with(
     >;
     let mut previous = git_repository_fingerprint(&root);
     let mut registry = group_registry_fingerprint(&root);
+    let mut milestones = milestone_registry_fingerprint(&root);
     let mut filter = RepositoryEventFilter::load(&root);
     // HS2-2HZN2C: events dropped as ignored, by ignored entry, ranking exclusion candidates.
     let mut churn: std::collections::HashMap<std::path::PathBuf, u64> =
@@ -1756,10 +1827,18 @@ pub(crate) fn run_native_repository_monitor_with(
                 if stop.try_recv().is_ok() {
                     return;
                 }
-                // The bridge also compares the group registry, which native events report later.
+                // The bridge also compares the group and milestone registries, which native
+                // events report later.
                 announce_group_registry_change(
                     &root,
                     &mut registry,
+                    &checkout_id,
+                    &events,
+                    &event_log,
+                );
+                announce_milestones_change(
+                    &root,
+                    &mut milestones,
                     &checkout_id,
                     &events,
                     &event_log,
@@ -1780,6 +1859,7 @@ pub(crate) fn run_native_repository_monitor_with(
     // Compare once the stream is live, covering the moments since the bridge's last read.
     gate.note_event(Instant::now());
     let mut registry_touched = true;
+    let mut milestones_touched = true;
     loop {
         if stop.try_recv().is_ok() {
             return;
@@ -1817,6 +1897,11 @@ pub(crate) fn run_native_repository_monitor_with(
                 if touches_group_registry(&root, &result) {
                     registry_touched = true;
                     gate.note_event(Instant::now());
+                } else if touches_milestone_registry(&root, &result) {
+                    // Committed files, so Git status would notice them too; the registry
+                    // event is its own announcement (HS2-9PYNCN).
+                    milestones_touched = true;
+                    gate.note_event(Instant::now());
                 } else if filter.is_relevant(&result) {
                     gate.note_event(Instant::now());
                 } else if exclude && let Ok(event) = &result {
@@ -1838,6 +1923,9 @@ pub(crate) fn run_native_repository_monitor_with(
         gate.fingerprinted(now);
         if std::mem::take(&mut registry_touched) {
             announce_group_registry_change(&root, &mut registry, &checkout_id, &events, &event_log);
+        }
+        if std::mem::take(&mut milestones_touched) {
+            announce_milestones_change(&root, &mut milestones, &checkout_id, &events, &event_log);
         }
         announce_repository_change(&root, &mut previous, &checkout_id, &events, &event_log);
         // Events without a status change are usually new ignored output; a status change may
@@ -1890,6 +1978,7 @@ fn run_git_repository_monitor(
     // and similar ignored trees do not participate in either startup or steady-state work.
     let mut previous = git_repository_fingerprint(&root);
     let mut registry = group_registry_fingerprint(&root);
+    let mut milestones = milestone_registry_fingerprint(&root);
     let mut unchanged_rounds = 0_u8;
     loop {
         let interval = if unchanged_rounds < 12 {
@@ -1900,8 +1989,10 @@ fn run_git_repository_monitor(
         if stop.recv_timeout(interval).is_ok() {
             return;
         }
-        // Without native events, the registry listing is compared on the same cadence (HS2-70JS8B).
+        // Without native events, the registry listings are compared on the same cadence
+        // (HS2-70JS8B, HS2-9PYNCN).
         announce_group_registry_change(&root, &mut registry, &checkout_id, &events, &event_log);
+        announce_milestones_change(&root, &mut milestones, &checkout_id, &events, &event_log);
         let Some(next) = git_repository_fingerprint(&root) else {
             continue;
         };
@@ -2989,6 +3080,101 @@ mod watcher_tests {
                 tokio::time::sleep(Duration::from_millis(2_000)).await;
                 std::iter::from_fn(|| receiver.try_recv().ok())
                     .filter(|event| event.kind == "group_registry_changed")
+                    .collect()
+            };
+            assert!(
+                quiet.is_empty(),
+                "{name}: an idle registry was announced: {quiet:?}"
+            );
+            if let Some(stop) = _native {
+                let _ = stop.send(());
+            }
+        }
+    }
+
+    /// HS2-9PYNCN: a milestone file created, edited, or removed by another process (or a pull)
+    /// announces `milestones_changed` for the checkout, from the native and the Git-status
+    /// monitor alike, and not `group_registry_changed`; an idle registry stays silent.
+    #[tokio::test]
+    async fn repository_monitors_announce_milestone_registry_changes() {
+        for name in ["native", "git"] {
+            let dir = tempfile::tempdir().unwrap();
+            let root = &hotsheet_sync::paths::canonicalize(dir.path()).unwrap();
+            git(root, &["init", "--quiet"]);
+            let registry = root.join(hotsheet_ticketing::milestones::MILESTONE_REGISTRY_DIR);
+            std::fs::create_dir_all(&registry).unwrap();
+            let (events, _) = tokio::sync::broadcast::channel(64);
+            let mut receiver = events.subscribe();
+            let stream = hotsheet_jobs::watch::InProcessStream::default();
+            let (_native, _git) = if name == "native" {
+                (
+                    Some(in_process_monitor(
+                        root,
+                        &format!("checkout-{name}"),
+                        events,
+                        &stream,
+                    )),
+                    None,
+                )
+            } else {
+                (
+                    None,
+                    Some(
+                        spawn_repository_monitor(
+                            root.to_path_buf(),
+                            format!("checkout-{name}"),
+                            events,
+                            Arc::new(Mutex::new(EventLog::default())),
+                            run_git_repository_monitor,
+                        )
+                        .unwrap(),
+                    ),
+                )
+            };
+            tokio::time::sleep(Duration::from_millis(1_000)).await;
+            while receiver.try_recv().is_ok() {}
+            let milestones_event =
+                async |receiver: &mut tokio::sync::broadcast::Receiver<super::ChangeEvent>,
+                       what: &str| {
+                    let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+                    loop {
+                        let event = tokio::time::timeout_at(deadline, receiver.recv())
+                            .await
+                            .unwrap_or_else(|_| panic!("{name}: {what} was not announced"))
+                            .unwrap();
+                        assert_ne!(event.kind, "group_registry_changed", "{name}: {what}");
+                        if event.kind == "milestones_changed" {
+                            assert_eq!(event.id, format!("checkout-{name}"));
+                            assert!(event.slug.is_empty() && event.message.is_none());
+                            return;
+                        }
+                    }
+                };
+            let entry = registry.join("7K3M9P2QXA.json");
+            // Create, edit, remove, then create again: each is announced.
+            for (what, text) in [
+                (
+                    "a create",
+                    Some("{\n  \"title\": \"A\",\n  \"state\": \"open\"\n}\n"),
+                ),
+                (
+                    "an edit",
+                    Some("{\n  \"title\": \"A\",\n  \"state\": \"closed\"\n}\n"),
+                ),
+                ("a removal", None),
+                ("a re-create", Some("{\"title\":\"B\",\"state\":\"open\"}")),
+            ] {
+                match text {
+                    Some(text) => std::fs::write(&entry, text).unwrap(),
+                    None => std::fs::remove_file(&entry).unwrap(),
+                }
+                stream.changed(&entry);
+                milestones_event(&mut receiver, what).await;
+            }
+            let quiet: Vec<_> = {
+                tokio::time::sleep(Duration::from_millis(2_000)).await;
+                std::iter::from_fn(|| receiver.try_recv().ok())
+                    .filter(|event| event.kind == "milestones_changed")
                     .collect()
             };
             assert!(

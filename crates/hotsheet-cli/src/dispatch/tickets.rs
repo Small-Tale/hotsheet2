@@ -96,6 +96,8 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
         Cmd::Read { id } => cmd_read(path, &id),
         Cmd::Groups { json, all } => super::groups::cmd_groups(path, json, all),
         Cmd::TicketGroup { cmd } => super::groups::cmd_group(path, cmd),
+        Cmd::Milestones { json, all } => super::milestones::cmd_milestones(path, json, all),
+        Cmd::Milestone { cmd } => super::milestones::cmd_milestone(path, cmd),
         Cmd::ConfidenceReport { json } => cmd_confidence_report(path, json),
         Cmd::PhaseReport { since, until, json } => {
             cmd_phase_report(path, since.as_deref(), until.as_deref(), json)

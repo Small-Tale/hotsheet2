@@ -15,6 +15,7 @@ pub(crate) mod feedback_session;
 pub(crate) mod groups;
 pub(crate) mod guidance;
 pub(crate) mod mcp_presence;
+pub(crate) mod milestones;
 pub(crate) mod notifiers;
 pub(crate) mod orchestration;
 // HS2-AMJNER: the orchestration work this server runs between requests.

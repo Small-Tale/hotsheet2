@@ -183,7 +183,11 @@ impl GroupRegistry {
     /// Commit (and publish) a registry write in the code checkout (HS2-9EGWC4). Never
     /// fails the write: Git problems become the registry's sync status.
     fn written(&self, message: &str) {
-        super::git_sync::registry_written(&self.root, message);
+        super::git_sync::registry_written(
+            super::git_sync::RegistryKind::Groups,
+            &self.root,
+            message,
+        );
     }
 
     /// Under one lock, give each `key → spelling` an id: the lowest existing id with that

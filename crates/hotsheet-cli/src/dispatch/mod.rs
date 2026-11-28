@@ -14,6 +14,7 @@ mod job_ci_rest;
 mod job_github;
 mod job_gitlab;
 pub(crate) mod jobs;
+pub(crate) mod milestones;
 pub(crate) mod notify;
 pub(crate) mod orchestration;
 mod orchestration_capacity;
@@ -119,6 +120,8 @@ impl Cmd {
             | Read { .. }
             | Groups { .. }
             | TicketGroup { .. }
+            | Milestones { .. }
+            | Milestone { .. }
             | ConfidenceReport { .. }
             | PhaseReport { .. }
             | Metrics { .. }

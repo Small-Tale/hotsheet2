@@ -353,3 +353,51 @@ fn hs2_gy8c2d_every_shared_writer_path_is_listed() {
         );
     }
 }
+
+/// HS2-9PYNCN: a block written before milestones gains `!/.hotsheet2/milestones/` on the next
+/// write, after which milestone files are committable and the milestone lock stays local.
+#[test]
+fn hs2_9pyncn_a_block_without_the_milestone_registry_is_restored() {
+    assert!(
+        SHARED_PROJECT_PATHS
+            .contains(&format!("{}/", crate::milestones::MILESTONE_REGISTRY_DIR).as_str())
+    );
+    let before: Vec<&str> = BLOCK_RULES
+        .iter()
+        .copied()
+        .filter(|rule| *rule != "!/.hotsheet2/milestones/")
+        .collect();
+    assert_eq!(before.len() + 1, BLOCK_RULES.len());
+    let dir = git_repo();
+    write(
+        dir.path(),
+        &format!("{BLOCK_BEGIN}\n{}\n{BLOCK_END}\n", before.join("\n")),
+    );
+    let probe = |path: &str| {
+        crate::git::command()
+            .arg("-C")
+            .arg(dir.path())
+            .args(["check-ignore", "-q", "--no-index", "--", path])
+            .status()
+            .unwrap()
+            .code()
+            == Some(0)
+    };
+    assert!(probe(".hotsheet2/milestones/7K3M9P2QXA.json"));
+    let report = ensure_project_block(dir.path()).unwrap();
+    assert!(report.changed);
+    assert_eq!(read(dir.path()), block());
+    assert!(!probe(".hotsheet2/milestones/7K3M9P2QXA.json"));
+    assert!(probe(".hotsheet2/milestones.lock"));
+    assert!(probe(".hotsheet2/milestones-sync.json"));
+    // A hand rule that hides the registry is named by its directory.
+    write(dir.path(), &format!("{}/.hotsheet2/milestones/\n", block()));
+    let report = ensure_project_block(dir.path()).unwrap();
+    let hidden: Vec<String> = report.conflicts.iter().map(ToString::to_string).collect();
+    assert!(
+        hidden
+            .iter()
+            .any(|line| line.contains("hides .hotsheet2/milestones/,")),
+        "{hidden:?}"
+    );
+}

@@ -2,7 +2,8 @@
 //!
 //! Hot Sheet keeps checkout-local files under `<project>/.hotsheet2/`. The ones listed in
 //! [`SHARED_PROJECT_PATHS`] are committed: the shared settings file, the project group
-//! registry (HS2-9KZSD4), and the shared orchestration files (HS2-GY8C2D). Everything else
+//! registry (HS2-9KZSD4), the milestone registry (HS2-9PYNCN), and the shared orchestration
+//! files (HS2-GY8C2D). Everything else
 //! there (the local settings file, the standalone store link, the group registry lock, and
 //! any later machine-local file) must stay out of Git.
 //!
@@ -15,6 +16,7 @@
 //! /.hotsheet2/*
 //! !/.hotsheet2/settings.json
 //! !/.hotsheet2/groups/
+//! !/.hotsheet2/milestones/
 //! !/.hotsheet2/orchestration.json
 //! … (one re-include per shared path)
 //! # <<< Hot Sheet 2 <<<
@@ -51,6 +53,7 @@ pub const BLOCK_END: &str = "# <<< Hot Sheet 2 <<<";
 pub const SHARED_PROJECT_PATHS: &[&str] = &[
     ".hotsheet2/settings.json",
     ".hotsheet2/groups/",
+    ".hotsheet2/milestones/",
     ".hotsheet2/orchestration.json",
     ".hotsheet2/orchestration-plan.json",
     ".hotsheet2/orchestration-policy.json",
@@ -64,6 +67,7 @@ pub const BLOCK_RULES: &[&str] = &[
     "/.hotsheet2/*",
     "!/.hotsheet2/settings.json",
     "!/.hotsheet2/groups/",
+    "!/.hotsheet2/milestones/",
     "!/.hotsheet2/orchestration.json",
     "!/.hotsheet2/orchestration-plan.json",
     "!/.hotsheet2/orchestration-policy.json",
@@ -79,6 +83,7 @@ pub const LEGACY_LINES: &[&str] = &[".hotsheet2/settings.local.json", ".hotsheet
 const COMMITTED_PROBES: &[&str] = &[
     ".hotsheet2/settings.json",
     ".hotsheet2/groups/0000000000.json",
+    ".hotsheet2/milestones/0000000000.json",
     ".hotsheet2/orchestration.json",
     ".hotsheet2/orchestration-plan.json",
     ".hotsheet2/orchestration-policy.json",
@@ -91,6 +96,7 @@ const LOCAL_PROBES: &[&str] = &[
     ".hotsheet2/settings.local.json",
     ".hotsheet2/store",
     ".hotsheet2/groups.lock",
+    ".hotsheet2/milestones.lock",
     ".hotsheet2/machine-local-file",
 ];
 
@@ -120,6 +126,7 @@ impl GitignoreConflict {
     pub fn subject(&self) -> &str {
         match self.path.as_str() {
             path if path.starts_with(".hotsheet2/groups/") => ".hotsheet2/groups/",
+            path if path.starts_with(".hotsheet2/milestones/") => ".hotsheet2/milestones/",
             ".hotsheet2/machine-local-file" => "machine-local files in .hotsheet2/",
             path => path,
         }

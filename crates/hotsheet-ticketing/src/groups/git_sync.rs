@@ -28,6 +28,11 @@
 //! [`on_status_change`] tells a process when a recorded state changes, so the server can
 //! announce it to open clients (HS2-1CWD0H).
 //!
+//! The milestone registry (HS2-9PYNCN, docs/38 §38.2) shares this machinery unchanged: each
+//! step takes a [`RegistryKind`] naming the registry's directory, status file, and wording.
+//! Group and milestone commits both count as registry-only commits for the push check, so
+//! publishing one never waits behind the other. Only the group registry keeps a remote overlay.
+//!
 //! Concurrency (HS2-NM6E27): every commit step, from the background committer, the sync
 //! loop, or a CLI or MCP write, holds the per-repository Git transaction lock the ticket
 //! store's autocommit and sync also take. Hot Sheet's own reads (repository status, the
@@ -58,11 +63,77 @@ pub const GROUP_REMOTE_OVERLAY_FILE: &str = ".hotsheet2/groups-remote.json";
 /// The commit message when a sync pass commits changes no write announced.
 pub const PENDING_COMMIT_MESSAGE: &str = "Update group registry";
 
-/// The registry files, as a pathspec relative to the checkout root.
-const REGISTRY_PATHSPEC: &str = ":(glob).hotsheet2/groups/*.json";
-/// A probe path for `git check-ignore`; ids are never all zeros in practice, and the
-/// check does not need the file to exist.
-const IGNORE_PROBE: &str = ".hotsheet2/groups/0000000000.json";
+/// The milestone registry's directory (HS2-9PYNCN, docs/38 §38.2).
+pub const MILESTONE_REGISTRY_DIR: &str = ".hotsheet2/milestones";
+/// Machine-local status of the milestone registry's last publication attempt.
+pub const MILESTONE_SYNC_STATUS_FILE: &str = ".hotsheet2/milestones-sync.json";
+/// The commit message when a sync pass commits milestone changes no write announced.
+pub const MILESTONE_PENDING_COMMIT_MESSAGE: &str = "Update milestone registry";
+
+/// Which project registry a publication step works on. Both live in the code checkout,
+/// one committed JSON file per entry, and publish by the same rules (docs/35 §35.7).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum RegistryKind {
+    /// Ticket groups, `.hotsheet2/groups/` (HS2-9KZSD4).
+    Groups,
+    /// Milestones, `.hotsheet2/milestones/` (HS2-9PYNCN).
+    Milestones,
+}
+
+impl RegistryKind {
+    /// Every registry; a push publishes commits that touch only these files.
+    pub const ALL: [Self; 2] = [Self::Groups, Self::Milestones];
+
+    /// The registry directory, relative to the checkout root.
+    pub fn dir(self) -> &'static str {
+        match self {
+            Self::Groups => GROUP_REGISTRY_DIR,
+            Self::Milestones => MILESTONE_REGISTRY_DIR,
+        }
+    }
+
+    /// The machine-local publication status file.
+    pub fn status_file(self) -> &'static str {
+        match self {
+            Self::Groups => GROUP_SYNC_STATUS_FILE,
+            Self::Milestones => MILESTONE_SYNC_STATUS_FILE,
+        }
+    }
+
+    /// The commit message when a sync pass commits changes no write announced.
+    pub fn pending_message(self) -> &'static str {
+        match self {
+            Self::Groups => PENDING_COMMIT_MESSAGE,
+            Self::Milestones => MILESTONE_PENDING_COMMIT_MESSAGE,
+        }
+    }
+
+    /// The registry's name in status lines.
+    fn noun(self) -> &'static str {
+        match self {
+            Self::Groups => "group registry",
+            Self::Milestones => "milestone registry",
+        }
+    }
+
+    /// The registry files, as a pathspec relative to the checkout root.
+    fn pathspec(self) -> String {
+        format!(":(glob){}/*.json", self.dir())
+    }
+
+    /// A probe path for `git check-ignore`; ids are never all zeros in practice, and the
+    /// check does not need the file to exist.
+    fn ignore_probe(self) -> String {
+        format!("{}/0000000000.json", self.dir())
+    }
+
+    /// Whether a sync pass pulls the upstream's entries into a remote overlay. Only the
+    /// group registry has one; milestone changes arrive with the user's pull, which the
+    /// checkout watcher announces (docs/38 §38.6).
+    fn has_overlay(self) -> bool {
+        matches!(self, Self::Groups)
+    }
+}
 
 /// How the registry's publication stands.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -128,21 +199,26 @@ impl RegistrySyncStatus {
     }
 }
 
-/// The last recorded status of the registry under `checkout_root`, if any.
+/// The last recorded status of the group registry under `checkout_root`, if any.
 pub fn read_status(checkout_root: &Path) -> Option<RegistrySyncStatus> {
-    let bytes = fs::read(checkout_root.join(GROUP_SYNC_STATUS_FILE)).ok()?;
+    read_status_of(RegistryKind::Groups, checkout_root)
+}
+
+/// The last recorded status of the `kind` registry under `checkout_root`, if any.
+pub fn read_status_of(kind: RegistryKind, checkout_root: &Path) -> Option<RegistrySyncStatus> {
+    let bytes = fs::read(checkout_root.join(kind.status_file())).ok()?;
     serde_json::from_slice(&bytes).ok()
 }
 
-fn record_status(checkout_root: &Path, status: &mut RegistrySyncStatus) {
+fn record_status(kind: RegistryKind, checkout_root: &Path, status: &mut RegistrySyncStatus) {
     status.at = time::OffsetDateTime::now_utc()
         .format(&time::format_description::well_known::Rfc3339)
         .unwrap_or_default();
     // The background committer and a sync-loop pass can record at once; compare and write
     // under one lock so each state change is announced exactly once (HS2-1CWD0H).
     let _recording = RECORDING.lock().unwrap_or_else(PoisonError::into_inner);
-    let before = read_status(checkout_root).map(|status| status.state);
-    let path = checkout_root.join(GROUP_SYNC_STATUS_FILE);
+    let before = read_status_of(kind, checkout_root).map(|status| status.state);
+    let path = checkout_root.join(kind.status_file());
     let after = if status.state == RegistrySyncState::Untracked {
         // A registry Hot Sheet does not publish has no publication status to show.
         let _ = fs::remove_file(&path);
@@ -160,7 +236,9 @@ fn record_status(checkout_root: &Path, status: &mut RegistrySyncStatus) {
         }
         Some(status.state)
     };
-    if before != after {
+    // The listeners announce `group_registry_sync`; a milestone status has no event of its
+    // own yet (HS2-9PYNCN follow-up) and is read with the milestone list.
+    if before != after && kind == RegistryKind::Groups {
         notify_status_change(checkout_root, after);
     }
 }
@@ -221,22 +299,31 @@ fn notify_status_change(checkout_root: &Path, state: Option<RegistrySyncState>) 
 
 /// Called by the registry after it wrote an entry: commit (and push) now, or queue the
 /// commit for the background committer when the process enabled one.
-pub(crate) fn registry_written(checkout_root: &Path, message: &str) {
+pub(crate) fn registry_written(kind: RegistryKind, checkout_root: &Path, message: &str) {
     if let Some(background) = BACKGROUND.get() {
-        background.submit(checkout_root, message);
+        background.submit(kind, checkout_root, message);
     } else {
-        publish(checkout_root, Some(message));
+        publish_registry(kind, checkout_root, Some(message));
     }
 }
 
-/// Commit the registry's pending changes with `message` (or [`PENDING_COMMIT_MESSAGE`])
-/// and push them when that is safe. Records and returns the status. Never fails: every
-/// problem is a status.
+/// Commit the group registry's pending changes with `message` (or
+/// [`PENDING_COMMIT_MESSAGE`]) and push them when that is safe. Records and returns the
+/// status. Never fails: every problem is a status.
 pub fn publish(checkout_root: &Path, message: Option<&str>) -> RegistrySyncStatus {
-    let mut status = match Checkout::open(checkout_root) {
+    publish_registry(RegistryKind::Groups, checkout_root, message)
+}
+
+/// [`publish`] for any registry.
+pub fn publish_registry(
+    kind: RegistryKind,
+    checkout_root: &Path,
+    message: Option<&str>,
+) -> RegistrySyncStatus {
+    let mut status = match Checkout::open(kind, checkout_root) {
         Err(status) => status,
         Ok(checkout) => {
-            let committed = checkout.commit(message.unwrap_or(PENDING_COMMIT_MESSAGE));
+            let committed = checkout.commit(message.unwrap_or(kind.pending_message()));
             match committed {
                 Err(status) => status,
                 Ok(committed) => {
@@ -247,26 +334,35 @@ pub fn publish(checkout_root: &Path, message: Option<&str>) -> RegistrySyncStatu
             }
         }
     };
-    record_status(checkout_root, &mut status);
+    record_status(kind, checkout_root, &mut status);
     status
 }
 
-/// One sync-loop pass for a checkout: commit anything pending, fetch the upstream branch,
-/// refresh the remote overlay, and push. Never fails: every problem is a status.
+/// One sync-loop pass for a checkout's group registry: commit anything pending, fetch the
+/// upstream branch, refresh the remote overlay, and push. Never fails: every problem is a
+/// status.
 pub fn sync_checkout(checkout_root: &Path) -> RegistrySyncStatus {
-    let mut status = match Checkout::open(checkout_root) {
+    sync_registry(RegistryKind::Groups, checkout_root)
+}
+
+/// [`sync_checkout`] for any registry. A registry without a remote overlay (milestones)
+/// commits and pushes only, against the remote-tracking ref the group pass fetched.
+pub fn sync_registry(kind: RegistryKind, checkout_root: &Path) -> RegistrySyncStatus {
+    let mut status = match Checkout::open(kind, checkout_root) {
         Err(status) => status,
         Ok(checkout) => {
-            let committed = checkout.commit(PENDING_COMMIT_MESSAGE);
+            let committed = checkout.commit(kind.pending_message());
             // Pull even when the commit failed (a refusing hook must not hide other
             // clones' groups). Offline is not fatal: the overlay keeps its last view and
             // the push reports the failure.
-            if let Some(upstream) = checkout.upstream() {
-                if checkout.fetch(&upstream) {
-                    checkout.refresh_overlay(&upstream);
+            if kind.has_overlay() {
+                if let Some(upstream) = checkout.upstream() {
+                    if checkout.fetch(&upstream) {
+                        checkout.refresh_overlay(&upstream);
+                    }
+                } else {
+                    remove_overlay(checkout_root);
                 }
-            } else {
-                remove_overlay(checkout_root);
             }
             match committed {
                 Err(status) => status,
@@ -278,7 +374,7 @@ pub fn sync_checkout(checkout_root: &Path) -> RegistrySyncStatus {
             }
         }
     };
-    record_status(checkout_root, &mut status);
+    record_status(kind, checkout_root, &mut status);
     status
 }
 
@@ -323,7 +419,7 @@ struct Background {
 
 #[derive(Default)]
 struct BackgroundState {
-    pending: HashMap<PathBuf, Burst>,
+    pending: HashMap<(RegistryKind, PathBuf), Burst>,
     busy: bool,
     flushing: usize,
 }
@@ -342,9 +438,9 @@ impl Burst {
 
 /// One commit message for a burst: the first write's, counting the rest, like the ticket
 /// store's coalesced autocommits.
-fn coalesced_message(messages: &[String]) -> String {
+fn coalesced_message(kind: RegistryKind, messages: &[String]) -> String {
     match messages {
-        [] => PENDING_COMMIT_MESSAGE.to_string(),
+        [] => kind.pending_message().to_string(),
         [one] => one.clone(),
         [first, rest @ ..] => format!("{first} (+{} more)", rest.len()),
     }
@@ -355,14 +451,17 @@ impl Background {
         self.state.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
-    fn submit(&self, root: &Path, message: &str) {
+    fn submit(&self, kind: RegistryKind, root: &Path, message: &str) {
         let now = Instant::now();
         let mut state = self.lock();
-        let burst = state.pending.entry(root.to_path_buf()).or_insert(Burst {
-            messages: Vec::new(),
-            first: now,
-            last: now,
-        });
+        let burst = state
+            .pending
+            .entry((kind, root.to_path_buf()))
+            .or_insert(Burst {
+                messages: Vec::new(),
+                first: now,
+                last: now,
+            });
         burst.messages.push(message.to_string());
         burst.last = now;
         drop(state);
@@ -371,7 +470,7 @@ impl Background {
 
     /// The next burst to commit: the earliest due one once it is due, or any burst at once
     /// while someone is flushing.
-    fn take_due(&self) -> (PathBuf, Vec<String>) {
+    fn take_due(&self) -> ((RegistryKind, PathBuf), Vec<String>) {
         let mut state = self.lock();
         loop {
             let next = state
@@ -405,8 +504,8 @@ impl Background {
 
     fn work(&self) {
         loop {
-            let (root, messages) = self.take_due();
-            publish(&root, Some(&coalesced_message(&messages)));
+            let ((kind, root), messages) = self.take_due();
+            publish_registry(kind, &root, Some(&coalesced_message(kind, &messages)));
             self.lock().busy = false;
             self.changed.notify_all();
         }
@@ -530,10 +629,12 @@ struct Upstream {
 
 /// A checkout whose registry can be committed now.
 struct Checkout {
+    kind: RegistryKind,
     root: PathBuf,
-    /// The registry directory relative to the repository's top level, with a trailing
-    /// slash, as `git log --name-only` prints paths.
-    registry_prefix: String,
+    /// Every registry directory relative to the repository's top level, with a trailing
+    /// slash, as `git log --name-only` prints paths. A push publishes commits that touch
+    /// only files directly inside these.
+    registry_prefixes: Vec<String>,
 }
 
 fn git(root: &Path) -> std::process::Command {
@@ -584,7 +685,7 @@ fn tail(output: &Output) -> String {
 impl Checkout {
     /// The checkout, when its registry can be committed right now; otherwise the status
     /// that explains why not.
-    fn open(root: &Path) -> Result<Self, RegistrySyncStatus> {
+    fn open(kind: RegistryKind, root: &Path) -> Result<Self, RegistrySyncStatus> {
         use RegistrySyncState::{Untracked, Waiting};
         if std::env::var_os("HOTSHEET_NO_AUTOCOMMIT").is_some() {
             return Err(RegistrySyncStatus::new(
@@ -617,11 +718,17 @@ impl Checkout {
         let prefix = lines.next().unwrap_or_default();
         if succeeds(
             root,
-            &["check-ignore", "-q", "--no-index", "--", IGNORE_PROBE],
+            &[
+                "check-ignore",
+                "-q",
+                "--no-index",
+                "--",
+                &kind.ignore_probe(),
+            ],
         ) {
             return Err(RegistrySyncStatus::new(
                 Untracked,
-                "Git ignores .hotsheet2/groups/ in this checkout",
+                format!("Git ignores {}/ in this checkout", kind.dir()),
             ));
         }
         let git_dir = Path::new(git_dir);
@@ -646,13 +753,18 @@ impl Checkout {
             ));
         }
         Ok(Self {
+            kind,
             root: root.to_path_buf(),
-            registry_prefix: format!("{prefix}{GROUP_REGISTRY_DIR}/"),
+            registry_prefixes: RegistryKind::ALL
+                .iter()
+                .map(|registry| format!("{prefix}{}/", registry.dir()))
+                .collect(),
         })
     }
 
     /// The registry files that differ from `HEAD` in the index or the working tree.
     fn changed_paths(&self) -> Vec<String> {
+        let pathspec = self.kind.pathspec();
         let mut paths = Vec::new();
         let listings = [
             // Modified, deleted, and untracked (not ignored) in the working tree.
@@ -664,7 +776,7 @@ impl Checkout {
                 "--others",
                 "--exclude-standard",
                 "--",
-                REGISTRY_PATHSPEC,
+                &pathspec,
             ],
             // Staged but not committed.
             vec![
@@ -675,7 +787,7 @@ impl Checkout {
                 "-z",
                 "--relative",
                 "--",
-                REGISTRY_PATHSPEC,
+                &pathspec,
             ],
         ];
         for args in listings {
@@ -704,7 +816,11 @@ impl Checkout {
         let failed = |output: &Output| CommitFailure {
             status: RegistrySyncStatus::new(
                 RegistrySyncState::Failed,
-                format!("could not commit the group registry: {}", tail(output)),
+                format!(
+                    "could not commit the {}: {}",
+                    self.kind.noun(),
+                    tail(output)
+                ),
             ),
             locks: crate::sync_locks::locks_in_output(&String::from_utf8_lossy(&output.stderr)),
         };
@@ -798,15 +914,18 @@ impl Checkout {
     /// Whether every path in `listing` (one per line) is a registry entry file.
     fn only_registry_paths(&self, listing: &str) -> bool {
         listing.lines().filter(|line| !line.is_empty()).all(|path| {
-            path.strip_prefix(&self.registry_prefix)
-                .and_then(|name| name.strip_suffix(".json"))
-                .is_some_and(|id| !id.contains('/'))
+            self.registry_prefixes.iter().any(|prefix| {
+                path.strip_prefix(prefix.as_str())
+                    .and_then(|name| name.strip_suffix(".json"))
+                    .is_some_and(|id| !id.contains('/'))
+            })
         })
     }
 
     /// Push the branch's unpublished registry commits when that is a safe fast-forward.
     fn push(&self) -> RegistrySyncStatus {
         use RegistrySyncState::{Blocked, Failed, LocalOnly, Synced, Waiting};
+        let noun = self.kind.noun();
         let Some(upstream) = self.upstream() else {
             return RegistrySyncStatus::new(
                 LocalOnly,
@@ -824,7 +943,7 @@ impl Checkout {
             );
         };
         if ahead.trim().is_empty() {
-            return RegistrySyncStatus::new(Synced, "the group registry is published");
+            return RegistrySyncStatus::new(Synced, format!("the {noun} is published"));
         }
         let merges = stdout(&self.root, &["rev-list", "--merges", &range]).unwrap_or_default();
         let touched = stdout(
@@ -835,8 +954,10 @@ impl Checkout {
         if !merges.trim().is_empty() || !self.only_registry_paths(&touched) {
             return RegistrySyncStatus::new(
                 Blocked,
-                "group registry commits are waiting behind other unpublished commits on this \
-                 branch; push the branch to publish them",
+                format!(
+                    "{noun} commits are waiting behind other unpublished commits on this \
+                     branch; push the branch to publish them"
+                ),
             );
         }
         let behind = stdout(
@@ -852,8 +973,9 @@ impl Checkout {
         if behind > 0 {
             return RegistrySyncStatus::new(
                 Blocked,
-                "the branch is behind its upstream; pull (with --rebase) to publish the group \
-                 registry",
+                format!(
+                    "the branch is behind its upstream; pull (with --rebase) to publish the {noun}"
+                ),
             );
         }
         let refspec = format!("{}:{}", upstream.branch, upstream.remote_ref);
@@ -890,7 +1012,7 @@ impl Checkout {
             return RegistrySyncStatus::new(
                 Synced,
                 format!(
-                    "published {count} group registry commit{}",
+                    "published {count} {noun} commit{}",
                     if count == 1 { "" } else { "s" }
                 ),
             );
@@ -903,13 +1025,10 @@ impl Checkout {
         if printed.contains("[rejected]") || printed.contains("non-fast-forward") {
             return RegistrySyncStatus::new(
                 Blocked,
-                "the upstream moved; pull (with --rebase) to publish the group registry",
+                format!("the upstream moved; pull (with --rebase) to publish the {noun}"),
             );
         }
-        RegistrySyncStatus::new(
-            Failed,
-            format!("the group registry push failed: {}", tail(&output)),
-        )
+        RegistrySyncStatus::new(Failed, format!("the {noun} push failed: {}", tail(&output)))
     }
 
     /// The registry entry blobs of `rev`, id to object id.

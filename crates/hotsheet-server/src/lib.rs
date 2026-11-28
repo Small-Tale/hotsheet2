@@ -1817,6 +1817,24 @@ pub fn app(state: AppState) -> Router {
             "/checkouts/{reference}/groups/migrate",
             post(routes::groups::migrate_checkout_groups),
         )
+        .route(
+            "/checkouts/{reference}/milestones",
+            get(routes::milestones::list_checkout_milestones)
+                .post(routes::milestones::create_checkout_milestone),
+        )
+        .route(
+            "/checkouts/{reference}/milestones/{milestone}",
+            get(routes::milestones::get_checkout_milestone)
+                .patch(routes::milestones::edit_checkout_milestone),
+        )
+        .route(
+            "/checkouts/{reference}/milestones/{milestone}/close",
+            post(routes::milestones::close_checkout_milestone),
+        )
+        .route(
+            "/checkouts/{reference}/milestones/{milestone}/reopen",
+            post(routes::milestones::reopen_checkout_milestone),
+        )
         .route("/setup/{tool}", post(setup_tool))
         // Multi-store (HS2-87): list/register hosted stores + store-scoped ticket routes
         // (path-prefix scheme, maintainer's pick), sharing the default routes' logic.
