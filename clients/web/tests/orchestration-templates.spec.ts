@@ -206,8 +206,16 @@ test('HS2-A4RVYA Use Template… previews a template, applies it once and hands 
     // The planner took it once: the apply is recorded as planning, under the template applied.
     expect(applied).toMatchObject({ state: 'planning', template_id: templateId });
     const slug = applied.goal?.slug ?? '';
-    const tickets = await server.request<Array<{ slug: string; title: string }>>('/tickets');
-    expect(tickets.find((ticket) => ticket.slug === slug)?.title).toBe('Rate limits in Self');
+    // The goal ticket reaches the listing once the index catches up with the store (HS2-N91NYP).
+    await expect
+      .poll(
+        async () =>
+          (await server.request<Array<{ slug: string; title: string }>>('/tickets')).find(
+            (ticket) => ticket.slug === slug,
+          )?.title,
+        { timeout: 15_000 },
+      )
+      .toBe('Rate limits in Self');
     await expect(dialog).toContainText(slug);
     await capture(page, 'applied-1440-light');
     await page.emulateMedia({ colorScheme: 'dark' });
