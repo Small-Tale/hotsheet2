@@ -6,6 +6,7 @@ import { withoutGitRepositoryEnv } from '../scripts/repository-env.mjs';
 import { remoteProjectId } from '../src/remote-projects/identity';
 import { demoHostHealth, demoLiveState } from '../src/ux-demo/live-section-fixtures';
 import { openMockedProject, projectTab } from './open-mocked-project';
+import { showProjectSidebarAt } from './project-sidebar-layout';
 import { proxyFetch, realTicketServer } from './real-ticket-server';
 
 type Server = Awaited<ReturnType<typeof realTicketServer>>;
@@ -72,9 +73,7 @@ test('HS2-Z9DAYD keeps a full battery quiet and shows a below-50% warning in Liv
       timeout: 30_000,
     });
     for (const width of [1280, 760, 390, 1280]) {
-      await page.setViewportSize({ width, height: 900 });
-      const showSidebar = page.getByRole('button', { name: 'Show Project Sidebar' });
-      if (await showSidebar.isVisible()) await showSidebar.click();
+      await showProjectSidebarAt(page, width);
       const callout = live.locator('[data-host-callout="power"]');
       await expect(callout).toBeVisible();
       await callout.scrollIntoViewIfNeeded();
@@ -320,9 +319,7 @@ test('HS2-505PHC labels the Live CI chip with its elapsed time and ticks without
       await live.screenshot({ path: `target/visual-captures/hs2-505phc-${name}.png` });
     };
     for (const width of [1280, 1024, 390, 1280]) {
-      await page.setViewportSize({ width, height: 900 });
-      const showSidebar = page.getByRole('button', { name: 'Show Project Sidebar' });
-      if (await showSidebar.isVisible()) await showSidebar.click();
+      await showProjectSidebarAt(page, width);
       await expect(chip).toBeVisible();
       await expect(chip).toHaveText(/^CI · \d+:\d\d$/u);
       // The label stays on one line inside the badge at every width.
@@ -446,9 +443,7 @@ test('HS2-D3JJ49 shows each running CI run as its own chip and row', async ({ pa
       await live.screenshot({ path: `target/visual-captures/hs2-d3jj49-${browserName}-${name}.png` });
     };
     for (const width of [1280, 1024, 390, 1280]) {
-      await page.setViewportSize({ width, height: 900 });
-      const showSidebar = page.getByRole('button', { name: 'Show Project Sidebar' });
-      if (await showSidebar.isVisible()) await showSidebar.click();
+      await showProjectSidebarAt(page, width);
       await expect(chips).toHaveCount(2);
       for (const each of await chips.all()) {
         const box = await each.boundingBox();
@@ -470,9 +465,7 @@ test('HS2-D3JJ49 shows each running CI run as its own chip and row', async ({ pa
     await capture('rows-dark-1280');
     await page.emulateMedia({ colorScheme: 'light' });
     for (const width of [1280, 390]) {
-      await page.setViewportSize({ width, height: 900 });
-      const showSidebar = page.getByRole('button', { name: 'Show Project Sidebar' });
-      if (await showSidebar.isVisible()) await showSidebar.click();
+      await showProjectSidebarAt(page, width);
       await expect(rows).toHaveCount(2);
       // Neither row nor its truncating label overflows: the whole label shows.
       for (const row of await rows.all()) {
@@ -546,9 +539,7 @@ test('HS2-7PSBHQ clears one CI run from the Live section context menu', async ({
     for (const width of [1280, 1024, 390, 1280]) {
       await page.keyboard.press('Escape');
       await expect(menu).toHaveCount(0);
-      await page.setViewportSize({ width, height: 900 });
-      const showSidebar = page.getByRole('button', { name: 'Show Project Sidebar' });
-      if (await showSidebar.isVisible()) await showSidebar.click();
+      await showProjectSidebarAt(page, width);
       // Right-click on the gauges, not a chip: every shown run.
       await live.locator('[data-component="glance-gauge"]').first().click({ button: 'right' });
       await expect(items).toHaveCount(2);
