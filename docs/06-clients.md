@@ -2173,7 +2173,7 @@ checkout name>`, where the host is the machine name the peer last reported on th
   along with toolbars, toolbar text/control groups, page headers, loading indicators,
   and Lucide rendering; the client does not carry local copies of those primitives.
   The web client pins `kerfjs`, `@kerfjs/ui`, `create-kerf-component`, and
-  `eslint-plugin-kerfjs` at 5.0.0-beta.139 (HS2-23GC8C). Its Kerf/Web Awesome
+  `eslint-plugin-kerfjs` at 5.0.0-beta.140 (HS2-KPZY3Y). Its Kerf/Web Awesome
   spike remains pinned to beta.117 for its compatibility proof (HS2-F83DZZ).
   `npx kerfjs setup --ui --write --yes`, run from `clients/web`, installs the Kerf
   `kerf-app`, `kerf-ui`, and `kerf-ui-design-mock` skills under `clients/web/.claude/skills`

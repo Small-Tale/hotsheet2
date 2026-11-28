@@ -2943,12 +2943,11 @@ the quick ticket composer's raw `wa-dialog` parts, owned by its DialogSurface ad
 `KF-R55A9X` (literal-union class modifiers), which retired 13 more entries (HS2-23GC8C).
 HS2-5FFT4J retired the `TicketInspectorPanel` `KUI-L008` entry. Its root class is now one
 finite template, and the forwarded panel class is a literal union. `SidebarPane` types its
-forwarded class as a literal union too. A bare `className={className}` is never type-checked,
-though, and a template-only forward fails `no-unnecessary-template-expression`. Its exception is
-therefore owned by `KF-7MBEBY`, which asks Kerf to classify typed bare forwards. The `KUI-L004`
-entry covers the chat preview card. That card is absolutely positioned at the frame inset, so the
-two insets cannot compound, but the analyzer ignores `position`. It is owned by the Kerf
-false-positive ticket `KF-F24ZM8`.
+forwarded class as a literal union too. Kerf beta.140 classifies that bare typed
+`className={className}` forward (`KF-7MBEBY`) and starts a new inset chain at an absolutely
+positioned child (`KF-F24ZM8`), so the `SidebarPane` `KUI-L008` entry and the chat preview card's
+`KUI-L004` entry suppressed nothing and were removed (HS2-KPZY3Y). Only the `HS2-CR912H` entry
+remains.
 `src/kerf-ui-profile.test.ts`
 pins the exact ids. It requires every target to exist and still contain the flagged
 construct (`::part(`, the named classes, the quoted expressions), and requires every
