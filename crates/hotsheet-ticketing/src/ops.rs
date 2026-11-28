@@ -1960,6 +1960,15 @@ fn chronological_note_cmp(a: &Note, b: &Note) -> std::cmp::Ordering {
 
 /// The target status of an automatic status-transition activity note, if it is one.
 pub(crate) fn transition_target(note: &Note) -> Option<Status> {
+    status_transition_labels(note).and_then(|(_, to)| status_from_label(to))
+}
+
+pub(crate) fn recorded_status_transition(note: &Note) -> Option<(Status, Status)> {
+    let (from, to) = status_transition_labels(note)?;
+    Some((status_from_label(from)?, status_from_label(to)?))
+}
+
+fn status_transition_labels(note: &Note) -> Option<(&str, &str)> {
     if note.kind != NoteKind::Activity {
         return None;
     }
@@ -1968,7 +1977,6 @@ pub(crate) fn transition_target(note: &Note) -> Option<Status> {
         .next()?
         .strip_prefix("Status changed from ")?
         .rsplit_once(" to ")
-        .and_then(|(_, to)| status_from_label(to))
 }
 
 /// Whether an automatic activity note records the ticket returning to active work.

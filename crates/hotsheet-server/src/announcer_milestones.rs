@@ -95,12 +95,19 @@ pub fn spawn_announcer_milestones_with(
     ai: Option<SharedAi>,
     timing: Timing,
 ) -> tokio::task::JoinHandle<()> {
+    let started_at = OffsetDateTime::now_utc();
     let mut events = state.subscribe();
+    let startup_stores = state
+        .host
+        .locations()
+        .into_iter()
+        .map(|(store, _)| store)
+        .collect();
     let (queued, pending) = mpsc::channel::<(String, String)>();
     let worker = state.clone();
     std::thread::Builder::new()
         .name("hotsheet-announcer-milestones".into())
-        .spawn(move || Worker::new(worker, ai, timing).run(&pending))
+        .spawn(move || Worker::new(worker, ai, timing).run(&pending, startup_stores, started_at))
         .expect("spawn the announcer milestone worker");
     tokio::spawn(async move {
         loop {
@@ -128,6 +135,12 @@ struct Batch {
     milestones: Vec<Milestone>,
 }
 
+#[derive(Clone, Copy)]
+struct StoreSeed {
+    at: OffsetDateTime,
+    at_startup: bool,
+}
+
 struct Worker {
     state: AppState,
     ai: Option<SharedAi>,
@@ -135,7 +148,7 @@ struct Worker {
     decider: Decider,
     /// When each store was seeded: notes and follow-ups of a ticket first seen count as new
     /// only after it.
-    seeded: HashMap<String, OffsetDateTime>,
+    seeded: HashMap<String, StoreSeed>,
     snapshots: HashMap<(String, String), MilestoneSnapshot>,
     emitted: HashSet<String>,
     emitted_order: VecDeque<String>,
@@ -159,9 +172,14 @@ impl Worker {
 
     /// Seed every hosted store, then observe changes and decide due batches. Blocks on the
     /// channel while nothing is pending, so an idle server does no work.
-    fn run(mut self, pending: &mpsc::Receiver<(String, String)>) {
-        for (store, _) in self.state.host.locations() {
-            self.seed(&store, OffsetDateTime::now_utc());
+    fn run(
+        mut self,
+        pending: &mpsc::Receiver<(String, String)>,
+        startup_stores: Vec<String>,
+        started_at: OffsetDateTime,
+    ) {
+        for store in startup_stores {
+            self.seed(&store, started_at);
         }
         loop {
             let next = self.batches.values().map(|batch| batch.due).min();
@@ -191,7 +209,13 @@ impl Worker {
 
     /// Record each ticket's transition baseline from the store's index.
     fn seed(&mut self, store: &str, at: OffsetDateTime) {
-        self.seeded.insert(store.to_owned(), at);
+        self.seeded.insert(
+            store.to_owned(),
+            StoreSeed {
+                at,
+                at_startup: true,
+            },
+        );
         let Some(entry) = self.state.host.get(store) else {
             return;
         };
@@ -232,14 +256,14 @@ impl Worker {
         let Some(entry) = self.state.host.get(store) else {
             return;
         };
-        if !self.seeded.contains_key(store) {
-            // A store hosted after startup: no baseline, recent notes only.
-            self.seeded.insert(
-                store.to_owned(),
-                OffsetDateTime::now_utc() - LATE_SEED_LOOKBACK,
-            );
-        }
-        let since = self.seeded[store];
+        // A store hosted after startup has no baseline and only considers recent notes.
+        let seed = *self
+            .seeded
+            .entry(store.to_owned())
+            .or_insert_with(|| StoreSeed {
+                at: OffsetDateTime::now_utc() - LATE_SEED_LOOKBACK,
+                at_startup: false,
+            });
         let Ok(ticket) = entry.store.read_ticket(&ulid) else {
             return;
         };
@@ -258,7 +282,19 @@ impl Worker {
                     .map(|actor| actor.role == AttachmentActorRole::Ai),
             })
         };
-        let found = ticket_milestones(store, self.snapshots.get(&key), &ticket, since, resolve);
+        let previous = self.snapshots.get(&key);
+        let recovered = if seed.at_startup {
+            MilestoneSnapshot::recover_initial_status(previous, &ticket, seed.at)
+        } else {
+            None
+        };
+        let found = ticket_milestones(
+            store,
+            recovered.as_ref().or(previous),
+            &ticket,
+            seed.at,
+            resolve,
+        );
         self.snapshots.insert(key, MilestoneSnapshot::of(&ticket));
         let fresh: Vec<Milestone> = found
             .into_iter()

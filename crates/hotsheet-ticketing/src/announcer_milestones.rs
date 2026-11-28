@@ -183,6 +183,38 @@ impl MilestoneSnapshot {
             follow_ups: None,
         }
     }
+
+    /// A first observation can see the newest file before its queued writes are consumed.
+    /// Recover its prior status only from a generated transition since subscription.
+    pub fn recover_initial_status(
+        previous: Option<&Self>,
+        ticket: &Ticket,
+        subscribed_at: OffsetDateTime,
+    ) -> Option<Self> {
+        if previous.is_some_and(|snapshot| {
+            snapshot.notes.is_some()
+                || snapshot
+                    .baseline
+                    .as_ref()
+                    .is_some_and(|baseline| baseline.status != ticket.status)
+        }) {
+            return None;
+        }
+        let (from, to) = ticket
+            .notes
+            .iter()
+            .rev()
+            .filter(|note| !note.kind_explicit && note_is_new(note, None, subscribed_at))
+            .find_map(crate::ops::recorded_status_transition)?;
+        if to != ticket.status || from == to {
+            return None;
+        }
+        let mut baseline = previous
+            .and_then(|snapshot| snapshot.baseline.clone())
+            .unwrap_or_else(|| Baseline::of(ticket));
+        baseline.status = from;
+        Some(Self::from_baseline(baseline))
+    }
 }
 
 /// A follow-up target as the server resolved it.

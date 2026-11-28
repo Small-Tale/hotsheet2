@@ -220,7 +220,10 @@ Those milestones live in ticket writes, so the server produces them
   MCP (through the store watcher) and compares each changed ticket with what it saw before: status,
   started phase, and blocked state (seeded from each store's index at startup), and seen note and
   follow-up ids (a ticket first seen later counts only notes and follow-ups created after its store
-  was seeded). Only AI work is narrated, because the agent speaks for itself: a note counts when its
+  was seeded). The startup cutoff is when the subscriber starts, even while the worker seeds those
+  stores in the background. If the first read already reflects a queued status update, a generated
+  status transition recorded since subscription supplies its prior status (HS2-XH9EVB).
+  Only AI work is narrated, because the agent speaks for itself: a note counts when its
   author role is `ai`; a status, phase, or block counts when the transition's own activity note is
   AI-authored or, with no authored note, while a worker holds the claim.
 - **Milestones.** Started; initial thoughts (a `## Preliminary thoughts` note); progress (any other

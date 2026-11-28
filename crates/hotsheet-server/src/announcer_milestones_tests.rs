@@ -36,6 +36,19 @@ struct Harness {
 }
 
 fn harness(ai: Option<SharedAi>) -> Harness {
+    let harness = unstarted_harness();
+    drop(spawn_announcer_milestones_with(
+        harness.state.clone(),
+        ai,
+        Timing {
+            coalesce: Duration::from_millis(150),
+            max_wait: Duration::from_secs(2),
+        },
+    ));
+    harness
+}
+
+fn unstarted_harness() -> Harness {
     let dir = tempfile::tempdir().unwrap();
     let store = FsStore::init_git(dir.path().join("tickets"), &StoreMetadata::new("HS2")).unwrap();
     let state = AppState::new(store, "secret".into())
@@ -44,14 +57,6 @@ fn harness(ai: Option<SharedAi>) -> Harness {
     state.host.register(state.default_entry());
     let entry = state.default_entry();
     let events = state.subscribe();
-    drop(spawn_announcer_milestones_with(
-        state.clone(),
-        ai,
-        Timing {
-            coalesce: Duration::from_millis(150),
-            max_wait: Duration::from_secs(2),
-        },
-    ));
     Harness {
         _dir: dir,
         state,
@@ -81,6 +86,73 @@ fn create(harness: &Harness, title: &str) -> hotsheet_model::Ticket {
     .unwrap();
     harness.state.changed_in(&harness.entry, "created", &ticket);
     ticket
+}
+
+fn change_status(
+    harness: &Harness,
+    ticket: &hotsheet_model::Ticket,
+    status: Status,
+) -> hotsheet_model::Ticket {
+    let updated = ops::update(
+        &harness.entry.store,
+        &ticket.id,
+        crate::now(),
+        TicketPatch {
+            status: Some(status),
+            actor: ai_actor(),
+            ..TicketPatch::default()
+        },
+    )
+    .unwrap();
+    harness
+        .state
+        .changed_in(&harness.entry, "updated", &updated);
+    updated
+}
+
+#[tokio::test]
+async fn hs2_xh9evb_replays_status_updates_queued_during_startup() {
+    let harness = unstarted_harness();
+    let existing = create(&harness, "Existing ticket");
+    let old = create(&harness, "Previously started ticket");
+    let old = change_status(&harness, &old, Status::Started);
+    let started_at = OffsetDateTime::now_utc();
+    let mut queued = harness.state.subscribe();
+    let store = crate::multistore::store_url_id(&harness.entry.store);
+
+    let mut early_seed = Worker::new(harness.state.clone(), None, Timing::default());
+    early_seed.seed(&store, started_at);
+    let new = create(&harness, "New ticket");
+    change_status(&harness, &existing, Status::Started);
+    change_status(&harness, &new, Status::Started);
+    harness.state.changed_in(&harness.entry, "changed", &old);
+
+    let mut delayed_seed = Worker::new(harness.state.clone(), None, Timing::default());
+    delayed_seed.seed(&store, started_at);
+    let mut late_store = Worker::new(harness.state.clone(), None, Timing::default());
+    while let Ok(event) = queued.try_recv() {
+        if TICKET_KINDS.contains(&event.kind.as_str()) {
+            early_seed.observe(&event.store, &event.id);
+            delayed_seed.observe(&event.store, &event.id);
+            late_store.observe(&event.store, &event.id);
+        }
+    }
+    assert!(late_store.batches.is_empty());
+
+    let expected = HashSet::from([existing.id.to_string(), new.id.to_string()]);
+    let observed =
+        [("early seed", early_seed), ("delayed seed", delayed_seed)].map(|(ordering, worker)| {
+            let mut ids = HashSet::new();
+            for milestone in worker.batches.values().flat_map(|batch| &batch.milestones) {
+                assert_eq!(milestone.kind.as_str(), "started", "{ordering}");
+                assert!(ids.insert(milestone.ticket_id.clone()), "{ordering}");
+            }
+            (ordering, ids)
+        });
+    assert_eq!(
+        observed,
+        [("early seed", expected.clone()), ("delayed seed", expected)]
+    );
 }
 
 fn note(
