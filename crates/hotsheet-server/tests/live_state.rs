@@ -1357,7 +1357,8 @@ async fn hs2_m8hhea_reported_ci_runs_are_pushed_in_the_live_state() {
         "POST",
         &format!("/checkouts/{main_id}/ci-status"),
         Some(
-            json!({"status": "in_progress", "sha": sha, "workflow": "CI", "started_at_ms": 1_000}),
+            json!({"status": "in_progress", "branch": "main", "sha": sha, "workflow": "CI",
+                    "started_at_ms": 1_000}),
         ),
     )
     .await;

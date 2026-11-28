@@ -191,6 +191,9 @@ describe('newestCi (HS2-E16ZEK)', () => {
     expect(newestCi([older, newer], NOW)).toEqual({
       status: 'success',
       branch: 'main',
+      // HS2-D3JJ49: the reported branch and workflow name the run among its checkout's runs.
+      reportedBranch: 'main',
+      workflow: 'CI',
       shortSha: '1a2b3c4',
       ageMs: 12 * MIN,
       runUrl: 'https://ci.example.test/runs/7',
@@ -214,6 +217,7 @@ describe('newestCi (HS2-E16ZEK)', () => {
     expect(newestCi([running], NOW)).toEqual({
       status: 'in_progress',
       branch: 'main',
+      workflow: 'CI',
       ageMs: 20 * MIN,
       checkout: 'demo-ab12',
       reportedAtMs: NOW - MIN,

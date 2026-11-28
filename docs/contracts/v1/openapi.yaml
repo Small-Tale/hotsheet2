@@ -18423,12 +18423,14 @@ paths:
       operationId: reportCheckoutCiStatus
       description:
         Record the latest CI run a local tool observed for a registered checkout (HS2-M8HHEA,
-        docs/32-notifier-plugins.md §32.8.5). The server keeps one run per checkout, persists it machine-locally, and
-        pushes the newest run among a store's linked checkouts as `ci` in that store's live state. A run that started
-        before the stored one, or a non-terminal report of the same run after a terminal one, is stale and leaves the
-        stored run unchanged. The headless form is `hotsheet-cli ci report`. The server never polls a CI provider. An
-        applied queued or in-progress report of a GitHub Actions run is handed to the machine's GitHub Actions watch
-        Job, which the Job monitor follows to its end, and the verdict is recorded like a report (HS2-CC7TCB, `follow`).
+        docs/32-notifier-plugins.md §32.8.5). The server keeps one run per checkout, branch, and workflow (HS2-D3JJ49),
+        persists them machine-locally, and pushes the shown runs among a store's linked checkouts as `ci_runs`, and the
+        newest as `ci`, in that store's live state. A run that started before the stored one of its branch and workflow,
+        or a non-terminal report of the same run after a terminal one, is stale and leaves the stored run unchanged. A
+        queued or running run that no watch follows is shown for 2 h after its report, then is unverifiable and hidden.
+        The headless form is `hotsheet-cli ci report`. The server never polls a CI provider. An applied queued or
+        in-progress report of a GitHub Actions run is handed to the machine's GitHub Actions watch Job, which the Job
+        monitor follows to its end, and the verdict is recorded like a report (HS2-CC7TCB, `follow`).
       requestBody:
         required: true
         content:
@@ -18463,11 +18465,11 @@ paths:
     delete:
       operationId: clearCheckoutCiStatus
       description:
-        Forget the CI run stored for a registered checkout (HS2-7PSBHQ, docs/32-notifier-plugins.md §32.8.5), such as a
-        run last reported running long ago whose end nobody reported. With `reported_at_ms`, only while the stored run
-        is still the one reported then, so a newer report is kept. Idempotent; a cleared run's linked stores push their
-        live state again. The headless form is `hotsheet-cli ci clear`; the project sidebar's Live section offers it as
-        Clear CI Status while the run shows as unknown.
+        Forget CI runs stored for a registered checkout (HS2-7PSBHQ, docs/32-notifier-plugins.md §32.8.5). The server
+        keeps one run per branch and workflow (HS2-D3JJ49). Without a filter every run of the checkout is cleared; with
+        `reported_at_ms`, `branch`, or `workflow`, only runs matching all given filters, so a newer report is kept.
+        Idempotent; a cleared run's linked stores push their live state again. The headless form is `hotsheet-cli ci
+        clear`; the project sidebar's Live section offers Clear CI Status for each shown run.
       parameters:
         - name: reported_at_ms
           in: query
@@ -18476,6 +18478,18 @@ paths:
           schema:
             type: integer
             format: int64
+        - name: branch
+          in: query
+          required: false
+          description: Clear only runs of this branch (HS2-D3JJ49).
+          schema:
+            type: string
+        - name: workflow
+          in: query
+          required: false
+          description: Clear only runs of this workflow (HS2-D3JJ49).
+          schema:
+            type: string
       responses:
         '200':
           description: Whether a run was cleared, the run still stored, and the linked stores.
@@ -34658,7 +34672,7 @@ components:
       type: string
       description:
         A CI run's state (HS2-M8HHEA). `unavailable` appears only in the live state, when no linked checkout has
-        reported a run.
+        reported a run that can be shown.
       enum:
         - unavailable
         - queued
@@ -34666,11 +34680,25 @@ components:
         - success
         - failure
         - cancelled
+    LiveCiVerification:
+      type: string
+      description: >-
+        Whether the run's provider still confirms its state (HS2-D3JJ49, docs/32-notifier-plugins.md §32.8.5).
+        `verified`: a reporter just read it, the server's GitHub Actions watch read it, or the run finished.
+        `transient`: the watch's last provider read failed for a network error, a server error, or a rate limit; the
+        last known status stays shown while the Job monitor retries with bounded backoff. `unverifiable`: nothing can
+        confirm it (no token or provider access, a CI the server cannot query once the report's trust window ends, a run
+        the provider no longer knows, a re-check that settled nothing). The live state never lists an unverifiable run;
+        a clear response can.
+      enum:
+        - verified
+        - transient
+        - unverifiable
     LiveCi:
       type: object
       description:
-        The newest CI run reported by a checkout linked to the store (HS2-M8HHEA, docs/32-notifier-plugins.md §32.8.5).
-        Every member but `status` is null while `status` is `unavailable`. Times are Unix milliseconds.
+        A CI run reported by a checkout linked to the store (HS2-M8HHEA, docs/32-notifier-plugins.md §32.8.5). Every
+        member but `status` is null while `status` is `unavailable`. Times are Unix milliseconds.
       required:
         - status
         - checkout
@@ -34681,6 +34709,8 @@ components:
         - started_at_ms
         - finished_at_ms
         - reported_at_ms
+        - verification
+        - verify_by_ms
       properties:
         status:
           $ref: '#/components/schemas/LiveCiStatus'
@@ -34715,6 +34745,18 @@ components:
             - 'null'
         reported_at_ms:
           description: When the server accepted the report.
+          type:
+            - integer
+            - 'null'
+        verification:
+          description: Null while `status` is `unavailable` (HS2-D3JJ49).
+          anyOf:
+            - $ref: '#/components/schemas/LiveCiVerification'
+            - type: 'null'
+        verify_by_ms:
+          description: >-
+            HS2-D3JJ49: when a queued or running run that nothing follows stops being shown, the report time plus the 2
+            h trust window. Null for a finished run and for a run the server's GitHub Actions watch follows.
           type:
             - integer
             - 'null'
@@ -34812,16 +34854,23 @@ components:
         - checkout
         - cleared
         - ci
+        - runs
         - stores
       properties:
         checkout:
           description: The resolved checkout id.
           type: string
         cleared:
-          description: False when nothing was stored, or the stored run was reported at another time than the one named.
+          description: False when no stored run matched the query.
           type: boolean
         ci:
+          description: The newest run still stored for the checkout, shown or not, or `unavailable`.
           $ref: '#/components/schemas/LiveCi'
+        runs:
+          description: Every run still stored for the checkout, newest first, shown or not (HS2-D3JJ49).
+          type: array
+          items:
+            $ref: '#/components/schemas/LiveCi'
         stores:
           description: Hosted stores linked to the checkout.
           type: array
@@ -34889,6 +34938,7 @@ components:
         - waiting
         - rates
         - ci
+        - ci_runs
       properties:
         store:
           type: string
@@ -35112,8 +35162,18 @@ components:
                   type: integer
                   minimum: 0
         ci:
-          description: Main CI status (HS2-M8HHEA, §32.8.5), explicitly `unavailable` until a linked checkout reports.
+          description:
+            The newest shown CI run (HS2-M8HHEA, §32.8.5), explicitly `unavailable` until a linked checkout reports a
+            run that can be shown.
           $ref: '#/components/schemas/LiveCi'
+        ci_runs:
+          description: >-
+            HS2-D3JJ49: every shown CI run of the linked checkouts, the newest per branch and workflow, newest first, at
+            most 8. Unverifiable runs are left out.
+          type: array
+          maxItems: 8
+          items:
+            $ref: '#/components/schemas/LiveCi'
     TicketFlowSummary:
       type: object
       required:

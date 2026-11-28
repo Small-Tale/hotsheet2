@@ -9,7 +9,14 @@ import { StateBanner } from '@kerfjs/ui/state-banner';
 import { Text } from '@kerfjs/ui/text';
 import { BatteryWarning, Cpu, HardDrive, type IconNode, MemoryStick, Thermometer, Timer, WifiOff } from 'lucide';
 
-import { CI_PRESENTATION, ciClearTarget, ciRow } from '../ci-presentation';
+import {
+  CI_PRESENTATION,
+  ciClearAttributes,
+  type CiClearTarget,
+  ciClearTarget,
+  ciRow,
+  ciRunNaming,
+} from '../ci-presentation';
 import type { HostHealthSignalId } from '../host-health';
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
 import { LIVE_STATE_ICONS } from '../live-state-icons';
@@ -51,7 +58,7 @@ function chipIcon(chip: LiveChip, summary: ProjectLiveSummary): { icon: IconNode
     case 'overrun':
       return { icon: Timer, name: 'timer' };
     case 'ci':
-      return CI_PRESENTATION[summary.ci.status];
+      return CI_PRESENTATION[(chip.ci ?? summary.ci).status];
     default:
       return chip.kind satisfies never;
   }
@@ -84,10 +91,16 @@ function gauges(summary: ProjectLiveSummary, expanded: boolean) {
   );
 }
 
-/** One expanded detail row: glyph, label, and a quiet trailing value. */
-function detailRow(kind: string, icon: { icon: IconNode; name: string }, label: string, trailing: string) {
+/** One expanded detail row: glyph, label, and a quiet trailing value; extra attributes name a CI row's run. */
+function detailRow(
+  kind: string,
+  icon: { icon: IconNode; name: string },
+  label: string,
+  trailing: string,
+  attributes: Record<string, string> = {},
+) {
   return (
-    <Row gap="xs" vAlign="middle" rootAttributes={{ 'data-live-row': kind }}>
+    <Row gap="xs" vAlign="middle" rootAttributes={{ 'data-live-row': kind, ...attributes }}>
       <LucideIcon icon={icon.icon} name={icon.name} size="s" />
       <Text variant="span" size="compact" wrap="truncate">
         {label}
@@ -108,18 +121,13 @@ function detailRow(kind: string, icon: { icon: IconNode; name: string }, label: 
  * conditions past a threshold keep a full-width callout in both modes (§34.1).
  */
 export function ProjectLiveSection({ summary, callouts = [], expanded = false }: ProjectLiveSectionProps) {
-  const chips = summary ? liveChips(summary) : [],
-    // HS2-7PSBHQ: a run shown as unknown can be cleared from the section's context menu.
-    clear = summary ? ciClearTarget(summary.ci) : undefined;
+  const chips = summary ? liveChips(summary) : [];
   return (
     <section
       class="project-live-section"
       data-component="project-live-section"
       data-mode={expanded ? 'expanded' : 'compact'}
       aria-label="Live"
-      {...(clear
-        ? { 'data-ci-clear-checkout': clear.checkout, 'data-ci-clear-reported-at-ms': String(clear.reportedAtMs) }
-        : {})}
     >
       {/* 16px between the gauges and badges and the host callouts (HS2-0EQMZZ); callouts stay 8px apart. */}
       <List gap="m">
@@ -165,7 +173,9 @@ function compactContent(summary: ProjectLiveSummary, chips: readonly LiveChip[])
     <Row gap="xs" vAlign="middle" wrap textInsets="rl">
       {gauges(summary, false)}
       {chips.map((chip) => {
-        const icon = chipIcon(chip, summary);
+        const icon = chipIcon(chip, summary),
+          // HS2-7PSBHQ, HS2-D3JJ49: each CI chip names its run for Clear CI Status in the context menu.
+          clear = chip.ci ? ciClearTarget(chip.ci, ciRunNaming(chips.flatMap((each) => each.ci ?? []))) : undefined;
         return (
           <Badge
             tone={chip.tone}
@@ -173,7 +183,11 @@ function compactContent(summary: ProjectLiveSummary, chips: readonly LiveChip[])
             shape="pill"
             title={chip.title}
             label={chip.title}
-            rootAttributes={{ 'data-live-chip': chip.kind }}
+            rootAttributes={{
+              'data-live-chip': chip.kind,
+              ...(chip.ci ? { 'data-key': `ci:${chip.ci.branch}:${chip.ci.workflow ?? ''}` } : {}),
+              ...(clear ? ciClearAttributes(clear) : {}),
+            }}
             {...(chip.text ? { icon: <LucideIcon icon={icon.icon} name={icon.name} /> } : {})}
           >
             {chip.text || <LucideIcon icon={icon.icon} name={icon.name} />}
@@ -206,8 +220,23 @@ function expandedContent(summary: ProjectLiveSummary) {
           `${summary.overrun.slug} past ETA`,
           `+${formatGlanceDuration(summary.overrun.ms)}`,
         )}
-      {summary.ci.status !== 'unavailable' &&
-        detailRow('ci', CI_PRESENTATION[summary.ci.status], ciRow(summary.ci).label, ciRow(summary.ci).trailing)}
+      {ciRows(summary.ciRuns)}
     </List>
   );
+}
+
+/**
+ * One expanded row per shown CI run (HS2-57BYEA, HS2-D3JJ49), each naming its run for Clear CI Status. A run
+ * nothing can verify has no row.
+ */
+function ciRows(runs: readonly ProjectLiveSummary['ci'][]) {
+  const naming = ciRunNaming(runs);
+  return runs.map((ci) => {
+    const row = ciRow(ci, naming),
+      clear: CiClearTarget | undefined = ciClearTarget(ci, naming);
+    return detailRow('ci', CI_PRESENTATION[ci.status], row.label, row.trailing, {
+      'data-key': `ci:${ci.branch}:${ci.workflow ?? ''}`,
+      ...(clear ? ciClearAttributes(clear) : {}),
+    });
+  });
 }

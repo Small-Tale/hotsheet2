@@ -216,7 +216,25 @@ test('client contracts accept real ticket and replay responses', async () => {
     const reported = await server.request(`/checkouts/${server.checkoutId}/ci-status`, 'POST', ciReport);
     expect(ciResponse(reported), JSON.stringify(ciResponse.errors)).toBe(true);
     expect(reported).toMatchObject({ applied: true, ci: { status: 'success', checkout: server.checkoutId } });
-    validateResponse('/live-state', await server.request('/live-state'));
+    // HS2-D3JJ49: a run in flight carries its verification and trust bound; the live state lists each run.
+    const running = await server.request(`/checkouts/${server.checkoutId}/ci-status`, 'POST', {
+      ...ciReport,
+      status: 'in_progress',
+      workflow: 'Platforms',
+      finished_at_ms: null,
+    });
+    expect(ciResponse(running), JSON.stringify(ciResponse.errors)).toBe(true);
+    expect(running).toMatchObject({ ci: { verification: 'verified', workflow: 'Platforms' } });
+    const live = await server.request<{ stores: { ci_runs: unknown[] }[] }>('/live-state');
+    validateResponse('/live-state', live);
+    expect(live.stores[0]?.ci_runs).toHaveLength(2);
+    const cleared = await server.request(
+      `/checkouts/${server.checkoutId}/ci-status?reported_at_ms=${String((running as { ci: { reported_at_ms: number } }).ci.reported_at_ms)}&workflow=Platforms`,
+      'DELETE',
+    );
+    const clearResponse = ajv.compile(schema('CiClearResponse'));
+    expect(clearResponse(cleared), JSON.stringify(clearResponse.errors)).toBe(true);
+    expect(cleared).toMatchObject({ cleared: true, runs: [{ workflow: 'CI' }] });
     const rules = await fetch(`${server.url}/permissions/rules`, {
       headers: { 'X-Hotsheet-Secret': server.secret },
     });

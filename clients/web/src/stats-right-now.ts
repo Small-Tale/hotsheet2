@@ -1,5 +1,5 @@
 import type { LiveCi, LiveCiStatus, LiveStoreState, LiveWord } from './api';
-import { type CiLastSeen, ciStaleness } from './ci-staleness';
+import { shownCiRuns } from './ci-runs';
 import { aggregateLiveStates, etaOverrunMs, progressAgeMs, tokenHours, tokensPerMinute } from './live-state';
 
 /**
@@ -56,56 +56,63 @@ export interface RightNowTiles {
   ci: RightNowCi;
 }
 
-/**
- * A reported run's status as glance surfaces show it: the reported one, or `unknown` once a report of a
- * run still queued or running is too old to believe (HS2-CC7TCB, `ci-staleness.ts`).
- */
-export type CiDisplayStatus = LiveCiStatus | 'unknown';
+/** A reported run's status as glance surfaces show it. A run that cannot be verified is not shown (HS2-D3JJ49). */
+export type CiDisplayStatus = LiveCiStatus;
 
-/** The `main` CI tile (HS2-E16ZEK): the newest run any store in scope reported, or none reported. */
+/** One shown CI run (HS2-E16ZEK, HS2-D3JJ49): the `main` CI tile shows the newest, the sidebar each. */
 export interface RightNowCi {
   status: CiDisplayStatus;
-  /** For `unknown`: what the stale report last said (HS2-CC7TCB). */
-  lastSeen?: CiLastSeen;
   /** The branch the run was for; the tile names `main` when the report leaves it out. */
   branch: string;
+  /** The branch as reported, when the report gave one: Clear CI Status names the run by it (HS2-D3JJ49). */
+  reportedBranch?: string;
+  /** The reported workflow name, when the report gave one (HS2-D3JJ49). */
+  workflow?: string;
   /** The first seven characters of the run's commit. */
   shortSha?: string;
-  /**
-   * Since the run finished, or, while it runs or waits, since it started; for `unknown`, since it was last
-   * reported. From the display clock.
-   */
+  /** Since the run finished, or, while it runs or waits, since it started. From the display clock. */
   ageMs?: number;
   runUrl?: string;
   /** The checkout that reported the run, and when (HS2-7PSBHQ: Clear CI Status names the run it clears). */
   checkout?: string;
   reportedAtMs?: number;
+  /** HS2-D3JJ49: the provider could not be read just now; the status is the last one it confirmed. */
+  transient?: boolean;
 }
 
-/**
- * The newest reported CI run across `states` (HS2-E16ZEK). A store reports `status: unavailable`
- * until a CI watcher has told it about a run (docs/32-notifier-plugins.md §32.8.5); a reported run is
- * newer by when it was reported, then finished, then started.
- */
-export function newestCi(states: readonly LiveStoreState[], nowMs: number): RightNowCi {
-  const at = (ci: LiveCi) => ci.reported_at_ms ?? ci.finished_at_ms ?? ci.started_at_ms ?? 0;
-  const reported = states
-    .flatMap((state) => (state.ci && state.ci.status !== 'unavailable' ? [state.ci] : []))
-    .sort((a, b) => at(b) - at(a));
-  const ci = reported.at(0);
-  if (!ci) return { status: 'unavailable', branch: 'main' };
-  // HS2-CC7TCB: a run reported running or queued long ago is not shown as still running.
-  const lastSeen = ciStaleness(ci, nowMs);
-  const since = lastSeen ? (ci.reported_at_ms ?? undefined) : (ci.finished_at_ms ?? ci.started_at_ms ?? undefined);
+/** One shown run as glance surfaces read it, at the display clock `nowMs`. */
+export function rightNowCi(ci: LiveCi, nowMs: number): RightNowCi {
+  const since = ci.finished_at_ms ?? ci.started_at_ms ?? undefined;
   return {
-    ...(lastSeen ? { status: 'unknown' as const, lastSeen } : { status: ci.status }),
+    status: ci.status,
     branch: ci.branch ?? 'main',
+    ...(ci.branch === null ? {} : { reportedBranch: ci.branch }),
+    ...(ci.workflow ? { workflow: ci.workflow } : {}),
     ...(ci.sha ? { shortSha: ci.sha.slice(0, 7) } : {}),
     ...(since === undefined ? {} : { ageMs: Math.max(0, nowMs - since) }),
     ...(ci.run_url ? { runUrl: ci.run_url } : {}),
     ...(ci.checkout ? { checkout: ci.checkout } : {}),
     ...(ci.reported_at_ms === null ? {} : { reportedAtMs: ci.reported_at_ms }),
+    ...(ci.verification === 'transient' ? { transient: true } : {}),
   };
+}
+
+/**
+ * Every CI run `states` show at `nowMs`, newest first (HS2-D3JJ49, `ci-runs.ts`): one per branch and
+ * workflow, never a run that cannot be verified.
+ */
+export function shownRightNowCis(states: readonly LiveStoreState[], nowMs: number): RightNowCi[] {
+  return shownCiRuns(states, nowMs).map((ci) => rightNowCi(ci, nowMs));
+}
+
+/**
+ * The newest shown CI run across `states` (HS2-E16ZEK). A store reports `status: unavailable` until a CI
+ * watcher has told it about a run (docs/32-notifier-plugins.md §32.8.5); a reported run is newer by when it
+ * was reported, then finished, then started. A run that cannot be verified is skipped, so an older shown run,
+ * or none, takes its place (HS2-D3JJ49).
+ */
+export function newestCi(states: readonly LiveStoreState[], nowMs: number): RightNowCi {
+  return shownRightNowCis(states, nowMs).at(0) ?? { status: 'unavailable', branch: 'main' };
 }
 
 export function rightNowTiles(states: readonly LiveStoreState[], nowMs: number): RightNowTiles {

@@ -118,6 +118,35 @@ describe('live state helpers (HS2-JTTQMY)', () => {
     expect(() => parseLiveStoreState({ ...liveFixture(), ci: null })).toThrow('live state');
   });
 
+  it('HS2-D3JJ49 parses each run, its verification and trust bound, and tolerates an older server', () => {
+    const transient: LiveCi = {
+      status: 'in_progress',
+      checkout: 'demo-ab12',
+      branch: 'main',
+      sha: 'abcdef1',
+      run_url: null,
+      workflow: 'Platforms',
+      started_at_ms: NOW - MINUTE,
+      finished_at_ms: null,
+      reported_at_ms: NOW,
+      verification: 'transient',
+      verify_by_ms: null,
+    };
+    const bounded: LiveCi = { ...transient, workflow: 'CI', verification: 'verified', verify_by_ms: NOW + MINUTE };
+    const parsed = parseLiveStoreState(liveFixture({ ci: bounded, ci_runs: [bounded, transient] }));
+    expect(parsed.ci_runs).toEqual([bounded, transient]);
+    expect(parseLiveStoreState(liveFixture({ ci: bounded })).ci_runs).toBeUndefined();
+    const unavailable = { ...bounded, status: 'unavailable' as const, verification: null, verify_by_ms: null };
+    expect(parseLiveStoreState(liveFixture({ ci: unavailable, ci_runs: [] })).ci_runs).toEqual([]);
+    expect(() =>
+      parseLiveStoreState(liveFixture({ ci_runs: [{ ...bounded, verification: 'unknown' as never }] })),
+    ).toThrow('live state');
+    expect(() =>
+      parseLiveStoreState(liveFixture({ ci_runs: [{ ...bounded, verify_by_ms: 'soon' as never }] })),
+    ).toThrow('live state');
+    expect(() => parseLiveStoreState({ ...liveFixture(), ci_runs: null })).toThrow('live state');
+  });
+
   it('rates decay with the local clock from the pushed timestamps', () => {
     const state = liveFixture();
     // The current minute and the four before it: 1,000 + 4,000 over 5 minutes.

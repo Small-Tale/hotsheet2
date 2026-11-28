@@ -6,10 +6,15 @@ import {
   ciAge,
   ciChipText,
   ciChipTicks,
+  ciClearAttributes,
+  ciClearItemLabel,
   ciClearTarget,
   ciClearTargetOf,
   ciDetail,
   ciRow,
+  ciRunLabel,
+  ciRunName,
+  ciRunNaming,
   formatCiElapsed,
 } from './ci-presentation';
 import type { RightNowCi } from './stats-right-now';
@@ -78,43 +83,20 @@ describe('CI chip face (HS2-505PHC)', () => {
   });
 });
 
-describe('stale CI report words (HS2-CC7TCB)', () => {
-  const stale = (lastSeen: 'running' | 'queued', ageMs?: number): RightNowCi => ({
-    status: 'unknown',
-    lastSeen,
-    branch: 'main',
-    shortSha: '8f6c8d8',
-    ...(ageMs === undefined ? {} : { ageMs }),
-  });
-
-  it('names the chip without a clock and never ticks', () => {
-    expect(ciChipText(stale('running', 2 * HOUR + 39 * MINUTE))).toBe('CI · unknown');
-    expect(ciChipText(stale('queued'))).toBe('CI · unknown');
-    expect(ciChipTicks(stale('running', 2 * HOUR))).toBe(false);
-  });
-
-  it('says when the run was last seen and what it was doing', () => {
-    expect(ciAge(stale('running', 2 * HOUR + 39 * MINUTE))).toBe('last seen running 2h 39m ago');
-    expect(ciAge(stale('queued', 3 * HOUR))).toBe('last seen queued 3h 00m ago');
-    expect(ciAge(stale('running'))).toBeUndefined();
-    expect(ciDetail(stale('running', 2 * HOUR + 39 * MINUTE))).toBe('main CI · 8f6c8d8 · last seen running 2h 39m ago');
-    expect(CI_PRESENTATION.unknown).toMatchObject({ word: 'Unknown', name: 'circle-help' });
-  });
-
-  it('fits the expanded sidebar row', () => {
-    expect(ciRow(stale('running', 2 * HOUR + 10 * MINUTE))).toEqual({
-      label: 'main CI unknown',
-      trailing: 'seen 2h 10m ago',
-    });
-    expect(ciRow({ status: 'unknown', lastSeen: 'queued', branch: 'main' })).toEqual({
-      label: 'main CI unknown',
-      trailing: '',
-    });
+describe('expanded sidebar row (HS2-57BYEA)', () => {
+  it('names the branch, word and commit, with the age trailing', () => {
     expect(ciRow(ci('success', 12 * MINUTE))).toEqual({ label: 'main CI passed · 9f8e7d6', trailing: '12m ago' });
     expect(ciRow(ci('in_progress', 4 * MINUTE))).toEqual({
       label: 'main CI running · 9f8e7d6',
       trailing: 'running 4m',
     });
+    expect(ciRow({ status: 'queued', branch: 'main' })).toEqual({ label: 'main CI queued', trailing: '' });
+  });
+
+  it('has no word for a run that cannot be verified (HS2-D3JJ49)', () => {
+    expect(Object.keys(CI_PRESENTATION).sort()).toEqual(
+      ['cancelled', 'failure', 'in_progress', 'queued', 'success', 'unavailable'].sort(),
+    );
   });
 });
 
@@ -129,24 +111,101 @@ describe('CI detail words (HS2-E16ZEK)', () => {
   });
 });
 
-describe('Clear CI Status target (HS2-7PSBHQ)', () => {
+describe('several shown runs (HS2-D3JJ49)', () => {
+  const named = (workflow: string, branch = 'main'): RightNowCi => ({
+    ...ci('in_progress', MINUTE),
+    branch,
+    workflow,
+  });
+
+  it('reads CI for one run, or runs that differ in nothing', () => {
+    const one = [named('CI')];
+    expect(ciRunNaming(one)).toEqual({ workflows: false, branches: false });
+    expect(ciRunName(one[0], ciRunNaming(one))).toBe('CI');
+    expect(ciRunNaming([])).toEqual({ workflows: false, branches: false });
+    expect(ciChipText(one[0], 'CI')).toBe('CI · 1:00');
+  });
+
+  it('names the workflow when workflows differ, and the branch when branches differ', () => {
+    const workflows = [named('CI'), named('Platforms')],
+      byWorkflow = ciRunNaming(workflows);
+    expect(byWorkflow).toEqual({ workflows: true, branches: false });
+    expect(workflows.map((run) => ciRunName(run, byWorkflow))).toEqual(['CI', 'Platforms']);
+    expect(ciChipText(workflows[1], ciRunName(workflows[1], byWorkflow))).toBe('Platforms · 1:00');
+    expect(ciRunLabel(workflows[1], byWorkflow)).toBe('main Platforms');
+    expect(ciRow(workflows[1], byWorkflow).label).toBe('Platforms running');
+    expect(ciRow({ ...named('CI', 'docs'), status: 'queued' }, { workflows: false, branches: true }).label).toBe(
+      'docs CI queued',
+    );
+
+    const branches = [named('CI', 'main'), named('CI', 'docs')],
+      byBranch = ciRunNaming(branches);
+    expect(byBranch).toEqual({ workflows: false, branches: true });
+    expect(branches.map((run) => ciRunName(run, byBranch))).toEqual(['main CI', 'docs CI']);
+    expect(ciChipText({ ...branches[1], status: 'queued' }, 'docs CI')).toBe('docs CI · queued');
+    expect(ciChipText({ ...branches[1], status: 'failure' }, 'docs CI')).toBe('docs CI failed');
+
+    const both = [named('CI', 'main'), named('Platforms', 'release/2026-11-long-name')];
+    expect(ciRunName(both[1], ciRunNaming(both))).toBe('release/2026-11… Platforms');
+    // A run without a workflow reads CI among named ones.
+    const unnamed = [{ ...ci('queued'), branch: 'main' }, named('Platforms')];
+    expect(ciRunName(unnamed[0], ciRunNaming(unnamed))).toBe('CI');
+    expect(ciRunName(named('A very long workflow name'), { workflows: true, branches: false })).toBe(
+      'A very long wor…',
+    );
+  });
+});
+
+describe('Clear CI Status target (HS2-7PSBHQ, HS2-D3JJ49)', () => {
+  const single = { workflows: false, branches: false };
   const run = (status: RightNowCi['status'], named = true): RightNowCi => ({
     status,
     branch: 'main',
+    reportedBranch: 'main',
+    workflow: 'CI',
     ...(named ? { checkout: 'hotsheet2-56cb', reportedAtMs: 1_795_693_115_028 } : {}),
   });
 
-  it('offers to clear only a run shown as unknown that names its checkout and report time', () => {
-    expect(ciClearTarget(run('unknown'))).toEqual({ checkout: 'hotsheet2-56cb', reportedAtMs: 1_795_693_115_028 });
-    for (const status of ['in_progress', 'queued', 'failure', 'success', 'cancelled', 'unavailable'] as const)
-      expect(ciClearTarget(run(status)), status).toBeUndefined();
-    expect(ciClearTarget(run('unknown', false))).toBeUndefined();
-    expect(ciClearTarget({ ...run('unknown'), reportedAtMs: undefined })).toBeUndefined();
+  it('offers to clear any shown run that names its checkout and report time', () => {
+    for (const status of ['in_progress', 'queued', 'failure', 'success', 'cancelled'] as const)
+      expect(ciClearTarget(run(status), single), status).toEqual({
+        checkout: 'hotsheet2-56cb',
+        reportedAtMs: 1_795_693_115_028,
+        branch: 'main',
+        workflow: 'CI',
+        label: 'main CI',
+      });
+    expect(ciClearTarget(run('unavailable'), single)).toBeUndefined();
+    expect(ciClearTarget(run('failure', false), single)).toBeUndefined();
+    expect(ciClearTarget({ ...run('failure'), reportedAtMs: undefined }, single)).toBeUndefined();
+    // A report without a branch or workflow is named by the time alone.
+    const bare: RightNowCi = { status: 'queued', branch: 'main', checkout: 'c', reportedAtMs: 5 };
+    expect(ciClearTarget(bare, single)).toEqual({ checkout: 'c', reportedAtMs: 5, label: 'main CI' });
   });
 
-  it('reads the target back from data attributes, refusing a missing or malformed time', () => {
-    expect(ciClearTargetOf('c-1', '1795693115028')).toEqual({ checkout: 'c-1', reportedAtMs: 1_795_693_115_028 });
-    expect(ciClearTargetOf('c-1', '0')).toEqual({ checkout: 'c-1', reportedAtMs: 0 });
+  it('round-trips through data attributes and refuses a missing or malformed time', () => {
+    const target = ciClearTarget(run('queued'), { workflows: true, branches: false })!;
+    const attributes = ciClearAttributes(target);
+    expect(attributes).toEqual({
+      'data-ci-clear-checkout': 'hotsheet2-56cb',
+      'data-ci-clear-reported-at-ms': '1795693115028',
+      'data-ci-clear-branch': 'main',
+      'data-ci-clear-workflow': 'CI',
+      'data-ci-clear-label': 'main CI',
+    });
+    const dataset = {
+      ciClearCheckout: attributes['data-ci-clear-checkout'],
+      ciClearReportedAtMs: attributes['data-ci-clear-reported-at-ms'],
+      ciClearBranch: attributes['data-ci-clear-branch'],
+      ciClearWorkflow: attributes['data-ci-clear-workflow'],
+      ciClearLabel: attributes['data-ci-clear-label'],
+    };
+    expect(ciClearTargetOf(dataset)).toEqual(target);
+    expect(ciClearTargetOf({ ciClearCheckout: 'c-1', ciClearReportedAtMs: '0' })).toEqual({
+      checkout: 'c-1',
+      reportedAtMs: 0,
+      label: 'CI',
+    });
     for (const [checkout, at] of [
       [undefined, '1'],
       ['', '1'],
@@ -156,6 +215,18 @@ describe('Clear CI Status target (HS2-7PSBHQ)', () => {
       ['c-1', '1.5'],
       ['c-1', '12abc'],
     ] as const)
-      expect(ciClearTargetOf(checkout, at), `${checkout} ${at}`).toBeUndefined();
+      expect(
+        ciClearTargetOf({
+          ...(checkout === undefined ? {} : { ciClearCheckout: checkout }),
+          ...(at === undefined ? {} : { ciClearReportedAtMs: at }),
+        }),
+        `${checkout} ${at}`,
+      ).toBeUndefined();
+  });
+
+  it('labels the menu item by the run only when the menu lists several', () => {
+    const target = ciClearTarget(run('queued'), { workflows: true, branches: false })!;
+    expect(ciClearItemLabel(target, false)).toBe('Clear CI Status');
+    expect(ciClearItemLabel({ ...target, label: 'main Platforms' }, true)).toBe('Clear main Platforms Status');
   });
 });

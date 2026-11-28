@@ -174,7 +174,7 @@ async fn hs2_cc7tcb_a_reported_run_in_flight_is_followed_to_its_failure() {
         &hotsheet_server::ci_status::ci_status_path(&fx.home),
     );
     assert_eq!(
-        stored[&fx.checkout].status,
+        stored[&fx.checkout][0].status,
         hotsheet_server::ci_status::CiStatus::Failure
     );
     assert!(provider.requests() > 0);
@@ -313,7 +313,8 @@ async fn hs2_7psbhq_a_restart_rechecks_a_run_left_in_flight_past_the_follow_wind
 async fn hs2_7psbhq_clearing_forgets_only_the_run_the_caller_saw() {
     let fx = fixture();
     let sha = "4".repeat(40);
-    let reported = store_stale_run(&fx.home, &fx.checkout, &sha, 36);
+    // HS2-D3JJ49: reported an hour ago, so it is still shown (a 36 h old one is hidden).
+    let reported = store_stale_run(&fx.home, &fx.checkout, &sha, 1);
     let host =
         state(&fx.source, &fx.home).with_ci_follow(CiFollow::new(None, Arc::new(Token(false))));
     let router = app(host.clone());
@@ -391,4 +392,213 @@ async fn hs2_7psbhq_clearing_forgets_only_the_run_the_caller_saw() {
     )
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+/// The next pushed live state whose `ci_runs` satisfies `want` (HS2-D3JJ49).
+async fn next_runs(
+    events: &mut tokio::sync::broadcast::Receiver<ChangeEvent>,
+    want: impl Fn(&[Value]) -> bool,
+) -> Vec<Value> {
+    tokio::time::timeout(std::time::Duration::from_secs(60), async {
+        loop {
+            let event = match events.recv().await {
+                Ok(event) => event,
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                Err(error) => panic!("change bus closed: {error}"),
+            };
+            let Some(live) = event.live.filter(|_| event.kind == "live_state") else {
+                continue;
+            };
+            let runs = serde_json::to_value(live).unwrap()["ci_runs"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default();
+            if want(&runs) {
+                return runs;
+            }
+        }
+    })
+    .await
+    .expect("the expected CI runs were never pushed")
+}
+
+/// HS2-D3JJ49: a provider that is unreachable for now keeps a followed run shown with its
+/// last known status (transient), a successful read verifies it again, and a 404 (the run
+/// or repository can no longer be read) makes it unverifiable, so it is no longer shown.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn hs2_d3jj49_an_outage_keeps_the_run_shown_and_a_404_hides_it() {
+    assert!(hotsheet_aitools::test_permission_vault_available());
+    hotsheet_aitools::enable_test_permission_vault();
+    let provider = Provider::default();
+    let url = provider.start();
+    let fx = fixture();
+    let sha = "5".repeat(40);
+    provider.run(9, &sha, None);
+    let host = state(&fx.source, &fx.home)
+        .with_ci_follow(CiFollow::new(Some(monitor(&url)), Arc::new(Token(true))));
+    let router = app(host.clone());
+    let mut events = host.subscribe();
+    let route = format!("/checkouts/{}/ci-status", fx.checkout);
+
+    let (status, started) = api(
+        router.clone(),
+        "POST",
+        &route,
+        in_flight(&sha, RUN_PAGE),
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{started}");
+    assert_eq!(started["follow"], "started", "{started}");
+    // Followed: verified with no trust window.
+    assert_eq!(started["ci"]["verification"], "verified", "{started}");
+    assert_eq!(started["ci"]["verify_by_ms"], Value::Null, "{started}");
+
+    // The provider fails for now: the run stays shown, in progress, as transient.
+    provider.fail_with(Some(503));
+    let ci = next_ci(&mut events, |ci| ci["verification"] == "transient").await;
+    assert_eq!(ci["status"], "in_progress");
+    assert_eq!(ci["sha"], sha.as_str());
+    // Transient → verified: the next successful read confirms it again.
+    provider.fail_with(None);
+    let ci = next_ci(&mut events, |ci| ci["verification"] == "verified").await;
+    assert_eq!(ci["status"], "in_progress");
+
+    // Transient → unverifiable: the provider fails again, then answers 404.
+    provider.fail_with(Some(503));
+    next_ci(&mut events, |ci| ci["verification"] == "transient").await;
+    provider.fail_with(Some(404));
+    let ci = next_ci(&mut events, |ci| ci["status"] == "unavailable").await;
+    assert_eq!(ci["checkout"], Value::Null);
+    let stored = hotsheet_server::ci_status::load_runs(
+        &hotsheet_server::ci_status::ci_status_path(&fx.home),
+    );
+    assert_eq!(
+        stored[&fx.checkout][0].verification,
+        hotsheet_server::ci_status::Verification::Unverifiable,
+        "the record stays, hidden"
+    );
+}
+
+/// HS2-D3JJ49: several runs in flight (two workflows, a second branch) are each shown, a
+/// run that nothing can follow is believed only for its report's trust window, and Clear
+/// applies per run.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn hs2_d3jj49_several_runs_are_each_shown_and_cleared_per_run() {
+    let fx = fixture();
+    let host =
+        state(&fx.source, &fx.home).with_ci_follow(CiFollow::new(None, Arc::new(Token(false))));
+    let router = app(host.clone());
+    let mut events = host.subscribe();
+    let route = format!("/checkouts/{}/ci-status", fx.checkout);
+    let sha = "6".repeat(40);
+    for (workflow, branch, started) in [
+        ("CI", "main", CREATED_MS),
+        ("Platforms", "main", CREATED_MS + 1),
+        ("CI", "docs", CREATED_MS + 2),
+    ] {
+        let (status, answer) = api(
+            router.clone(),
+            "POST",
+            &route,
+            json!({"status": "in_progress", "branch": branch, "sha": sha,
+                "workflow": workflow, "started_at_ms": started}),
+            true,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{answer}");
+        assert_eq!(answer["applied"], true);
+        assert_eq!(answer["follow"], "none", "{answer}");
+        // Nothing follows it: the report's trust window applies.
+        assert_eq!(answer["ci"]["verification"], "verified");
+        let by = answer["ci"]["verify_by_ms"].as_i64().unwrap();
+        assert_eq!(
+            by - answer["ci"]["reported_at_ms"].as_i64().unwrap(),
+            hotsheet_server::ci_status::REPORT_TRUST_MS
+        );
+    }
+    let runs = next_runs(&mut events, |runs| runs.len() == 3).await;
+    let shown: Vec<(&str, &str)> = runs
+        .iter()
+        .map(|ci| {
+            (
+                ci["workflow"].as_str().unwrap(),
+                ci["branch"].as_str().unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        shown,
+        vec![("CI", "docs"), ("Platforms", "main"), ("CI", "main")],
+        "newest first"
+    );
+
+    // Platforms finishes: its pair is replaced, the other two stay in flight.
+    let (_, done) = api(
+        router.clone(),
+        "POST",
+        &route,
+        json!({"status": "success", "branch": "main", "sha": sha, "workflow": "Platforms",
+            "started_at_ms": CREATED_MS + 1, "finished_at_ms": CREATED_MS + 5}),
+        true,
+    )
+    .await;
+    assert_eq!(done["applied"], true);
+    next_runs(&mut events, |runs| {
+        runs.len() == 3 && runs.iter().any(|ci| ci["status"] == "success")
+    })
+    .await;
+
+    // Clear one run: the workflow and branch name it among the runs.
+    let reported = runs[2]["reported_at_ms"].as_i64().unwrap();
+    let (status, cleared) = api(
+        router.clone(),
+        "DELETE",
+        &format!("{route}?reported_at_ms={reported}&workflow=CI&branch=main"),
+        Value::Null,
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{cleared}");
+    assert_eq!(cleared["cleared"], true);
+    assert_eq!(cleared["runs"].as_array().unwrap().len(), 2, "{cleared}");
+    let runs = next_runs(&mut events, |runs| runs.len() == 2).await;
+    assert!(
+        runs.iter()
+            .all(|ci| !(ci["workflow"] == "CI" && ci["branch"] == "main"))
+    );
+    // Without filters every run of the checkout goes.
+    let (_, all) = api(router, "DELETE", &route, Value::Null, true).await;
+    assert_eq!(all["cleared"], true);
+    assert_eq!(all["runs"], json!([]));
+    assert_eq!(all["ci"]["status"], "unavailable");
+}
+
+/// HS2-D3JJ49: an old single-record file migrates; its run reported 36 h ago in flight is
+/// hidden, and a restart that cannot re-check it (no GitHub token) keeps it hidden rather
+/// than showing it as unknown. The file is rewritten as version 2.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn hs2_d3jj49_an_unverifiable_old_run_stays_hidden_after_migration() {
+    let fx = fixture();
+    let sha = "7".repeat(40);
+    store_stale_run(&fx.home, &fx.checkout, &sha, 36);
+    let host =
+        state(&fx.source, &fx.home).with_ci_follow(CiFollow::new(None, Arc::new(Token(false))));
+    let _router = app(host.clone());
+    let resumed = host.clone();
+    tokio::task::spawn_blocking(move || hotsheet_server::ci_follow::resume(&resumed))
+        .await
+        .unwrap();
+    let raw: Value = serde_json::from_slice(
+        &std::fs::read(hotsheet_server::ci_status::ci_status_path(&fx.home)).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(raw["version"], 2, "{raw}");
+    let stored = &raw["checkouts"][fx.checkout.as_str()];
+    assert_eq!(stored[0]["status"], "in_progress", "{raw}");
+    assert_eq!(stored[0]["verification"], "unverifiable", "{raw}");
+    let live = serde_json::to_value(hotsheet_server::live_state::snapshot_all(&host)).unwrap();
+    let store = &live["stores"][0];
+    assert_eq!(store["ci"]["status"], "unavailable", "{live}");
+    assert_eq!(store["ci_runs"], json!([]), "{live}");
 }

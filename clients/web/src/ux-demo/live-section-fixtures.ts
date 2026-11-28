@@ -80,38 +80,20 @@ export function demoLiveState(scenario: DemoLiveScenario): LiveStoreState {
 }
 
 /**
- * The `main` CI run a demo shows (HS2-505PHC): none reported, running, running before a start, queued, failed,
- * and a running report too old to believe (HS2-CC7TCB).
+ * The CI runs a demo shows (HS2-505PHC): none reported, running, running before a start, queued, failed,
+ * passed, running while the provider is unreachable for now, several runs in flight, and a run that cannot be
+ * verified, which shows nothing (HS2-D3JJ49).
  */
-export type DemoCiScenario = 'none' | 'running' | 'running-no-start' | 'queued' | 'failed' | 'passed' | 'stale';
+export type DemoCiScenario =
+  'none' | 'running' | 'running-no-start' | 'queued' | 'failed' | 'passed' | 'transient' | 'several' | 'unverifiable';
 
-/** A synthetic reported `main` run for a scenario at {@link DEMO_LIVE_NOW_MS}; `undefined` for none. */
-export function demoLiveCi(scenario: DemoCiScenario): LiveStoreState['ci'] {
-  if (scenario === 'none') return undefined;
-  const status = (
-    {
-      running: 'in_progress',
-      'running-no-start': 'in_progress',
-      queued: 'queued',
-      failed: 'failure',
-      passed: 'success',
-      stale: 'in_progress',
-    } as const
-  )[scenario];
+/** One synthetic reported run at {@link DEMO_LIVE_NOW_MS}. */
+function demoRun(
+  status: NonNullable<LiveStoreState['ci']>['status'],
+  startedAgoMs: number | null,
+  extra: Partial<NonNullable<LiveStoreState['ci']>> = {},
+): NonNullable<LiveStoreState['ci']> {
   const finished = status === 'failure' || status === 'success';
-  // HS2-CC7TCB: reported running 2 h 39 m ago, then never again.
-  if (scenario === 'stale')
-    return {
-      status,
-      checkout: 'hotsheet',
-      branch: 'main',
-      sha: '8f6c8d81f0a1',
-      run_url: null,
-      workflow: 'CI',
-      started_at_ms: DEMO_LIVE_NOW_MS - 2 * 60 * MINUTE - 45 * MINUTE,
-      finished_at_ms: null,
-      reported_at_ms: DEMO_LIVE_NOW_MS - 2 * 60 * MINUTE - 39 * MINUTE,
-    };
   return {
     status,
     checkout: 'hotsheet',
@@ -119,14 +101,55 @@ export function demoLiveCi(scenario: DemoCiScenario): LiveStoreState['ci'] {
     sha: '9f8e7d6c5b4a',
     run_url: null,
     workflow: 'CI',
-    // Running 1:05, or queued 30 seconds ago; a finished run started 18 minutes ago and took six.
-    started_at_ms:
-      scenario === 'running-no-start'
-        ? null
-        : DEMO_LIVE_NOW_MS - (finished ? 18 * MINUTE : status === 'queued' ? 30_000 : 65_000),
+    started_at_ms: startedAgoMs === null ? null : DEMO_LIVE_NOW_MS - startedAgoMs,
     finished_at_ms: finished ? DEMO_LIVE_NOW_MS - 12 * MINUTE : null,
     reported_at_ms: DEMO_LIVE_NOW_MS - (finished ? 12 * MINUTE : 5_000),
+    verification: 'verified',
+    verify_by_ms: null,
+    ...extra,
   };
+}
+
+/** The synthetic runs a scenario reports, newest first, as the server's `ci_runs` lists them. */
+export function demoLiveCiRuns(scenario: DemoCiScenario): NonNullable<LiveStoreState['ci_runs']> {
+  switch (scenario) {
+    case 'none':
+      return [];
+    // Running 1:05, or queued 30 seconds ago; a finished run started 18 minutes ago and took six.
+    case 'running':
+      return [demoRun('in_progress', 65_000)];
+    case 'running-no-start':
+      return [demoRun('in_progress', null)];
+    case 'queued':
+      return [demoRun('queued', 30_000)];
+    case 'failed':
+      return [demoRun('failure', 18 * MINUTE)];
+    case 'passed':
+      return [demoRun('success', 18 * MINUTE)];
+    // HS2-D3JJ49: the provider could not be read just now; the last known state stays shown.
+    case 'transient':
+      return [demoRun('in_progress', 65_000, { verification: 'transient' })];
+    // HS2-D3JJ49: three workflows of one push in flight, each with its own chip.
+    case 'several':
+      return [
+        demoRun('in_progress', 65_000),
+        demoRun('in_progress', 3 * MINUTE + 10_000, {
+          workflow: 'Platforms',
+          reported_at_ms: DEMO_LIVE_NOW_MS - 6_000,
+        }),
+        demoRun('queued', 20_000, { workflow: 'Docs', reported_at_ms: DEMO_LIVE_NOW_MS - 7_000 }),
+      ];
+    // HS2-D3JJ49: nothing can verify it, so the server leaves it out and nothing shows.
+    case 'unverifiable':
+      return [];
+    default:
+      return scenario satisfies never;
+  }
+}
+
+/** The newest synthetic run for a scenario, as the server's `ci`; `undefined` for none. */
+export function demoLiveCi(scenario: DemoCiScenario): LiveStoreState['ci'] {
+  return demoLiveCiRuns(scenario)[0];
 }
 
 const NORMAL = { status: 'normal' as const, reason: null, since: null };

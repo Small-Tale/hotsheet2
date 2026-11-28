@@ -13,13 +13,20 @@
 //!
 //! Nothing is followed for another CI's URL, for a run without a full commit, branch,
 //! and workflow, for a run this server already follows, or when no GitHub token is
-//! available. The client's stale-report display (`clients/web/src/ci-staleness.ts`)
-//! covers those cases, and the user can clear such a run (HS2-7PSBHQ).
+//! available. Such a run is shown only for its report's trust window, then is
+//! unverifiable and hidden (HS2-D3JJ49); the user can clear any shown run (HS2-7PSBHQ).
 //!
 //! HS2-7PSBHQ: a restarted server re-checks once a stored run still in flight that was
 //! reported before the follow window ([`recheck_stale`]), so a run whose follower never
 //! started (an older server, no token then, a server stopped for the whole run) settles
 //! instead of staying unknown for good.
+//!
+//! HS2-D3JJ49: the follower also keeps the run's verification ([`crate::ci_status::
+//! Verification`]). It wakes on every change of the watch Job, not only on a verdict: a
+//! provider read that failed for now (`watch: retrying`, a lost monitor) makes the run
+//! transient, the next successful read verifies it again, and a watch that ends without a
+//! verdict (a 404, a superseded commit, the follow window closing) makes it unverifiable.
+//! The Job monitor's bounded backoff does the retrying; the server still never polls.
 
 use std::collections::BTreeSet;
 use std::path::Path;
@@ -28,14 +35,14 @@ use std::time::Duration;
 
 use hotsheet_cli::orchestration::{DetachedJobMonitor, JobMonitor};
 use hotsheet_jobs::{
-    CiTarget, CiWatchOptions, Job, JobStore, Status, ensure_ci_watch, find_ci_watch, gate_of,
-    gate_state, rewatch_ci, wait_for_gate_change,
+    CiTarget, CiWatchOptions, Job, JobStore, KeptWaiter, Status, WATCH_STATE_KEY, ensure_ci_watch,
+    find_ci_watch, gate_of, gate_state, rewatch_ci,
 };
 use hotsheet_sync::LockExt;
 use serde::Serialize;
 
 use crate::AppState;
-use crate::ci_status::{CiReport, CiRun};
+use crate::ci_status::{CiReport, CiRun, REPORT_TRUST_MS, VerificationEvent};
 
 /// How long after its report a run is followed. GitHub Actions cancels a job after 6 h
 /// by default (`timeout-minutes: 360`), so a run still unfinished then is not worth
@@ -67,6 +74,35 @@ pub enum FollowState {
     NoToken,
     /// This server starts no Job monitor (test builds, `HOTSHEET_JOB_MONITOR_AUTOSTART=off`).
     Off,
+}
+
+impl FollowState {
+    /// HS2-D3JJ49: whether a follower watches the run now, so it, not the report's trust
+    /// window, keeps the run verified.
+    pub fn confirms(self) -> bool {
+        matches!(self, FollowState::Started | FollowState::Following)
+    }
+}
+
+/// HS2-D3JJ49: what a watch Job still in flight says about its run's verification: a lost
+/// monitor or a provider read that failed for now (`watch: retrying`) is
+/// [`VerificationEvent::Unreachable`]; a read that found the run at the provider
+/// (`run_status`) is [`VerificationEvent::Confirmed`]. A Job that has not read the provider
+/// yet, or that finished, says nothing here: its verdict or end is handled by the follower.
+pub fn watch_event(job: &Job) -> Option<VerificationEvent> {
+    match job.status {
+        Status::Lost => Some(VerificationEvent::Unreachable),
+        Status::Queued | Status::Running | Status::Waiting => {
+            if job.latest.get(WATCH_STATE_KEY).map(String::as_str) == Some("retrying") {
+                Some(VerificationEvent::Unreachable)
+            } else if job.latest.contains_key("run_status") {
+                Some(VerificationEvent::Confirmed)
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
 }
 
 /// Whether a GitHub token is available to the Job monitor.
@@ -354,8 +390,16 @@ fn follow(
     let job = match watch_job(&store, checkout, &target, recheck) {
         None => return FollowState::None,
         // Only a re-check takes a final verdict; nothing is left to follow either way.
+        // HS2-D3JJ49: a verdict that names no finished run settles nothing.
         Some(Watch::Final(job)) => {
-            record_verdict(state, checkout, &job, run);
+            if !record_verdict(state, checkout, &job, run) {
+                crate::ci_status::apply_verification(
+                    state,
+                    checkout,
+                    run,
+                    VerificationEvent::Unsettled,
+                );
+            }
             return FollowState::None;
         }
         Some(Watch::Follow(job)) => job,
@@ -388,6 +432,9 @@ fn follow(
 
 /// Wait on the Job store's file changes until the watch reaches a verdict, the watch
 /// ends without one, the server stops, or `deadline` passes (then stop watching).
+/// HS2-D3JJ49: every change of the watch updates the run's verification ([`watch_event`]);
+/// an end without a finished run makes it unverifiable. A stopping server leaves it as it
+/// is: the next start resumes the follow.
 fn follow_until_verdict(
     state: &AppState,
     store: &JobStore,
@@ -397,47 +444,116 @@ fn follow_until_verdict(
     followed: &CiRun,
     deadline: i64,
 ) {
-    let Ok(mut reading) = gate_state(store, checkout, target) else {
-        return;
+    let unsettled = || {
+        crate::ci_status::apply_verification(
+            state,
+            checkout,
+            followed,
+            VerificationEvent::Unsettled,
+        );
     };
+    // One waiter for the whole follow, not one per store change (HS2-N1QDZW).
+    let kept = KeptWaiter::default();
     loop {
+        let Ok(reading) = gate_state(store, checkout, target) else {
+            return;
+        };
+        let job = find_ci_watch(store, checkout, target).ok().flatten();
         if reading.state.is_final() {
-            if let Some(job) = find_ci_watch(store, checkout, target).ok().flatten() {
-                record_verdict(state, checkout, &job, followed);
+            let recorded = job
+                .as_ref()
+                .is_some_and(|job| record_verdict(state, checkout, job, followed));
+            if !recorded {
+                unsettled();
             }
             return;
         }
-        if reading.ended || reading.job_id.is_none() || state.is_stopping() {
+        if reading.ended || reading.job_id.is_none() {
+            unsettled();
             return;
+        }
+        if state.is_stopping() {
+            return;
+        }
+        if let Some(event) = job.as_ref().and_then(watch_event) {
+            crate::ci_status::apply_verification(state, checkout, followed, event);
         }
         let left = deadline.saturating_sub(now_ms());
         if left <= 0 {
             let id = reading.job_id.as_deref().unwrap_or(job_id);
             let _ = store.stop_watching(checkout, id);
+            unsettled();
             return;
         }
         let slice = Duration::from_millis(u64::try_from(left).unwrap_or(0)).min(WAIT_SLICE);
-        match wait_for_gate_change(store, checkout, target, &reading.state, slice) {
-            Ok(next) => reading = next,
-            Err(_) => return,
+        if store
+            .wait_for_change_keeping(&kept, checkout, reading.revision, slice)
+            .is_err()
+        {
+            return;
         }
+    }
+}
+
+/// HS2-D3JJ49: how a restarted server treats a stored run still in flight, reported
+/// `age_ms` ago. A run within the report's trust window is followed and keeps its
+/// verification; an older one is hidden until its re-check confirms it. Past the follow
+/// window the re-check is short ([`recheck_stale`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Resume {
+    /// Follow for the rest of the follow window; the report still vouches for the run.
+    Follow,
+    /// Follow for the rest of the follow window, hidden until the watch confirms the run.
+    Reconfirm,
+    /// Re-check once for [`RECHECK_LIMIT_MS`], hidden until the watch confirms the run.
+    Recheck,
+}
+
+/// HS2-D3JJ49: the pure resume decision for a run in flight reported `age_ms` ago.
+pub fn resume_plan(age_ms: i64) -> Resume {
+    if age_ms >= FOLLOW_LIMIT_MS {
+        Resume::Recheck
+    } else if age_ms > REPORT_TRUST_MS {
+        Resume::Reconfirm
+    } else {
+        Resume::Follow
     }
 }
 
 /// HS2-CC7TCB: a restarted server follows the stored runs that are still in flight and
 /// were reported within [`FOLLOW_LIMIT_MS`]. HS2-7PSBHQ: one reported before that, which
 /// nothing ended, is re-checked once ([`recheck_stale`]) instead of staying unknown.
-/// Idle when there are none.
-pub(crate) fn resume(state: &AppState) {
+/// HS2-D3JJ49: a run reported longer ago than the trust window is hidden until confirmed,
+/// and a run nothing can follow now falls back to its report's trust window. Idle when
+/// there are none.
+pub fn resume(state: &AppState) {
     let now = now_ms();
-    for (checkout, run) in state.ci_reports_snapshot() {
-        if run.status.is_terminal() {
-            continue;
-        }
-        if now - run.reported_at_ms < FOLLOW_LIMIT_MS {
-            follow_reported(state, &checkout, &run);
-        } else {
-            recheck_stale(state, &checkout, &run);
+    for (checkout, runs) in state.ci_reports_snapshot() {
+        for run in runs {
+            if run.status.is_terminal() {
+                continue;
+            }
+            let plan = resume_plan(now - run.reported_at_ms);
+            if plan != Resume::Follow {
+                crate::ci_status::apply_verification(
+                    state,
+                    &checkout,
+                    &run,
+                    VerificationEvent::Recheck,
+                );
+            }
+            let follow = match plan {
+                Resume::Recheck => recheck_stale(state, &checkout, &run),
+                Resume::Follow | Resume::Reconfirm => follow_reported(state, &checkout, &run),
+            };
+            if plan == Resume::Follow {
+                let event = if follow.confirms() {
+                    VerificationEvent::Confirmed
+                } else {
+                    VerificationEvent::Unfollowed
+                };
+                crate::ci_status::apply_verification(state, &checkout, &run, event);
+            }
         }
     }
 }
@@ -473,6 +589,8 @@ mod tests {
             started_at_ms: Some(1_000),
             finished_at_ms: None,
             reported_at_ms: 2_000,
+            verification: crate::ci_status::Verification::Verified,
+            verify_by_ms: None,
         }
     }
 
@@ -674,6 +792,65 @@ mod tests {
         let descendant =
             aligned_start(verdict(&other, Some(500), None), &run(CiStatus::InProgress));
         assert_eq!(descendant.started_at_ms, Some(500));
+    }
+
+    /// HS2-D3JJ49: what a watch Job in flight says about its run's verification.
+    #[test]
+    fn hs2_d3jj49_a_watch_job_in_flight_maps_to_a_verification_event() {
+        let with_latest = |status: Status, latest: &[(&str, &str)]| {
+            let mut job = job(status, &[]);
+            job.latest = latest
+                .iter()
+                .map(|(key, value)| ((*key).to_owned(), (*value).to_owned()))
+                .collect();
+            job
+        };
+        // Not read yet: nothing to say.
+        for status in [Status::Queued, Status::Running, Status::Waiting] {
+            assert_eq!(watch_event(&with_latest(status, &[])), None, "{status:?}");
+        }
+        // A read that found the run confirms it.
+        let observed = [("run_status", "in_progress"), ("run_id", "9")];
+        assert_eq!(
+            watch_event(&with_latest(Status::Running, &observed)),
+            Some(VerificationEvent::Confirmed)
+        );
+        assert_eq!(
+            watch_event(&with_latest(Status::Waiting, &[("run_status", "queued")])),
+            Some(VerificationEvent::Confirmed)
+        );
+        // A read that failed for now, even after an earlier answer, is unreachable; so is
+        // a lost monitor.
+        let retrying = [("run_status", "in_progress"), (WATCH_STATE_KEY, "retrying")];
+        assert_eq!(
+            watch_event(&with_latest(Status::Running, &retrying)),
+            Some(VerificationEvent::Unreachable)
+        );
+        assert_eq!(
+            watch_event(&with_latest(Status::Lost, &[])),
+            Some(VerificationEvent::Unreachable)
+        );
+        // A finished Job is the follower's business (verdict or end), not an event.
+        for status in [Status::Succeeded, Status::Failed, Status::Cancelled] {
+            assert_eq!(
+                watch_event(&with_latest(status, &observed)),
+                None,
+                "{status:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn hs2_d3jj49_a_restart_reconfirms_runs_past_the_trust_window() {
+        assert_eq!(resume_plan(0), Resume::Follow);
+        assert_eq!(resume_plan(REPORT_TRUST_MS), Resume::Follow);
+        assert_eq!(resume_plan(REPORT_TRUST_MS + 1), Resume::Reconfirm);
+        assert_eq!(resume_plan(FOLLOW_LIMIT_MS - 1), Resume::Reconfirm);
+        assert_eq!(resume_plan(FOLLOW_LIMIT_MS), Resume::Recheck);
+        assert!(FollowState::Started.confirms() && FollowState::Following.confirms());
+        for state in [FollowState::None, FollowState::NoToken, FollowState::Off] {
+            assert!(!state.confirms(), "{state:?}");
+        }
     }
 
     #[test]

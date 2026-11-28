@@ -121,9 +121,13 @@ pub struct LiveStoreState {
     pub workers: LiveWorkers,
     pub waiting: LiveWaiting,
     pub rates: LiveRates,
-    /// The newest CI run reported by a linked checkout, or `unavailable` (HS2-M8HHEA).
+    /// The newest shown CI run reported by a linked checkout, or `unavailable` (HS2-M8HHEA).
     #[serde(default = "crate::ci_status::LiveCi::unavailable")]
     pub ci: crate::ci_status::LiveCi,
+    /// HS2-D3JJ49: every shown run of the linked checkouts, the newest per branch and
+    /// workflow, newest first. Runs that cannot be verified are left out.
+    #[serde(default)]
+    pub ci_runs: Vec<crate::ci_status::LiveCi>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -580,7 +584,11 @@ fn build(state: &AppState, store: &str, now: OffsetDateTime) -> Option<LiveStore
     });
     let waiting = waiting_of(&waiting_rows);
     let (checkouts, name) = crate::notification_router::store_identity(state, store);
-    let ci = state.ci_reports.live(state.machine_home(), &checkouts);
+    let (ci, ci_runs) = state.ci_reports.live(
+        state.machine_home(),
+        &checkouts,
+        (now.unix_timestamp_nanos() / 1_000_000) as i64,
+    );
     let mut stores = state.live_states.stores.lock_or_recover();
     let live = stores.entry(store.to_string()).or_default();
     let tokens = token_rate(live, &entry.store, now);
@@ -624,6 +632,7 @@ fn build(state: &AppState, store: &str, now: OffsetDateTime) -> Option<LiveStore
             tickets_updated: updated,
         },
         ci,
+        ci_runs,
     })
 }
 
@@ -1466,6 +1475,7 @@ mod tests {
                 },
             },
             ci: crate::ci_status::LiveCi::unavailable(),
+            ci_runs: Vec::new(),
         };
         let mut next = base.clone();
         next.revision = 0;

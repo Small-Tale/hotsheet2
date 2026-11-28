@@ -1,5 +1,5 @@
 import type { LiveStoreState, LiveWord } from './api';
-import { ciAge, ciChipText, ciChipTicks, formatCiElapsed } from './ci-presentation';
+import { ciChipText, ciChipTicks, ciRunLabel, ciRunName, ciRunNaming, formatCiElapsed } from './ci-presentation';
 import type { HostHealthSignalId, HostHealthSnapshot } from './host-health';
 import { hostHealthCallouts } from './host-health';
 import {
@@ -11,7 +11,7 @@ import {
   tokensPerMinute,
   worstLiveWord,
 } from './live-state';
-import { newestCi, type RightNowCi } from './stats-right-now';
+import { type RightNowCi, shownRightNowCis } from './stats-right-now';
 
 /**
  * The project sidebar's Live section numbers (HS2-F788GW, docs/34-glance-surfaces.md §34.6), derived
@@ -74,8 +74,10 @@ export interface ProjectLiveSummary {
   overrun?: ProjectLiveOverrun;
   /** How many claims are past their ETA. */
   overrunCount: number;
-  /** The newest `main` CI run the project's stores reported, or none (HS2-57BYEA). */
+  /** The newest shown CI run the project's stores reported, or none (HS2-57BYEA). */
   ci: RightNowCi;
+  /** HS2-D3JJ49: every shown CI run, one per branch and workflow, newest first; never an unverifiable one. */
+  ciRuns: RightNowCi[];
 }
 
 /** The project's live numbers, or `undefined` when none of its stores has reported yet. */
@@ -95,6 +97,7 @@ export function projectLiveSummary(states: readonly LiveStoreState[], nowMs: num
     .sort((a, b) => b.ms - a.ms);
   const activity = worstLiveWord(states.map((state) => ({ ...state, state: state.activity.word })));
   const activityAge = progressAgeForWord(states, activity, nowMs, (state) => state.activity.word);
+  const ciRuns = shownRightNowCis(states, nowMs);
   return {
     state: worstLiveWord(states),
     activity,
@@ -109,7 +112,8 @@ export function projectLiveSummary(states: readonly LiveStoreState[], nowMs: num
     waiting: aggregate.waiting,
     ...(overruns[0] ? { overrun: overruns[0] } : {}),
     overrunCount: overruns.length,
-    ci: newestCi(states, nowMs),
+    ci: ciRuns[0] ?? { status: 'unavailable', branch: 'main' },
+    ciRuns,
   };
 }
 
@@ -117,8 +121,17 @@ const CI_STATUS_TITLES = {
   failure: 'failed',
   in_progress: 'running',
   queued: 'queued',
-  unknown: 'status unknown',
 } as const;
+
+/**
+ * The runs with a compact chip (HS2-D3JJ49, §34.6): each run still queued or running, and the newest run
+ * when it failed (HS2-57BYEA). A run that passed or was cancelled has no chip.
+ */
+export function ciChipRuns(runs: readonly RightNowCi[]): RightNowCi[] {
+  return runs.filter(
+    (ci, index) => ci.status === 'in_progress' || ci.status === 'queued' || (index === 0 && ci.status === 'failure'),
+  );
+}
 
 /** The work-state sentence for titles and the expanded row, e.g. `Active · 2 workers live`. */
 export function liveStateDescription(summary: ProjectLiveSummary): string {
@@ -147,6 +160,19 @@ export interface LiveChip {
   /** The hover title and accessible name. */
   title: string;
   tone: 'neutral' | 'pop' | 'warning' | 'danger';
+  /** HS2-D3JJ49: a CI chip's run, one chip per shown run in flight. */
+  ci?: RightNowCi;
+}
+
+/** A CI chip's title (HS2-D3JJ49): `main CI running for 1:05 · 1a2b3c4`, noting a provider being retried. */
+function ciChipTitle(ci: RightNowCi, label: string): string {
+  const status =
+    ci.status === 'failure' || ci.status === 'in_progress' || ci.status === 'queued' ? ci.status : 'queued';
+  return [
+    `${label} ${CI_STATUS_TITLES[status]}${ciChipTicks(ci) ? ` for ${formatCiElapsed(ci.ageMs ?? 0)}` : ''}`,
+    ...(ci.shortSha ? [ci.shortSha] : []),
+    ...(ci.transient ? ['provider unreachable, retrying'] : []),
+  ].join(' · ');
 }
 
 /**
@@ -178,37 +204,34 @@ export function liveChips(summary: ProjectLiveSummary): LiveChip[] {
       }`,
       tone: 'warning',
     });
-  // `main` CI only when it is non-trivial (§34.6): failing, running, or waiting to run (HS2-57BYEA). Its
-  // face names it and, while it runs, the elapsed time (HS2-505PHC): `CI · 1:05`, `CI · queued`, `CI failed`.
-  // A stale running or queued report reads `CI · unknown` with when it was last seen, never a clock
-  // (HS2-CC7TCB).
-  const ci = summary.ci;
-  if (ci.status === 'failure' || ci.status === 'in_progress' || ci.status === 'queued' || ci.status === 'unknown')
+  // CI only when it is non-trivial (§34.6): failing, running, or waiting to run (HS2-57BYEA). Its face names
+  // it and, while it runs, the elapsed time (HS2-505PHC): `CI · 1:05`, `CI · queued`, `CI failed`. HS2-D3JJ49:
+  // each shown run in flight has its own chip, named by what tells them apart (`Platforms · 3:10`); a run
+  // nothing can verify has none, and a transient one keeps its last known face.
+  const ciRuns = ciChipRuns(summary.ciRuns),
+    naming = ciRunNaming(ciRuns);
+  for (const ci of ciRuns)
     chips.push({
       kind: 'ci',
-      text: ciChipText(ci) ?? '',
-      title: `${ci.branch} CI ${CI_STATUS_TITLES[ci.status]}${
-        ciChipTicks(ci) ? ` for ${formatCiElapsed(ci.ageMs ?? 0)}` : ''
-      }${ci.status === 'unknown' && ci.ageMs !== undefined ? ` · ${ciAge(ci) ?? ''}` : ''}${
-        ci.shortSha ? ` · ${ci.shortSha}` : ''
-      }`,
+      text: ciChipText(ci, ciRunName(ci, naming)) ?? '',
+      title: ciChipTitle(ci, ciRunLabel(ci, naming)),
       tone: ci.status === 'failure' ? 'danger' : 'neutral',
+      ci,
     });
   return chips;
 }
 
 /**
  * Whether the Live section needs its one-second display clock (HS2-505PHC): only while the page shows,
- * the section is compact, and the project's newest `main` run is running with a known start, so the
- * chip's `CI · 1:05` face moves. A stale report at `nowMs` reads `CI · unknown` and needs no clock
- * (HS2-CC7TCB). The clock only re-renders; it never issues a request.
+ * the section is compact, and a shown CI chip's run is running with a known start, so its `CI · 1:05`
+ * face moves (HS2-D3JJ49: any of several). It only re-renders; it never issues a request.
  */
 export function liveCiClockRunning(
   states: readonly LiveStoreState[],
   view: { visible: boolean; expanded: boolean },
   nowMs: number,
 ): boolean {
-  return view.visible && !view.expanded && ciChipTicks(newestCi(states, nowMs));
+  return view.visible && !view.expanded && ciChipRuns(shownRightNowCis(states, nowMs)).some(ciChipTicks);
 }
 
 /** One host condition past its threshold: always a full-width callout, even in compact mode (§34.1). */

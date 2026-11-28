@@ -2517,7 +2517,8 @@ fn hs2_jttqmy_live_state_reads_the_local_server_snapshot() {
 /// HS2-M8HHEA: `ci report` posts the run to the local server's
 /// `POST /checkouts/{reference}/ci-status`, naming an explicit checkout or the checkout of the
 /// current directory, and prints the server's answer; outside a checkout it asks for one.
-/// HS2-7PSBHQ: `ci clear` sends `DELETE` to the same route the same way.
+/// HS2-7PSBHQ: `ci clear` sends `DELETE` to the same route the same way; HS2-D3JJ49: with
+/// its branch and workflow filters.
 #[test]
 fn hs2_m8hhea_ci_report_posts_the_run_to_the_local_server() {
     use std::io::{BufRead, BufReader, Read, Write};
@@ -2569,7 +2570,9 @@ fn hs2_m8hhea_ci_report_posts_the_run_to_the_local_server() {
         "POST /checkouts/demo-1234/ci-status HTTP/1.1".to_string(),
         format!("POST /checkouts/{encoded}/ci-status HTTP/1.1"),
         // HS2-7PSBHQ: `ci clear` forgets the stored run through `DELETE` on the same route.
-        "DELETE /checkouts/demo-1234/ci-status?reported_at_ms=17 HTTP/1.1".to_string(),
+        // HS2-D3JJ49: the branch and workflow filters name one run.
+        "DELETE /checkouts/demo-1234/ci-status?reported_at_ms=17&branch=release%2F2&workflow=Build%20all HTTP/1.1"
+            .to_string(),
         format!("DELETE /checkouts/{encoded}/ci-status HTTP/1.1"),
     ];
     let server = std::thread::spawn(move || {
@@ -2676,6 +2679,10 @@ fn hs2_m8hhea_ci_report_posts_the_run_to_the_local_server() {
             "demo-1234",
             "--reported-at-ms",
             "17",
+            "--branch",
+            "release/2",
+            "--workflow",
+            "Build all",
         ],
     );
     assert!(

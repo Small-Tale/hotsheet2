@@ -7324,17 +7324,20 @@ export async function startHotSheetWebClient() {
   const savedViewMenuRoot = document.createElement('div');
   document.body.append(savedViewMenuRoot);
   mount(savedViewMenuRoot, () => (savedViewMenu.value ? <SavedViewContextMenu {...savedViewMenu.value} /> : <></>));
-  // HS2-7PSBHQ: the Live section's context menu clears a `main` CI run shown as unknown, through the selected
-  // project's server; its live-state push then removes the chip.
+  // HS2-7PSBHQ, HS2-D3JJ49: the Live section's context menu clears a shown CI run, through the selected
+  // project's server; its live-state push then removes the chip or row.
   const liveCiMenu = signal<LiveCiMenuState | undefined>(undefined);
   const liveCiMenuRoot = document.createElement('div');
   document.body.append(liveCiMenuRoot);
   mount(liveCiMenuRoot, () => (liveCiMenu.value ? <LiveCiContextMenu {...liveCiMenu.value} /> : <></>));
   wireLiveCiMenu(document.body, {
     menu: liveCiMenu,
-    clear: async ({ checkout, reportedAtMs }) => {
+    clear: async ({ checkout, reportedAtMs, branch, workflow }) => {
       try {
-        await api().clearCiStatus(checkout, reportedAtMs);
+        await api().clearCiStatus(checkout, reportedAtMs, {
+          ...(branch === undefined ? {} : { branch }),
+          ...(workflow === undefined ? {} : { workflow }),
+        });
       } catch {
         showToast('Could not clear the CI status');
       }

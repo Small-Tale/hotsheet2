@@ -360,12 +360,11 @@ test('HS2-505PHC labels the Live CI chip with its elapsed time and ticks without
   }
 });
 
-// HS2-CC7TCB: a run reported running and then never reported again (no reporter followed it to its end) stops
-// counting once the report is over 2 h old: the chip reads `CI · unknown` with when it was last seen, the
-// display clock stops, and the expanded row says the status is unknown. The browser clock is moved past the
-// bound instead of waiting; the server stamps the report time itself. Captured wide, medium, narrow and wide
-// again, in light and dark.
-test('HS2-CC7TCB shows a stale running CI report as unknown, without a clock', async ({ page }) => {
+// HS2-D3JJ49 (replacing HS2-CC7TCB's `CI · unknown`): a run reported running by a reporter nothing follows is
+// believed for 2 h after its report; then it cannot be verified and the Live section shows nothing for it, in
+// both modes, and the display clock stops. The browser clock is moved past the bound instead of waiting; the
+// server stamps the report time and its `verify_by_ms` itself.
+test('HS2-D3JJ49 shows nothing for a running CI report that can no longer be verified', async ({ page }) => {
   test.setTimeout(150_000);
   const server = await realTicketServer();
   try {
@@ -379,73 +378,38 @@ test('HS2-CC7TCB shows a stale running CI report as unknown, without a clock', a
     await expect(live).toHaveAttribute('data-mode', 'compact', { timeout: 30_000 });
     const chip = live.locator('[data-live-chip="ci"]');
 
-    // Reported running, 5 minutes in, by a reporter that never reports again.
-    await server.request(`/checkouts/${server.checkoutId}/ci-status`, 'POST', {
-      status: 'in_progress',
-      branch: 'main',
-      sha: '8f6c8d81f0a1',
-      workflow: 'CI',
-      started_at_ms: Date.now() - 5 * 60_000,
-    });
+    // Reported running, 5 minutes in, by a reporter that never reports again and no watch follows.
+    const answer = await server.request<{ follow: string; ci: { verification: string; verify_by_ms: number } }>(
+      `/checkouts/${server.checkoutId}/ci-status`,
+      'POST',
+      {
+        status: 'in_progress',
+        branch: 'main',
+        sha: '8f6c8d81f0a1',
+        workflow: 'CI',
+        started_at_ms: Date.now() - 5 * 60_000,
+      },
+    );
+    expect(answer.follow).not.toBe('started');
+    expect(answer.ci.verification).toBe('verified');
     await expect(chip).toHaveText(/^CI · 5:\d\d$/u, { timeout: 30_000 });
 
-    // Two hours and ten minutes later, on this machine's clock: the next display tick shows it as unknown.
+    // Two hours and ten minutes later, on this machine's clock: the next display tick removes the chip.
     await page.clock.setFixedTime(Date.now() + (2 * 60 + 10) * 60_000);
-    await expect(chip).toHaveText('CI · unknown', { timeout: 30_000 });
-    await expect(chip).toHaveAttribute('data-tone', 'neutral');
-    await expect(chip).toHaveAttribute('title', /^main CI status unknown · last seen running 2h 1\dm ago · 8f6c8d8$/u);
-    await expect(chip.locator('[data-lucide="circle-help"]')).toBeVisible();
-
-    await page.mouse.move(640, 880);
-    const capture = async (name: string) => {
-      await live.screenshot({ path: `target/visual-captures/hs2-cc7tcb-${name}.png` });
-    };
-    for (const width of [1280, 1024, 390, 1280]) {
-      await page.setViewportSize({ width, height: 900 });
-      const showSidebar = page.getByRole('button', { name: 'Show Project Sidebar' });
-      if (await showSidebar.isVisible()) await showSidebar.click();
-      await expect(chip).toBeVisible();
-      const box = await chip.boundingBox();
-      expect(box?.height ?? 0).toBeLessThan(32);
-      await capture(`unknown-chip-${width}`);
-    }
-    await page.emulateMedia({ colorScheme: 'dark' });
-    await capture('unknown-chip-dark-1280');
-
-    // The expanded row names the unknown status and when the run was last seen, fitting the narrow row.
+    await expect(chip).toHaveCount(0, { timeout: 30_000 });
+    await expect(live).not.toContainText('unknown');
     await live.getByRole('button', { name: /^Show live details\. / }).click();
     await expect(live).toHaveAttribute('data-mode', 'expanded');
-    const row = live.locator('[data-live-row="ci"]');
-    await expect(row).toContainText('main CI unknown');
-    await expect(row).toContainText(/seen 2h 1\dm ago/u);
-    await expect(row.locator('[data-lucide="circle-help"]')).toBeVisible();
-    await page.mouse.move(640, 880);
-    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
-    await capture('unknown-row-dark-1280');
-    await page.emulateMedia({ colorScheme: 'light' });
-    for (const width of [1280, 390]) {
-      await page.setViewportSize({ width, height: 900 });
-      const showSidebar = page.getByRole('button', { name: 'Show Project Sidebar' });
-      if (await showSidebar.isVisible()) await showSidebar.click();
-      await expect(row).toBeVisible();
-      // Neither the row nor its truncating label overflows: the whole label shows.
-      const fits = await row.evaluate((node) =>
-        [node, ...node.querySelectorAll('span')].every((part) => part.scrollWidth <= part.clientWidth + 1),
-      );
-      expect(fits).toBe(true);
-      await capture(`unknown-row-${width}`);
-    }
+    await expect(live.locator('[data-live-row="ci"]')).toHaveCount(0);
   } finally {
     await server.stop(page);
   }
 });
 
-// HS2-7PSBHQ: a run reported running and never ended stayed `CI · unknown` with no way to clear it. While it
-// shows as unknown, the shipped sidebar's Live section opens a context menu (right-click, or the context-menu
-// key on its focused toggle) with Clear CI Status; choosing it makes the real server forget the stored run, and
-// the pushed live state removes the chip. A run that is not unknown offers no menu. Captured wide, medium,
-// narrow and wide again, light and dark, with the menu open.
-test('HS2-7PSBHQ clears a stale CI report from the Live section context menu', async ({ page, browserName }) => {
+// HS2-D3JJ49: several runs in flight (two workflows of one push) each get their own chip and expanded row in the
+// shipped sidebar, named by their workflow, and each ticks. Captured wide, medium, narrow and wide again, light
+// and dark, in Chromium and WebKit.
+test('HS2-D3JJ49 shows each running CI run as its own chip and row', async ({ page, browserName }) => {
   test.setTimeout(150_000);
   const server = await realTicketServer();
   try {
@@ -454,39 +418,120 @@ test('HS2-7PSBHQ clears a stale CI report from the Live section context menu', a
     const sidebar = page.locator('section[aria-label="Project sidebar"]').first();
     const live = sidebar.locator('[data-component="project-live-section"]');
     await expect(live).toHaveAttribute('data-mode', 'compact', { timeout: 30_000 });
-    const chip = live.locator('[data-live-chip="ci"]'),
+    const chips = live.locator('[data-live-chip="ci"]');
+    for (const [workflow, startedAgoMs] of [
+      ['CI', 65_000],
+      ['Platforms', 190_000],
+    ] as const)
+      await server.request(`/checkouts/${server.checkoutId}/ci-status`, 'POST', {
+        status: 'in_progress',
+        branch: 'main',
+        sha: '9f8e7d6c5b4a',
+        workflow,
+        started_at_ms: Date.now() - startedAgoMs,
+      });
+    await expect(chips).toHaveCount(2, { timeout: 30_000 });
+    const platforms = chips.filter({ hasText: /^Platforms · \d+:\d\d$/u }),
+      ci = chips.filter({ hasText: /^CI · \d+:\d\d$/u });
+    await expect(platforms).toHaveCount(1);
+    await expect(ci).toHaveCount(1);
+    await expect(platforms).toHaveAttribute('title', /^main Platforms running for \d+:\d\d · 9f8e7d6$/u);
+    await expect(platforms).toHaveAttribute('data-ci-clear-workflow', 'Platforms');
+    // Both clocks tick.
+    const before = await platforms.textContent();
+    await expect(platforms).not.toHaveText(before ?? '', { timeout: 5_000 });
+
+    await page.mouse.move(640, 880);
+    const capture = async (name: string) => {
+      await live.screenshot({ path: `target/visual-captures/hs2-d3jj49-${browserName}-${name}.png` });
+    };
+    for (const width of [1280, 1024, 390, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      const showSidebar = page.getByRole('button', { name: 'Show Project Sidebar' });
+      if (await showSidebar.isVisible()) await showSidebar.click();
+      await expect(chips).toHaveCount(2);
+      for (const each of await chips.all()) {
+        const box = await each.boundingBox();
+        expect(box?.height ?? 0).toBeLessThan(32);
+      }
+      await capture(`chips-${width}`);
+    }
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await capture('chips-dark-1280');
+
+    await live.getByRole('button', { name: /^Show live details\. / }).click();
+    await expect(live).toHaveAttribute('data-mode', 'expanded');
+    const rows = live.locator('[data-live-row="ci"]');
+    await expect(rows).toHaveCount(2);
+    await expect(rows.filter({ hasText: /^Platforms running/u })).toHaveCount(1);
+    await expect(rows.filter({ hasText: /^CI running/u })).toHaveCount(1);
+    await page.mouse.move(640, 880);
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await capture('rows-dark-1280');
+    await page.emulateMedia({ colorScheme: 'light' });
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      const showSidebar = page.getByRole('button', { name: 'Show Project Sidebar' });
+      if (await showSidebar.isVisible()) await showSidebar.click();
+      await expect(rows).toHaveCount(2);
+      // Neither row nor its truncating label overflows: the whole label shows.
+      for (const row of await rows.all()) {
+        const fits = await row.evaluate((node) =>
+          [node, ...node.querySelectorAll('span')].every((part) => part.scrollWidth <= part.clientWidth + 1),
+        );
+        expect(fits).toBe(true);
+      }
+      await capture(`rows-${width}`);
+    }
+  } finally {
+    await server.stop(page);
+  }
+});
+
+// HS2-7PSBHQ, HS2-D3JJ49: Clear CI Status applies per run. Right-clicking one run's chip offers that run; the real
+// server forgets it and the pushed live state removes only its chip. Right-clicking elsewhere on the section, or
+// the context-menu key on its focused toggle, lists each shown run by name. Captured wide, medium, narrow and wide
+// again, light and dark, with the menu open.
+test('HS2-7PSBHQ clears one CI run from the Live section context menu', async ({ page, browserName }) => {
+  test.setTimeout(150_000);
+  const server = await realTicketServer();
+  try {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await openProject(page, server);
+    const sidebar = page.locator('section[aria-label="Project sidebar"]').first();
+    const live = sidebar.locator('[data-component="project-live-section"]');
+    await expect(live).toHaveAttribute('data-mode', 'compact', { timeout: 30_000 });
+    const chips = live.locator('[data-live-chip="ci"]'),
       menu = page.locator('[data-context-menu="live-ci"]'),
-      item = menu.getByRole('menuitem', { name: 'Clear CI Status' });
+      items = menu.getByRole('menuitem');
+    const report = (workflow: string) =>
+      server.request(`/checkouts/${server.checkoutId}/ci-status`, 'POST', {
+        status: 'in_progress',
+        branch: 'main',
+        sha: '8f6c8d81f0a1',
+        workflow,
+        started_at_ms: Date.now() - 5 * 60_000,
+      });
+    await report('CI');
+    await report('Platforms');
+    await expect(chips).toHaveCount(2, { timeout: 30_000 });
+    const platforms = chips.filter({ hasText: /^Platforms · / });
 
-    // A fresh running report offers no menu: right-click leaves the browser's own.
-    await server.request(`/checkouts/${server.checkoutId}/ci-status`, 'POST', {
-      status: 'in_progress',
-      branch: 'main',
-      sha: '8f6c8d81f0a1',
-      workflow: 'CI',
-      started_at_ms: Date.now() - 5 * 60_000,
-    });
-    await expect(chip).toHaveText(/^CI · \d+:\d\d$/u, { timeout: 30_000 });
-    await expect(live).not.toHaveAttribute('data-ci-clear-checkout', /./u);
-    await chip.click({ button: 'right' });
-    await expect(menu).toHaveCount(0);
-
-    // Two hours and ten minutes later the run shows as unknown and names the run Clear CI Status forgets.
-    await page.clock.setFixedTime(Date.now() + (2 * 60 + 10) * 60_000);
-    await expect(chip).toHaveText('CI · unknown', { timeout: 30_000 });
-    await expect(live).toHaveAttribute('data-ci-clear-checkout', server.checkoutId);
-
-    // Right-click opens the menu at the pointer; Escape closes it; the context-menu key on the focused
-    // toggle opens it again below the toggle.
-    await chip.click({ button: 'right' });
-    await expect(item).toBeVisible();
-    await expect(item.locator('[data-lucide="eraser"]')).toBeAttached();
+    // Right-click on one chip offers that run alone.
+    await platforms.click({ button: 'right' });
+    await expect(items).toHaveCount(1);
+    await expect(items.first()).toHaveText('Clear CI Status');
+    await expect(items.first()).toHaveAttribute('data-ci-clear-workflow', 'Platforms');
+    await expect(items.first().locator('[data-lucide="eraser"]')).toBeAttached();
     await page.keyboard.press('Escape');
     await expect(menu).toHaveCount(0);
+
+    // The context-menu key on the focused toggle lists each shown run by name, below the toggle.
     const toggle = live.getByRole('button', { name: /^Show live details\. / });
     await toggle.focus();
     await toggle.dispatchEvent('contextmenu', { clientX: 0, clientY: 0, bubbles: true, cancelable: true });
-    await expect(item).toBeVisible();
+    // In the section's order: the newest report first.
+    await expect(items).toHaveText(['Clear main Platforms Status', 'Clear main CI Status']);
     // Opening the menu does not switch the section's mode.
     await expect(live).toHaveAttribute('data-mode', 'compact');
 
@@ -496,7 +541,7 @@ test('HS2-7PSBHQ clears a stale CI report from the Live section context menu', a
         await menu.evaluate((node) =>
           Promise.all(node.getAnimations({ subtree: true }).map((animation) => animation.finished)),
         );
-      await page.screenshot({ path: `target/visual-captures/hs2-7psbhq-${browserName}-${name}.png` });
+      await page.screenshot({ path: `target/visual-captures/hs2-d3jj49-${browserName}-${name}.png` });
     };
     for (const width of [1280, 1024, 390, 1280]) {
       await page.keyboard.press('Escape');
@@ -504,26 +549,37 @@ test('HS2-7PSBHQ clears a stale CI report from the Live section context menu', a
       await page.setViewportSize({ width, height: 900 });
       const showSidebar = page.getByRole('button', { name: 'Show Project Sidebar' });
       if (await showSidebar.isVisible()) await showSidebar.click();
-      await chip.click({ button: 'right' });
-      await expect(item).toBeVisible();
-      const box = await item.boundingBox();
-      expect((box?.x ?? -1) >= 0 && (box?.x ?? 0) + (box?.width ?? 0) <= width).toBe(true);
+      // Right-click on the gauges, not a chip: every shown run.
+      await live.locator('[data-component="glance-gauge"]').first().click({ button: 'right' });
+      await expect(items).toHaveCount(2);
+      for (const each of await items.all()) {
+        const box = await each.boundingBox();
+        expect((box?.x ?? -1) >= 0 && (box?.x ?? 0) + (box?.width ?? 0) <= width).toBe(true);
+      }
       await capture(`menu-${width}`);
     }
     await page.emulateMedia({ colorScheme: 'dark' });
     await capture('menu-dark-1280');
     await page.emulateMedia({ colorScheme: 'light' });
 
-    await item.click();
+    // Clear only Platforms: its chip goes, the CI chip stays, and the server keeps the CI run.
+    await items.filter({ hasText: 'Platforms' }).click();
     await expect(menu).toHaveCount(0);
-    await expect(chip).toHaveCount(0, { timeout: 30_000 });
-    await expect(live).not.toHaveAttribute('data-ci-clear-checkout', /./u);
-    // The server forgot the run: its live state reports none, and the expanded section has no CI row.
-    const state = await server.request<{ stores: { ci: { status: string } }[] }>('/live-state');
-    expect(state.stores.map((store) => store.ci.status)).toEqual(['unavailable']);
+    await expect(chips).toHaveCount(1, { timeout: 30_000 });
+    await expect(chips.first()).toHaveText(/^CI · \d+:\d\d$/u);
+    const state = await server.request<{ stores: { ci_runs: { workflow: string }[] }[] }>('/live-state');
+    expect(state.stores.map((store) => store.ci_runs.map((run) => run.workflow))).toEqual([['CI']]);
+    // With one run left, the section's menu offers it unnamed; clearing it leaves no chip or row.
+    await chips.first().click({ button: 'right' });
+    await expect(items).toHaveText(['Clear CI Status']);
+    await items.first().click();
+    await expect(chips).toHaveCount(0, { timeout: 30_000 });
     await toggle.click();
     await expect(live).toHaveAttribute('data-mode', 'expanded');
     await expect(live.locator('[data-live-row="ci"]')).toHaveCount(0);
+    // Nothing shown: right-click keeps the browser's own menu.
+    await live.click({ button: 'right' });
+    await expect(menu).toHaveCount(0);
     await page.mouse.move(640, 880);
     await capture('cleared-expanded-1280');
   } finally {

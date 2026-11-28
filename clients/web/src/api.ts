@@ -1,5 +1,6 @@
 import { browserRandomId } from './browser-id';
 import { isTicketCollectionRead, responseChangeCursor, ticketReadCursors } from './change-read-gap';
+import { ciClearQuery } from './ci-runs';
 import { parseSchedulePreview, parseScheduleView, parseScheduleViews, type ScheduleInput } from './command-schedules';
 import { type FeatureSettingsChange, parseFeatureSettings } from './feature-areas';
 import { parseHostCpuFrame } from './host-cpu-feed';
@@ -1927,7 +1928,20 @@ export interface LiveCi {
   started_at_ms: number | null;
   finished_at_ms: number | null;
   reported_at_ms: number | null;
+  /**
+   * HS2-D3JJ49: whether the provider still confirms the run: `verified`, or `transient` while the last provider
+   * read failed for now (the last known status stays shown). The live state never lists an `unverifiable` run.
+   * Absent from an older server; `null` while `unavailable`.
+   */
+  verification?: LiveCiVerification | null;
+  /**
+   * HS2-D3JJ49: when a queued or running run that no watch follows stops being shown; `null` when a watch follows
+   * it or it finished. Absent from an older server.
+   */
+  verify_by_ms?: number | null;
 }
+/** HS2-D3JJ49: whether a CI run's provider still confirms its state (docs/32-notifier-plugins.md §32.8.5). */
+export type LiveCiVerification = 'verified' | 'transient' | 'unverifiable';
 /** A hosted store's server-pushed live snapshot; clients derive ages and decaying rates locally. */
 /** `GET /stores/{store_id}/live-tokens` (HS2-ZTRF4Q): recorded tokens in a window; `complete` is false
  * when the window starts before the server's retained series. */
@@ -1974,8 +1988,13 @@ export interface LiveStoreState {
     };
     tickets_updated: { window_minutes: number; at_ms: number[]; peak_per_hour: number };
   };
-  /** Main CI status (HS2-M8HHEA); absent from an older server. */
+  /** Main CI status, the newest shown run (HS2-M8HHEA); absent from an older server. */
   ci?: LiveCi;
+  /**
+   * HS2-D3JJ49: every shown run of the linked checkouts, the newest per branch and workflow, newest first; absent
+   * from an older server.
+   */
+  ci_runs?: LiveCi[];
 }
 export interface LiveStateList {
   epoch_ms: number;
@@ -2769,14 +2788,13 @@ export class Api {
     this.parsed(parseCalibrationReport, `/checkouts/${encodeURIComponent(checkout)}/confidence-report`);
   /**
    * HS2-7PSBHQ: forget the CI run stored for `checkout`, only while it is still the run reported at
-   * `reportedAtMs`; the server then pushes the linked stores' live state again.
+   * `reportedAtMs`; HS2-D3JJ49: `branch` and `workflow` name it among the checkout's runs. The server then
+   * pushes the linked stores' live state again.
    */
-  clearCiStatus = (checkout: string, reportedAtMs: number) =>
-    this.parsed(
-      ignoreBody,
-      `/checkouts/${encodeURIComponent(checkout)}/ci-status?reported_at_ms=${String(Math.floor(reportedAtMs))}`,
-      { method: 'DELETE' },
-    );
+  clearCiStatus = (checkout: string, reportedAtMs: number, run: { branch?: string; workflow?: string } = {}) =>
+    this.parsed(ignoreBody, `/checkouts/${encodeURIComponent(checkout)}/ci-status?${ciClearQuery(reportedAtMs, run)}`, {
+      method: 'DELETE',
+    });
   /** Every hosted store's live snapshot (HS2-JTTQMY); read on stream resync only, never on a timer. */
   liveStates = () => this.parsed(parseLiveStateList, '/live-state');
   /** Recorded per-store state segments and completion ticks since `sinceMs` (HS2-9AN4DN). Read on demand only. */
