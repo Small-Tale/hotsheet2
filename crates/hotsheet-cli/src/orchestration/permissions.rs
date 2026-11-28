@@ -148,10 +148,22 @@ pub fn signal_token(directory: &std::path::Path) -> Option<String> {
 
 /// Write a fresh token to a signal directory. Best effort: a missed signal is caught
 /// up by the next read.
+///
+/// HS2-4QRWVQ: the token is written to a temporary file and renamed into place, so a
+/// reader sees the old token or the new one, never the truncated file between. An
+/// in-place write let a waiter read the empty file as one change and the new token as
+/// a second, so one hosted start was announced twice on a slow machine.
 pub(super) fn touch_signal(directory: &std::path::Path) {
-    if std::fs::create_dir_all(directory).is_ok() {
-        let _ = std::fs::write(directory.join("token"), ulid::Ulid::new().to_string());
-    }
+    let _ = write_signal_token(directory);
+}
+
+fn write_signal_token(directory: &std::path::Path) -> std::io::Result<()> {
+    use std::io::Write as _;
+    std::fs::create_dir_all(directory)?;
+    let mut staged = tempfile::NamedTempFile::new_in(directory)?;
+    staged.write_all(ulid::Ulid::new().to_string().as_bytes())?;
+    hotsheet_sync::files::persist(staged, directory.join("token"))?;
+    Ok(())
 }
 
 impl SignalWaiter {

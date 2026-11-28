@@ -9,9 +9,10 @@
 //! milestones are recorded with [`AppState::record_activity`], which persists them in the rolling
 //! activity window and pushes them to clients over the live bus.
 //!
-//! The live model is the person's signed-in `claude` CLI on the smallest Claude model, with no
-//! tools, no MCP servers, no hooks, and no saved session, in a private empty directory, killed
-//! with its process group at [`AI_TIMEOUT`]. It never runs in a test process
+//! The live model is the person's signed-in AI CLI, the first installed tool plugin declaring a
+//! structured call (`drive.structured_call_args`; Claude's names its smallest model, no tools,
+//! no MCP servers, no hooks, and no saved session), in a private empty directory, killed with
+//! its process group at [`AI_TIMEOUT`]. It never runs in a test process
 //! (`HOTSHEET_AI_TOOL_PROBES=off`), when the Announcer feature is off, or when both machine-wide
 //! switches (`announcer.ai_importance`, `announcer.ai_rewrite`) are off.
 
@@ -26,9 +27,7 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use hotsheet_model::{AttachmentActorRole, ProjectTicketRef, Ulid};
 use hotsheet_sync::LockExt;
-use hotsheet_ticketing::announcer_ai::{
-    AiSettings, AiTask, CLASSIFIER_MODEL, Decider, MilestoneAi,
-};
+use hotsheet_ticketing::announcer_ai::{AiSettings, AiTask, Decider, MilestoneAi};
 use hotsheet_ticketing::announcer_milestones::{
     Baseline, FollowUpTarget, Milestone, MilestoneSnapshot, milestone_event, ticket_milestones,
 };
@@ -82,9 +81,9 @@ impl Default for Timing {
     }
 }
 
-/// Start the subscriber with the signed-in `claude` CLI. The handle keeps the bus task.
+/// Start the subscriber with the person's signed-in AI CLI. The handle keeps the bus task.
 pub fn spawn_announcer_milestones(state: AppState) -> tokio::task::JoinHandle<()> {
-    let ai = ClaudeCliAi {
+    let ai = PluginCliAi {
         plugin_dirs: state.plugin_dirs.to_vec(),
     };
     spawn_announcer_milestones_with(state, Some(Arc::new(ai)), Timing::default())
@@ -400,48 +399,28 @@ pub(crate) async fn put_announcer_settings(
     .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
 }
 
-/// The arguments of one AI call: print mode, the smallest model, structured JSON output, no
-/// tools, MCP servers, hooks, slash commands, or saved session.
-pub fn cli_args(task: AiTask, prompt: &str) -> Vec<String> {
-    [
-        "-p",
-        prompt,
-        "--model",
-        CLASSIFIER_MODEL,
-        "--output-format",
-        "json",
-        "--json-schema",
-        task.schema(),
-        "--system-prompt",
-        task.system_prompt(),
-        "--tools",
-        "",
-        "--strict-mcp-config",
-        "--no-session-persistence",
-        "--disable-slash-commands",
-        "--settings",
-        r#"{"disableAllHooks":true}"#,
-    ]
-    .map(str::to_owned)
-    .to_vec()
+/// The arguments of one AI call (HS2-17NWC1): the tool plugin's declared
+/// `drive.structured_call_args` template with this task's prompt, schema and system prompt.
+/// The plugin owns the model and the flags that turn off tools, MCP servers, hooks, slash
+/// commands and saved sessions.
+pub fn cli_args(template: &[String], task: AiTask, prompt: &str) -> Vec<String> {
+    hotsheet_plugins::structured_call_args(template, prompt, task.schema(), task.system_prompt())
 }
 
-/// The person's signed-in `claude` CLI (no API key), found through its installed plugin.
-struct ClaudeCliAi {
+/// The person's signed-in AI CLI (no API key): the first installed tool plugin declaring a
+/// structured call (`drive.structured_call_args`, docs/05 §5.1).
+struct PluginCliAi {
     plugin_dirs: Vec<PathBuf>,
 }
 
-impl MilestoneAi for ClaudeCliAi {
+impl MilestoneAi for PluginCliAi {
     fn ask(&self, task: AiTask, prompt: &str) -> Result<String, String> {
         // HS2-7W3D7V: test processes never run an installed tool.
         if !hotsheet_aitools::model_catalog::ai_tool_probes_enabled() {
             return Err("AI tool calls are off in this process".into());
         }
-        let program = hotsheet_plugins::detected_drivable_plugins(&self.plugin_dirs)
-            .into_iter()
-            .find(|plugin| plugin.id() == "claude")
-            .and_then(|plugin| plugin.manifest.drive.map(|drive| drive.program))
-            .ok_or("the claude CLI is not installed")?;
+        let (program, template) = hotsheet_plugins::detected_structured_call(&self.plugin_dirs)
+            .ok_or("no installed AI tool serves a structured call")?;
         // HS2-BNDRYP: a private empty directory, so nothing the tool writes lands in a store.
         let workspace = hotsheet_aitools::probe::probe_workspace()
             .map_err(|error| format!("no private directory: {error}"))?;
@@ -451,7 +430,7 @@ impl MilestoneAi for ClaudeCliAi {
             Some(workspace.path()),
         );
         command
-            .args(cli_args(task, prompt))
+            .args(cli_args(&template, task, prompt))
             .current_dir(workspace.path());
         // Nothing in the call may report back into Hot Sheet as a worker.
         for name in [
@@ -464,9 +443,10 @@ impl MilestoneAi for ClaudeCliAi {
         }
         let output = hotsheet_aitools::probe::run_probe_within(&mut command, AI_TIMEOUT)?;
         if !output.status.success() {
-            return Err(format!("claude exited with {}", output.status));
+            return Err(format!("{program} exited with {}", output.status));
         }
-        String::from_utf8(output.stdout).map_err(|_| "claude replied with invalid UTF-8".into())
+        String::from_utf8(output.stdout)
+            .map_err(|_| format!("{program} replied with invalid UTF-8"))
     }
 }
 

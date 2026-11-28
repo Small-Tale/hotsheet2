@@ -23,10 +23,15 @@ import { closeLikeUpstream } from './ws-close-relay';
 export const PEER_GATEWAY_PREFIXES = [
   'accounts',
   'activity',
+  // HS2-9A60CG: like `terminals/{id}/claude-activity` and `mcp-presence`, hook reports carry no
+  // host authority here; the machine server authenticates the caller's paired session.
+  'ai-hooks',
   'ai-settings',
   'ai-tools',
   'analytics',
   'announce',
+  // HS2-9A60CG: machine-wide announcer switches, guarded by the server like `tts` and `standby-settings`.
+  'announcer',
   'batch',
   'checkouts',
   'claim-next',

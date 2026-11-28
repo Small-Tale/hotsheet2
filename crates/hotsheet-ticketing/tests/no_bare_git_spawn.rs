@@ -340,6 +340,13 @@ const FORK_TRIGGER_INVENTORY: &[(&str, &str, Verdict)] = &[
         ),
     ),
     (
+        // HS2-17NWC1: the announcer's AI call (HS2-G3HJZH) runs in a private probe
+        // workspace; launch_resolved resolves the claude CLI to an absolute path first.
+        "hotsheet-server/src/announcer_milestones.rs",
+        "cwd=1",
+        Verdict::Resolved,
+    ),
+    (
         "hotsheet-server/src/code_review.rs",
         "detached=1",
         Verdict::Spawned,

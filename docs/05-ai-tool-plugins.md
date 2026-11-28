@@ -1371,6 +1371,16 @@ unknown) in its capacity snapshot's `capabilities.ai_tools[]` ([26](26-orchestra
 placed on that machine (HS2-ZRPZJJ); an absent state is still tried. OpenCode and Antigravity
 declare none.
 
+It may also name **`structured_call_args`** (HS2-17NWC1): arguments for one bounded call of the
+drive's `program` that answers a single JSON object, with no tools, MCP servers, hooks, slash
+commands, or saved session, on the tool's own small model. An argument that is exactly `{prompt}`,
+`{schema}`, or `{system_prompt}` is replaced by that value; nothing else is substituted. The reply
+is the object itself, or an envelope carrying it as `structured_output` or as `result` text. The
+announcer's AI importance score and wording ([15](15-activity-narration-interface.md) §15.6.1) run
+the first detected plugin declaring it, so the host never picks a tool by id. Claude declares it
+(`claude -p {prompt} --model claude-haiku-5-5 --output-format json --json-schema {schema} …`);
+the other built-in tools declare none.
+
 A plugin may also declare **`[capacity]`** (HS2-AHG7HW): which limit signals the host can observe
 from the tool. It is data only and selects no parser. Each of `rate_limit_errors`,
 `usage_limit_errors`, `reset_times`, `usage_events` and `cost` is `"reported"` or `"unknown"`, and

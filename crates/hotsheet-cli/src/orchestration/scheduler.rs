@@ -375,11 +375,10 @@ impl OrchestrationRuntime {
 
     /// Tell every scheduler following on this machine that something outside the
     /// run event stream changed: a tool limit, a policy. Best effort.
+    /// HS2-4QRWVQ: written as the hosted-session signal is, so a follower never reads
+    /// a half-written token as an extra wake.
     pub fn scheduler_wake_at(home: &Path) {
-        let directory = home.join(WAKE_DIRECTORY);
-        if std::fs::create_dir_all(&directory).is_ok() {
-            let _ = std::fs::write(directory.join("token"), ulid::Ulid::new().to_string());
-        }
+        super::permissions::touch_signal(&home.join(WAKE_DIRECTORY));
     }
 
     /// HS2-2FG91X: wake the owner's scheduling loop, when its policy runs one. An

@@ -29,8 +29,6 @@ use crate::announcer_milestones::{
     Decision, Milestone, SPEAK_THRESHOLD, coalesce, rule_score, short_slug, spoken_line,
 };
 
-/// The smallest Claude model, used through the signed-in `claude` CLI.
-pub const CLASSIFIER_MODEL: &str = "claude-haiku-5-5";
 /// Milestones described in one prompt at most.
 pub const MAX_BATCH: usize = 8;
 /// The longest spoken line accepted from a rewrite, in characters.

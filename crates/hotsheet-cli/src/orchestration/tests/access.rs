@@ -1470,3 +1470,56 @@ fn hs2_5675t5_the_rule_cap_makes_room_from_removed_targets_only() {
         vec![(Some(id(2)), Some("target_removed".to_owned())); 4]
     );
 }
+
+/// HS2-4QRWVQ: a signal token is replaced whole. A reader racing the writer sees the
+/// previous token or the next one, never the empty or partial file an in-place write
+/// leaves between its truncate and its write, which a waiter took as an extra change
+/// (one hosted start announced twice). No staged file is left beside the token.
+#[test]
+fn hs2_4qrwvq_a_reader_never_sees_a_half_written_signal_token() {
+    let root = tempfile::tempdir().unwrap();
+    let signal = root.path().join("signal");
+    let wake_home = root.path().join("home");
+    let wake = wake_home.join(crate::orchestration::scheduler::WAKE_DIRECTORY);
+    let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let readers: Vec<_> = [signal.clone(), wake.clone()]
+        .into_iter()
+        .map(|directory| {
+            let stop = stop.clone();
+            std::thread::spawn(move || {
+                let mut torn = Vec::new();
+                let mut reads = 0_u32;
+                while !stop.load(std::sync::atomic::Ordering::Relaxed) {
+                    reads += 1;
+                    if let Some(token) = crate::orchestration::signal_token(&directory)
+                        && token.parse::<ulid::Ulid>().is_err()
+                    {
+                        torn.push(token);
+                    }
+                }
+                (torn, reads)
+            })
+        })
+        .collect();
+    let mut tokens = std::collections::HashSet::new();
+    for _ in 0..2_000 {
+        crate::orchestration::permissions::touch_signal(&signal);
+        OrchestrationRuntime::scheduler_wake_at(&wake_home);
+        tokens.insert(crate::orchestration::signal_token(&signal).unwrap());
+    }
+    stop.store(true, std::sync::atomic::Ordering::Relaxed);
+    for reader in readers {
+        let (torn, reads) = reader.join().unwrap();
+        assert!(reads > 0);
+        assert!(torn.is_empty(), "{} torn reads", torn.len());
+    }
+    // Every touch is a new token, and only the token is left in each directory.
+    assert_eq!(tokens.len(), 2_000);
+    for directory in [&signal, &wake] {
+        let names: Vec<_> = std::fs::read_dir(directory)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect();
+        assert_eq!(names, ["token"], "{}", directory.display());
+    }
+}
