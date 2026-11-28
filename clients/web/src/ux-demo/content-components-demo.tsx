@@ -29,6 +29,7 @@ import type { InspectorTab } from '../components/ticket-inspector';
 import { TicketReader, type TicketReaderProps } from '../components/ticket-reader';
 import { addTicketTag, openTicketTagSurface, removeTicketTag } from '../components/ticket-tag-editor';
 import { parseFeedbackChoices, updateFeedbackChoiceDocumentSelection } from '../feedback-choices';
+import { DETAILS_FEEDBACK_ID } from '../feedback-needed';
 import { beginFeedbackPromptEdit } from '../feedback-prompt-edits';
 import { INSPECTOR_AND_EDITOR_ACTIONS } from '../interaction-attrs/inspector-and-editor';
 import { DemoEvent } from './components/demo-event';
@@ -361,6 +362,11 @@ const SIDEBAR_FEEDBACK_NOTE = {
     'Anything else I should know?',
   ].join('\n'),
 };
+/**
+ * A ticket description marked FEEDBACK NEEDED as the sidebar inspector shows it (HS2-0MET3B): its CHOICE
+ * groups select through the same shared state, under the `ticket-details` selection id.
+ */
+export const SIDEBAR_FEEDBACK_DETAILS = `FEEDBACK NEEDED: ${SIDEBAR_FEEDBACK_NOTE.body}`;
 export const readerFeedbackChoiceSelections = signal<Record<string, string[]>>({ 'reader-feedback': ['choice-1'] });
 export const readerTab = signal<InspectorTab>('info');
 export const readerLargeText = signal(false);
@@ -872,7 +878,8 @@ function wireContentComponentsDemo(root: HTMLElement): () => void {
     wireFeedbackChoices(root, {
       toggle: (noteId, choiceId, modifiers) => {
         const note = [...readerNotes.value, SIDEBAR_FEEDBACK_NOTE].find((item) => item.id === noteId),
-          choices = note && parseFeedbackChoices(note.body);
+          source = noteId === DETAILS_FEEDBACK_ID ? SIDEBAR_FEEDBACK_DETAILS : note?.body,
+          choices = source && parseFeedbackChoices(source);
         if (!choices) return;
         const next = updateFeedbackChoiceDocumentSelection(
           choices,

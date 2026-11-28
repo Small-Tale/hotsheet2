@@ -14,13 +14,10 @@ interface KerfProfile {
  * 2026-11-26 an analyzer run without exceptions matched only these 17 of the former 48 entries. With
  * Kerf beta.139 (KF-A9H745, KF-R55A9X) the doctor reports 13 of them as suppressing nothing (KUI-P032),
  * so only these 4 remained (HS2-23GC8C). HS2-5FFT4J retired the ticket inspector panel's KUI-L008 entry
- * with a literal-union root class, leaving 3.
+ * with a literal-union root class, leaving 3. Kerf beta.140 (KF-F24ZM8, KF-7MBEBY) made the
+ * terminal-dashboard KUI-L004 and sidebar-panel KUI-L008 entries suppress nothing, leaving 1 (HS2-KPZY3Y).
  */
-const PROFILE_EXCEPTION_IDS = [
-  'web-awesome-quick-ticket-parts',
-  'intentional-nested-inset-terminal-dashboard',
-  'state-modifier-classes-sidebar-panel',
-];
+const PROFILE_EXCEPTION_IDS = ['web-awesome-quick-ticket-parts'];
 
 /**
  * HS2-AF1Q16: open Kerf tickets (kerf.hs2) whose capability retires an exception. Tests cannot
@@ -28,12 +25,9 @@ const PROFILE_EXCEPTION_IDS = [
  * here; the exceptions that still name it then fail until they are removed or re-owned. KF-A9H745 and
  * KF-R55A9X shipped in beta.139; their remaining exceptions moved to HS2-5FFT4J (HS2-23GC8C), which
  * retired one and re-owned the other two to Kerf: the absolutely positioned chat preview false positive
- * and the typed bare className forward.
+ * and the typed bare className forward. Both shipped in beta.140 and retired those entries (HS2-KPZY3Y).
  */
-const OPEN_KERF_OWNERS: Record<string, string> = {
-  'KF-F24ZM8': 'Analyzer KUI-L004 false positive: absolutely positioned child of a padded parent',
-  'KF-7MBEBY': 'Analyzer KUI-L008: classify a bare forwarded className typed as a literal union',
-};
+const OPEN_KERF_OWNERS: Record<string, string> = {};
 
 /**
  * HS2-AF1Q16: Hot Sheet adoption tickets for exceptions where Kerf already ships the capability, so

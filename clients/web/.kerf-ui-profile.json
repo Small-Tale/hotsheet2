@@ -41,18 +41,6 @@
       "rules": ["KUI-L011"],
       "target": "src/components/quick-ticket-composer.css",
       "rationale": "Pending adoption HS2-CR912H: QuickTicketComposer still renders a raw wa-dialog and sets its ::part(dialog) viewport height and pointer events and its ::part(body) padding. Kerf DialogSurface already exposes preferred width, viewport maximum, and content layout, so this is app adoption work rather than a Kerf gap; the exception goes when HS2-CR912H moves the shell to DialogSurface."
-    },
-    {
-      "id": "intentional-nested-inset-terminal-dashboard",
-      "rules": ["KUI-L004"],
-      "target": "src/components/terminal-dashboard.tsx",
-      "rationale": "Reviewed HS2-M6B8AD: design: workspace-chat-tile__preview, workspace-chat-tile__preview-surface are the chat tile's padded preview frame and its scaled summary card, which is absolutely positioned at the frame inset and carries its own card padding, so the two insets do not compound. The card has no background, border, or outline and is not a cataloged component, so neither CSS surface recognition nor layout.geometry.role \"surface\" (beta.139) describes it truthfully; the analyzer ignores position, so this is a false positive owned by KF-F24ZM8 (HS2-5FFT4J). The exception goes when Kerf breaks the inset chain at out-of-flow children."
-    },
-    {
-      "id": "state-modifier-classes-sidebar-panel",
-      "rules": ["KUI-L008"],
-      "target": "src/components/sidebar-panel.tsx",
-      "rationale": "Reviewed HS2-M6B8AD: SidebarPane forwards its consumer's own root class to the Kerf Pane, typed since HS2-5FFT4J as the SidebarPaneRootClass literal union (project-sidebar, settings-navigation, terminal-operations-sidebar, notification-navigation); no Kerf public class is chosen dynamically. The analyzer type-checks only template substitutions, and a template-only forward fails no-unnecessary-template-expression, so this waits on KF-7MBEBY (classify a typed bare forward). Expressions: className={className}"
     }
   ]
 }

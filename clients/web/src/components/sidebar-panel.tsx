@@ -110,10 +110,9 @@ export function workbenchSidebarPanel(
 }
 
 /**
- * The app-owned root classes a standalone side panel forwards to its Kerf `Pane` (HS2-5FFT4J). The
- * Kerf analyzer type-checks only template substitutions (KF-R55A9X), and a template-only forward is
- * rejected by `no-unnecessary-template-expression`, so the bare forward keeps its KUI-L008 profile
- * exception until Kerf classifies typed bare forwards (KF-7MBEBY).
+ * The app-owned root classes a standalone side panel forwards to its Kerf `Pane` (HS2-5FFT4J). Since
+ * Kerf beta.140 the analyzer classifies this bare typed forward as a literal union (KF-7MBEBY), so it
+ * needs no KUI-L008 profile exception (HS2-KPZY3Y).
  */
 export type SidebarPaneRootClass =
   'project-sidebar' | 'settings-navigation' | 'terminal-operations-sidebar' | 'notification-navigation';

@@ -586,6 +586,43 @@ describe('TicketInspector', () => {
     );
   });
 
+  it('offers the sidebar description CHOICE groups inside its click-to-edit surface (HS2-0MET3B)', () => {
+    const details = 'FEEDBACK NEEDED: Which direction?\n\nCHOICE:\n- Keep **A**\n- Use `B`';
+    const sidebar = String(
+      TicketInspector({
+        ...base,
+        details,
+        feedbackNeeded: true,
+        feedbackChoiceSelections: { 'ticket-details': ['choice-2'] },
+      }),
+    );
+    expect(sidebar.match(/data-action="toggle-feedback-choice"/g)).toHaveLength(2);
+    expect(sidebar).not.toContain('CHOICE:');
+    expect(sidebar).toContain('data-replyable="false"');
+    expect(sidebar).toMatch(
+      /<[^>]*aria-selected="true"[^>]*data-choice-id="choice-2"|<[^>]*data-choice-id="choice-2"[^>]*aria-selected="true"/,
+    );
+    expect(sidebar).toMatch(
+      /<[^>]*aria-selected="false"[^>]*data-choice-id="choice-1"|<[^>]*data-choice-id="choice-1"[^>]*aria-selected="false"/,
+    );
+    // The prose stays a click-to-edit surface, labelled as a group because it holds the choice lists.
+    expect(sidebar).toMatch(
+      /<div class="markdown-editor__preview" role="group" tabindex="0" data-action="edit-markdown"/,
+    );
+    expect(sidebar).toContain('aria-label="Edit Ticket details"');
+    expect(sidebar).not.toContain('aria-label="Feedback response"');
+    expect(sidebar).toContain('Respond to Feedback');
+    // Without CHOICE groups, or without permission to respond, the description stays a plain button preview.
+    const plain = String(
+      TicketInspector({ ...base, details: 'FEEDBACK NEEDED: Which direction?', feedbackNeeded: true }),
+    );
+    expect(plain).toContain('role="button" tabindex="0" data-action="edit-markdown"');
+    expect(plain).not.toContain('toggle-feedback-choice');
+    const readOnly = String(TicketInspector({ ...base, details, feedbackNeeded: true, canAddNotes: false }));
+    expect(readOnly).not.toContain('toggle-feedback-choice');
+    expect(readOnly).toContain('CHOICE:');
+  });
+
   it('shows a visible and accessible derived attachment count on the attachments tab', () => {
     const markup = String(
       TicketInspector({

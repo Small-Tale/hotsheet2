@@ -572,6 +572,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/ticket-display-number.ts # Source-aware local ticket number display; canonical slug remains the routing/copy identity (HS2-04C25A)
     src/annotation-intents.ts # Shape-derived default/primary intent and named colour family for media annotations (HS2-GNQPT4)
     src/search-collapse.ts # Whitespace-only search collapse predicate used on workspace focus handoff (HS2-Y4SHXY)
+    src/search-paste.ts # Plain-text, undoable paste into Kerf search fields ahead of Kerf's own handler (HS2-PQWZRG, KF-TBH48Z)
     src/ticket-blocking.ts   #   Collection-aware unresolved dependency projection matching core Completed/Verified semantics
     src/ticket-detail-cache.ts # Bounded LRU cache of recently viewed full ticket details for skeleton-free reopen (HS2-4Q04Z9)
     src/ticket-operations.ts #   Checkout-scoped field/external undo/redo and structured attachment-aware ticket clipboard operations

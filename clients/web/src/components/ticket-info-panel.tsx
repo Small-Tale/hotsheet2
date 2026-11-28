@@ -19,6 +19,7 @@ import { CircleAlert, Plus } from 'lucide';
 import type { PhaseEstimatePresentation } from '../active-ticket-work';
 import type { StartedPhase } from '../api';
 import type { AttachmentReferenceContext } from '../attachment-references';
+import { parseFeedbackChoices } from '../feedback-choices';
 import { DETAILS_FEEDBACK_ID, detailsRequestFeedback } from '../feedback-needed';
 import type { InlineFeedbackReply } from '../feedback-replies';
 import { ticketFieldConflictNoteId, type TicketFieldConflictPlacement } from '../ticket-field-conflict-placement';
@@ -210,6 +211,10 @@ function LoadedTicketInfoPanel({
       ai_feedback: note.ratingMetadata,
     })),
   );
+  // The sidebar's marked description offers its CHOICE groups as the reader's selectable lists, and
+  // Respond to Feedback carries the selection into the reader (HS2-0MET3B, after HS2-08EAH1).
+  const sidebarDetailsChoices =
+    detailsFeedback && canAddNotes && !readerPresentation && parseFeedbackChoices(details) !== undefined;
   const resolvedTagPopoverId = tagPopoverId ?? 'ticket-tag-popover';
   return (
     <TicketInspectorPanel
@@ -327,6 +332,17 @@ function LoadedTicketInfoPanel({
                 label="Ticket details"
                 editable={canEditText}
                 attachmentContext={attachmentContext}
+                preview={
+                  sidebarDetailsChoices ? (
+                    <FeedbackPrompt
+                      source={details}
+                      id={DETAILS_FEEDBACK_ID}
+                      selectedChoices={feedbackChoiceSelections?.[DETAILS_FEEDBACK_ID]}
+                      attachmentContext={attachmentContext}
+                      replyable={false}
+                    />
+                  ) : undefined
+                }
               />
               {detailsFeedback && canAddNotes && <RespondToFeedbackButton id={DETAILS_FEEDBACK_ID} />}
             </>

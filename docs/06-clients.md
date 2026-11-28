@@ -2173,7 +2173,7 @@ checkout name>`, where the host is the machine name the peer last reported on th
   along with toolbars, toolbar text/control groups, page headers, loading indicators,
   and Lucide rendering; the client does not carry local copies of those primitives.
   The web client pins `kerfjs`, `@kerfjs/ui`, `create-kerf-component`, and
-  `eslint-plugin-kerfjs` at 5.0.0-beta.139 (HS2-23GC8C). Its Kerf/Web Awesome
+  `eslint-plugin-kerfjs` at 5.0.0-beta.140 (HS2-KPZY3Y). Its Kerf/Web Awesome
   spike remains pinned to beta.117 for its compatibility proof (HS2-F83DZZ).
   `npx kerfjs setup --ui --write --yes`, run from `clients/web`, installs the Kerf
   `kerf-app`, `kerf-ui`, and `kerf-ui-design-mock` skills under `clients/web/.claude/skills`
@@ -4179,7 +4179,13 @@ the toolbar grows downward without clipping or moving peer controls. A chip can 
 editable text through its labeled edit action or a double-click, while removal leaves the search
 focused at its former position. The expanded
 search field keeps its single-line 1.5428125rem corner radius as content wraps onto additional
-lines, instead of changing to a different radius. Both workspace and global
+lines, instead of changing to a different radius. A paste into any Kerf search field (workspace
+search, the saved-view query, guidance search, and terminal search) inserts the clipboard's
+plain text only, with line breaks folded to spaces, at the caret and at the field's own type
+size; the caret ends after the pasted text, and Undo removes the paste as one step. Kerf's
+SearchField pastes plain text (KF-BACCQE); until its paste joins the browser's undo history
+(KF-TBH48Z), Hot Sheet inserts it first through the browser's text-insertion command
+(HS2-PQWZRG). Both workspace and global
 ticket search also accept case-insensitive
 `AND`, `OR`, and `NOT`, with parentheses and the conventional `NOT` → `AND` → `OR`
 precedence. `is:` predicates cover Up Next, an unexpired active claim, open (`not_started` or
@@ -5969,7 +5975,12 @@ reader (the production `FeedbackPrompt`, HS2-08EAH1), stacked full width so they
 narrow rail. Its prose stays plain Markdown there (inline replies are written in the reader, and a
 double-click on the prose still opens Edit Note, while a double-click on an option only toggles
 it). Sidebar and reader share one selection state, so Respond to Feedback opens the reader with the
-sidebar's choices already selected and the reader's Respond posts the same response. Reader descriptions
+sidebar's choices already selected and the reader's Respond posts the same response. A marked
+description whose prompt holds `CHOICE` groups shows them in the sidebar the same way, under the
+same shared selection (HS2-0MET3B). Its Details surface keeps click-to-edit: a click, double-click,
+or Enter on the prose opens the description editor, while a click or Space on an option only
+toggles it. Because the surface then holds the option lists, it is a labelled group rather than a
+button. Reader descriptions
 reuse the same Markdown choice selection, inline reply, optional general response, and
 No response needed controls as feedback notes; submitting adds a regular response note.
 Large reader text applies to active feedback prompts and choices as well as ordinary,

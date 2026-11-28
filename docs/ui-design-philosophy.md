@@ -29,6 +29,13 @@ tracks upstream gaps and Hot Sheet adoption work against a dated source snapshot
   finish, merged against that value. Reopening restores an unsaved copy; discrete
   edits such as tag chips save immediately. See [06-clients.md](06-clients.md)
   §6.3 for the full contract.
+- Correcting a note's metadata (timeline summary, type, confidence, response link)
+  deviates from the blur-save rule above and from Kerf's "Actions, feedback, and
+  dialogs" preference for direct editing (HS2-K7CZR2, maintainer decision A). The
+  `NoteMetadataDialog` keeps explicit Cancel and Save, because each field is a
+  deliberate correction of AI-written data that marks the note human-edited, and one
+  dialog serves all four corrections. Nothing saves until Save; Cancel and Escape
+  discard.
 - Minimized ticket readers (HS2-Q8WF64, signed off as design C) follow Kerf's Actions,
   feedback, and dialogs defaults: a reader is modal only while it is restored, and Close All
   confirms only when a draft would be lost. Minimized tickets sit in the workspace's existing
