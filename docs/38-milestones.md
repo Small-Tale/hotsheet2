@@ -397,7 +397,8 @@ registry.
 
 **Live updates.** A member's ticket change event names its old and new milestone id
 (`milestone: { from, to }`, shipped in HS2-A820C1 for server writes and for external edits
-the store watcher sees). A
+the store watcher sees). Rearm reconciliation keeps individual moves alongside the store
+invalidation. The writer and watcher publish each indexed transition once (HS2-X1PCZ6). A
 registry write emits one `milestones_changed` checkout event, and the checkout watcher emits
 it too when a pull changes `.hotsheet2/milestones/`. A client holding a roll-up refetches it
 once. Nothing polls.

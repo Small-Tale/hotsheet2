@@ -237,27 +237,57 @@ impl Project {
 
     /// The ticket events after `cursor` with a milestone move, and the new cursor.
     async fn moves(&self, cursor: u64) -> (Vec<(String, Value)>, u64) {
-        let polled = ok(
+        let polled = self.poll_changes(cursor, 0).await;
+        (milestone_moves(&polled), polled["cursor"].as_u64().unwrap())
+    }
+
+    async fn poll_changes(&self, cursor: u64, timeout_ms: u64) -> Value {
+        let page = ok(
             &self.router,
             "GET",
-            &format!("/ws/poll?since={cursor}&timeout_ms=0"),
+            &format!("/ws/poll?since={cursor}&timeout_ms={timeout_ms}"),
             None,
         )
         .await;
-        let moves = polled["events"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .filter(|event| event.get("milestone").is_some())
-            .map(|event| {
-                (
-                    event["slug"].as_str().unwrap().to_owned(),
-                    event["milestone"].clone(),
-                )
-            })
-            .collect();
-        (moves, polled["cursor"].as_u64().unwrap())
+        assert_eq!(page["overflow"], false, "{page}");
+        page
     }
+
+    /// Follow the returned cursor when the watcher has not published all expected moves yet.
+    async fn awaited_moves(&self, cursor: u64, count: usize) -> (Vec<(String, Value)>, u64) {
+        let mut pages = vec![self.poll_changes(cursor, 0).await];
+        let mut cursor = pages[0]["cursor"].as_u64().unwrap();
+        let mut moves = milestone_moves(&pages[0]);
+        let elapsed = tokio::time::timeout(std::time::Duration::from_secs(2), async {
+            while moves.len() < count {
+                let page = self.poll_changes(cursor, 500).await;
+                cursor = page["cursor"].as_u64().unwrap();
+                moves.extend(milestone_moves(&page));
+                pages.push(page);
+            }
+        })
+        .await;
+        assert!(
+            elapsed.is_ok(),
+            "missing expected milestone moves: {moves:?}; pages: {pages:?}"
+        );
+        (moves, cursor)
+    }
+}
+
+fn milestone_moves(polled: &Value) -> Vec<(String, Value)> {
+    polled["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|event| event.get("milestone").is_some())
+        .map(|event| {
+            (
+                event["slug"].as_str().unwrap().to_owned(),
+                event["milestone"].clone(),
+            )
+        })
+        .collect()
 }
 
 fn slug(t: &Value) -> String {
@@ -322,7 +352,7 @@ async fn hs2_a820c1_checkout_links_resolve_titles_keep_updated_at_and_announce_m
     );
 
     // Relink c, then b; neither changes updated_at; each change event names from and to.
-    let (created_moves, cursor) = p.moves(cursor).await;
+    let (created_moves, cursor) = p.awaited_moves(cursor, 2).await;
     assert_eq!(
         created_moves,
         vec![
@@ -340,7 +370,7 @@ async fn hs2_a820c1_checkout_links_resolve_titles_keep_updated_at_and_announce_m
         .patch(&b, json!({ "milestone": beta, "due_on": "2026-12-01" }))
         .await;
     assert_eq!(moved["updated_at"], b["updated_at"]);
-    let (moves, cursor) = p.moves(cursor).await;
+    let (moves, cursor) = p.awaited_moves(cursor, 2).await;
     assert_eq!(
         moves,
         vec![
@@ -354,8 +384,9 @@ async fn hs2_a820c1_checkout_links_resolve_titles_keep_updated_at_and_announce_m
     let (moves, cursor) = p.moves(cursor).await;
     assert!(moves.is_empty(), "{moves:?}");
     // Clearing with null names the move to none.
-    p.patch(&c, json!({ "milestone": null })).await;
-    let (moves, _) = p.moves(cursor).await;
+    let cleared = p.patch(&c, json!({ "milestone": null })).await;
+    assert!(cleared.get("milestone").is_none());
+    let (moves, _) = p.awaited_moves(cursor, 1).await;
     assert_eq!(moves, vec![(slug(&c), json!({ "from": beta, "to": null }))]);
 
     // List filters across both stores: by title, by id, has/none, effective due.

@@ -1360,14 +1360,14 @@ fn hs2_pt0y8a_full_walk_skips_a_ticket_removed_after_enumeration() {
 
     // The checkout changes after the directory walk, before the index reads this path.
     std::fs::remove_file(&path).unwrap();
-    let mut corrupt_source_changed = false;
+    let mut details = super::ReconcileDetails::default();
     assert_eq!(
         index
-            .reconcile_full_paths(enumerated.clone(), &mut corrupt_source_changed)
+            .reconcile_full_paths(enumerated.clone(), &mut details)
             .unwrap(),
         (0, 1)
     );
-    assert!(!corrupt_source_changed);
+    assert!(!details.corrupt_source_changed);
     assert_eq!(index.ticket_count().unwrap(), 2);
     assert!(
         index
@@ -1380,25 +1380,15 @@ fn hs2_pt0y8a_full_walk_skips_a_ticket_removed_after_enumeration() {
     assert_eq!(index.ticket_count().unwrap(), 2);
 
     std::fs::write(&path, bytes).unwrap();
-    assert_eq!(
-        index
-            .reconcile_full(&store, &mut corrupt_source_changed)
-            .unwrap(),
-        (1, 0)
-    );
-    assert_eq!(
-        index
-            .reconcile_full(&store, &mut corrupt_source_changed)
-            .unwrap(),
-        (0, 0)
-    );
+    assert_eq!(index.reconcile_full(&store, &mut details).unwrap(), (1, 0));
+    assert_eq!(index.reconcile_full(&store, &mut details).unwrap(), (0, 0));
     assert_eq!(index.ticket_count().unwrap(), 3);
 }
 
 #[test]
 fn hs2_pt0y8a_delta_removes_only_not_found_and_preserves_other_io_errors() {
     let (_dir, store, index) = seeded();
-    let mut corrupt_source_changed = false;
+    let mut details = super::ReconcileDetails::default();
     let vanished = ulid("01ARZ3NDEKTSV4RRFFQ69G5FB1");
     let path = store.ticket_path(&vanished);
     let bytes = std::fs::read(&path).unwrap();
@@ -1406,7 +1396,7 @@ fn hs2_pt0y8a_delta_removes_only_not_found_and_preserves_other_io_errors() {
     std::fs::remove_file(&path).unwrap();
     assert_eq!(
         index
-            .reconcile_ids(&store, [vanished], &mut corrupt_source_changed)
+            .reconcile_ids(&store, [vanished], &mut details)
             .unwrap(),
         (0, 1)
     );
@@ -1414,13 +1404,13 @@ fn hs2_pt0y8a_delta_removes_only_not_found_and_preserves_other_io_errors() {
     std::fs::write(&path, bytes).unwrap();
     assert_eq!(
         index
-            .reconcile_ids(&store, [vanished], &mut corrupt_source_changed)
+            .reconcile_ids(&store, [vanished], &mut details)
             .unwrap(),
         (1, 0)
     );
     assert_eq!(
         index
-            .reconcile_ids(&store, [vanished], &mut corrupt_source_changed)
+            .reconcile_ids(&store, [vanished], &mut details)
             .unwrap(),
         (0, 0)
     );
@@ -1429,7 +1419,7 @@ fn hs2_pt0y8a_delta_removes_only_not_found_and_preserves_other_io_errors() {
     std::fs::remove_file(&path).unwrap();
     std::fs::create_dir(&path).unwrap();
     assert!(matches!(
-        index.reconcile_ids(&store, [vanished], &mut corrupt_source_changed),
+        index.reconcile_ids(&store, [vanished], &mut details),
         Err(IndexError::Io(_))
     ));
     assert_eq!(index.ticket_count().unwrap(), 3);

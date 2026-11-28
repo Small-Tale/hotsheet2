@@ -2094,14 +2094,33 @@ pub(crate) fn watch_loop(
         let mut index_changed = false;
         let mut reconciled = true;
         if reconcile {
-            match target
-                .entry
-                .index
-                .lock_or_recover()
-                .reconcile_with_invalidations(&target.entry.store)
-            {
-                Ok((upserted, deleted, corrupt_source_changed)) => {
-                    index_changed = upserted + deleted > 0 || corrupt_source_changed;
+            // Keep reconciliation and publication in one index ownership interval (HS2-X1PCZ6).
+            let index = target.entry.index.lock_or_recover();
+            match index.reconcile_for_watcher(&target.entry.store) {
+                Ok(report) => {
+                    index_changed = report.index_changed;
+                    for change in report.milestone_moves {
+                        emit_change(
+                            &target.event_log,
+                            &target.events,
+                            ChangeEvent {
+                                live: None,
+                                cursor: None,
+                                store: target.store_id.clone(),
+                                kind: "changed".into(),
+                                id: change.id.to_string(),
+                                slug: change.slug,
+                                message: None,
+                                activity: None,
+                                assignment: None,
+                                turn: None,
+                                milestone: Some(crate::events::MilestoneChange {
+                                    from: change.from,
+                                    to: change.to,
+                                }),
+                            },
+                        );
+                    }
                     if index_changed {
                         // Files may have appeared before the replacement native watch.
                         // An aggregate invalidation makes every client reread the index.
@@ -2558,15 +2577,20 @@ pub(crate) fn handle_path_change(target: &WatchTarget, path: &FsPath) -> bool {
     let file = path.display().to_string();
     // HS2-A820C1: an external edit (CLI, pull) that moves the ticket between milestones
     // names both, as a server write does.
-    let previous_milestone = index.with_lock(|index| index.milestone_id(&ticket.id).ok().flatten());
-    repairs.write_or_schedule(&target.entry, &target.store_id, ticket.id, |index| {
-        index.upsert(&ticket, &file, &hash)
-    });
-    emit_with(
-        "changed",
-        ticket.id.to_string(),
-        ticket.slug.clone(),
-        crate::events::MilestoneChange::between(previous_milestone, ticket.milestone.clone()),
+    repairs.upsert_and_publish(
+        &target.entry,
+        &target.store_id,
+        &ticket,
+        &file,
+        &hash,
+        |milestone, _| {
+            emit_with(
+                "changed",
+                ticket.id.to_string(),
+                ticket.slug.clone(),
+                milestone,
+            )
+        },
     );
     true
 }
@@ -3835,6 +3859,86 @@ mod freshness_tests {
         drop(tx);
         looping.join().unwrap();
         std::fs::remove_dir_all(away).unwrap();
+    }
+
+    #[tokio::test]
+    async fn hs2_x1pcz6_rearm_and_patch_publish_each_milestone_move_once() {
+        use axum::{body::Body, http::Request};
+        use http_body_util::BodyExt;
+        use serde_json::{Value, json};
+        use tower::ServiceExt;
+
+        let (dir, store) = store();
+        let mut ticket = create(&store, "Milestone member");
+        let milestone = "84Z13Q0S5X";
+        ticket.milestone = Some(milestone.into());
+        store.write_ticket(&ticket).unwrap();
+
+        let state = crate::AppState::new(store.clone(), "secret".into()).unwrap();
+        let target = super::default_watch_target(&state);
+        let entry = target.entry.clone();
+        let mut events = target.events.subscribe();
+        let (raw, rx) = std::sync::mpsc::channel();
+        let tx = QueuedSender {
+            tx: raw,
+            freshness: entry.freshness.clone(),
+        };
+        let looping = std::thread::spawn(move || watch_loop(rx, target));
+        let tickets = dir.path().join("tickets");
+
+        // Persist the same link removal as PATCH, and let rearm consume the new file before
+        // the route publishes its write. Wait for the aggregate event from that reconcile.
+        ticket.milestone = None;
+        store.write_ticket(&ticket).unwrap();
+        tx.send(Ok(resync_event(&tickets, REARM_RESYNC)));
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                let event = events.recv().await.unwrap();
+                if event.kind == "changed" && event.id.is_empty() {
+                    break;
+                }
+            }
+        })
+        .await
+        .unwrap();
+        state.changed_in(&entry, "updated", &ticket);
+
+        // Reverse the order for relinking: the writer publishes first, then rearm runs.
+        ticket.milestone = Some(milestone.into());
+        store.write_ticket(&ticket).unwrap();
+        state.changed_in(&entry, "updated", &ticket);
+        tx.send(Ok(resync_event(&tickets, REARM_RESYNC)));
+        drop(tx);
+        looping.join().unwrap();
+
+        let reply = crate::app(state)
+            .oneshot(
+                Request::builder()
+                    .uri("/ws/poll?since=0&timeout_ms=0")
+                    .header("x-hotsheet-secret", "secret")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert!(reply.status().is_success());
+        let page: Value =
+            serde_json::from_slice(&reply.into_body().collect().await.unwrap().to_bytes()).unwrap();
+        assert_eq!(page["overflow"], false);
+        let events = page["events"].as_array().unwrap();
+        let moves: Vec<_> = events
+            .iter()
+            .filter_map(|event| event.get("milestone"))
+            .collect();
+        assert_eq!(
+            moves,
+            [
+                &json!({"from": milestone, "to": null}),
+                &json!({"from": null, "to": milestone})
+            ],
+            "{page}"
+        );
+        assert_eq!(page["cursor"], events.last().unwrap()["cursor"]);
     }
 
     #[test]

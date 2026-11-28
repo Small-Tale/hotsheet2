@@ -174,6 +174,43 @@ pub struct TicketSummary {
     pub completion_trend: Vec<u64>,
 }
 
+/// An index reconcile changed one ticket's milestone link (HS2-X1PCZ6).
+pub struct ReconciledMilestoneMove {
+    pub id: Ulid,
+    pub slug: String,
+    pub from: Option<String>,
+    pub to: Option<String>,
+}
+
+/// A watcher reconciliation's index changes and detailed milestone transitions.
+pub struct WatchReconcile {
+    pub index_changed: bool,
+    pub milestone_moves: Vec<ReconciledMilestoneMove>,
+}
+
+#[derive(Default)]
+struct ReconcileDetails {
+    corrupt_source_changed: bool,
+    milestone_moves: Option<Vec<ReconciledMilestoneMove>>,
+}
+
+impl ReconcileDetails {
+    fn record_milestone(&mut self, index: &Index, ticket: &Ticket) -> Result<(), IndexError> {
+        if let Some(moves) = &mut self.milestone_moves {
+            let from = index.milestone_id(&ticket.id)?;
+            if from != ticket.milestone {
+                moves.push(ReconciledMilestoneMove {
+                    id: ticket.id,
+                    slug: ticket.slug.clone(),
+                    from,
+                    to: ticket.milestone.clone(),
+                });
+            }
+        }
+        Ok(())
+    }
+}
+
 /// The index over one store.
 pub struct Index {
     conn: Connection,
@@ -751,6 +788,29 @@ impl Index {
         &self,
         store: &FsStore,
     ) -> Result<(usize, usize, bool), IndexError> {
+        let mut details = ReconcileDetails::default();
+        let (upserted, deleted) = self.reconcile_with_details(store, &mut details)?;
+        Ok((upserted, deleted, details.corrupt_source_changed))
+    }
+
+    /// Reconcile a watched store and retain milestone transitions through the committed write.
+    pub fn reconcile_for_watcher(&self, store: &FsStore) -> Result<WatchReconcile, IndexError> {
+        let mut details = ReconcileDetails {
+            milestone_moves: Some(Vec::new()),
+            ..Default::default()
+        };
+        let (upserted, deleted) = self.reconcile_with_details(store, &mut details)?;
+        Ok(WatchReconcile {
+            index_changed: upserted + deleted > 0 || details.corrupt_source_changed,
+            milestone_moves: details.milestone_moves.unwrap_or_default(),
+        })
+    }
+
+    fn reconcile_with_details(
+        &self,
+        store: &FsStore,
+        details: &mut ReconcileDetails,
+    ) -> Result<(usize, usize), IndexError> {
         // One IMMEDIATE write transaction: each ticket's upsert is several statements (row
         // upsert, then delete + reinsert of its tags/assignees/reviews), so two openers
         // reconciling the same file must not interleave them. The later reconciler waits
@@ -760,17 +820,15 @@ impl Index {
             &self.conn,
             rusqlite::TransactionBehavior::Immediate,
         )?;
-        let mut corrupt_source_changed = false;
-        let (upserted, deleted) =
-            self.reconcile_in_transaction(store, &mut corrupt_source_changed)?;
+        let counts = self.reconcile_in_transaction(store, details)?;
         transaction.commit()?;
-        Ok((upserted, deleted, corrupt_source_changed))
+        Ok(counts)
     }
 
     fn reconcile_in_transaction(
         &self,
         store: &FsStore,
-        corrupt_source_changed: &mut bool,
+        details: &mut ReconcileDetails,
     ) -> Result<(usize, usize), IndexError> {
         // Once an index has a Git baseline, reconcile the union of the committed HEAD
         // delta, current worktree delta, and the previous worktree delta. The last set is
@@ -807,13 +865,13 @@ impl Index {
                     ids.extend(self.previous_dirty_ids()?);
                     ids.sort();
                     ids.dedup();
-                    let result = self.reconcile_ids(store, ids, corrupt_source_changed)?;
+                    let result = self.reconcile_ids(store, ids, details)?;
                     self.write_git_state(&baseline)?;
                     return Ok(result);
                 }
             }
         }
-        let result = self.reconcile_full(store, corrupt_source_changed)?;
+        let result = self.reconcile_full(store, details)?;
         self.record_git_state(store)?;
         Ok(result)
     }
@@ -822,7 +880,7 @@ impl Index {
         &self,
         store: &FsStore,
         ids: impl IntoIterator<Item = Ulid>,
-        corrupt_source_changed: &mut bool,
+        details: &mut ReconcileDetails,
     ) -> Result<(usize, usize), IndexError> {
         let mut upserted = 0;
         let mut deleted = 0;
@@ -838,7 +896,7 @@ impl Index {
                             Ok(ticket) => ticket,
                             Err(error) => {
                                 self.record_source_hash(&id, &hash)?;
-                                *corrupt_source_changed = true;
+                                details.corrupt_source_changed = true;
                                 eprintln!(
                                     "warning: skipping unparseable ticket {}: {error}",
                                     path.display()
@@ -846,6 +904,7 @@ impl Index {
                                 continue;
                             }
                         };
+                        details.record_milestone(self, &ticket)?;
                         self.upsert(&ticket, &path.display().to_string(), &hash)?;
                         upserted += 1;
                     }
@@ -914,15 +973,15 @@ impl Index {
     fn reconcile_full(
         &self,
         store: &FsStore,
-        corrupt_source_changed: &mut bool,
+        details: &mut ReconcileDetails,
     ) -> Result<(usize, usize), IndexError> {
-        self.reconcile_full_paths(ticket_files(store)?, corrupt_source_changed)
+        self.reconcile_full_paths(ticket_files(store)?, details)
     }
 
     fn reconcile_full_paths(
         &self,
         paths: Vec<PathBuf>,
-        corrupt_source_changed: &mut bool,
+        details: &mut ReconcileDetails,
     ) -> Result<(usize, usize), IndexError> {
         let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
         let mut upserted = 0;
@@ -954,7 +1013,7 @@ impl Index {
                     Ok(ticket) => ticket,
                     Err(error) => {
                         self.record_source_hash(&id, &hash)?;
-                        *corrupt_source_changed = true;
+                        details.corrupt_source_changed = true;
                         eprintln!(
                             "warning: skipping unparseable ticket {}: {error}",
                             path.display()
@@ -962,6 +1021,7 @@ impl Index {
                         continue;
                     }
                 };
+                details.record_milestone(self, &ticket)?;
                 self.upsert(&ticket, &path.display().to_string(), &hash)?;
                 upserted += 1;
             }

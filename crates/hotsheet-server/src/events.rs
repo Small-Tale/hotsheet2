@@ -47,6 +47,33 @@ impl IndexRepairs {
         write(&index).map_err(|error| error.to_string())
     }
 
+    /// Publish the transition under the same index lock that observes and updates it.
+    /// The watcher and server cannot both claim a move or see its new row before it is queued.
+    pub(crate) fn upsert_and_publish(
+        &self,
+        entry: &StoreEntry,
+        store_id: &str,
+        ticket: &Ticket,
+        path: &str,
+        hash: &str,
+        publish: impl FnOnce(Option<MilestoneChange>, bool),
+    ) {
+        let mut publish = Some(publish);
+        let mut transition = None;
+        let result = self.write(entry, |index| {
+            let previous = index.milestone_id(&ticket.id).ok().flatten();
+            transition = MilestoneChange::between(previous, ticket.milestone.clone());
+            index.upsert(ticket, path, hash)?;
+            publish.take().expect("publish this write once")(transition.take(), true);
+            Ok(())
+        });
+        if let Err(error) = result {
+            self.schedule(store_id, ticket.id, &error);
+            entry.freshness.set_repairs_pending(true);
+            publish.expect("publish the unreconciled write")(transition, false);
+        }
+    }
+
     /// Log a failed index write and queue that ticket for re-indexing from its file.
     fn schedule(&self, store_id: &str, id: Ulid, error: &str) {
         tracing::warn!(ticket = %id, store = store_id, error, "index write failed; scheduled repair");
@@ -254,42 +281,39 @@ impl AppState {
             let path = entry.store.ticket_path(&t.id).display().to_string();
             let hash = hash_bytes(text.as_bytes());
             let index_started = Instant::now();
-            // HS2-A820C1: the indexed link before this write, so the event names the move.
-            let previous_milestone = entry
-                .index
-                .lock_or_recover()
-                .milestone_id(&t.id)
-                .ok()
-                .flatten();
-            let indexed = self.index_write(entry, |index| index.upsert(t, &path, &hash));
-            index_time += index_started.elapsed();
-            match indexed {
-                // Only a successfully indexed write may suppress its watcher echo; a
-                // failed one leaves the echo free to re-index the file (HS2-JD7TK0).
-                Ok(()) => {
-                    let mut writes = self.local_write_hashes.lock_or_recover();
-                    writes.insert(
-                        (store_id.clone(), t.id.to_string(), hash.clone()),
-                        std::time::Instant::now(),
-                    );
-                }
-                Err(error) => self.schedule_index_repair(&store_id, t.id, &error),
-            }
-            let event_started = Instant::now();
-            self.emit(ChangeEvent {
-                live: None,
-                cursor: None,
-                store: store_id.clone(),
-                kind: kind.to_string(),
-                id: t.id.to_string(),
-                slug: t.slug.clone(),
-                message: None,
-                activity: None,
-                assignment: None,
-                turn: None,
-                milestone: MilestoneChange::between(previous_milestone, t.milestone.clone()),
-            });
-            event_time += event_started.elapsed();
+            self.index_repairs.upsert_and_publish(
+                entry,
+                &store_id,
+                t,
+                &path,
+                &hash,
+                |milestone, indexed| {
+                    index_time += index_started.elapsed();
+                    // A failed index write leaves its echo free to re-index the file (HS2-JD7TK0).
+                    if indexed {
+                        let mut writes = self.local_write_hashes.lock_or_recover();
+                        writes.insert(
+                            (store_id.clone(), t.id.to_string(), hash.clone()),
+                            std::time::Instant::now(),
+                        );
+                    }
+                    let event_started = Instant::now();
+                    self.emit(ChangeEvent {
+                        live: None,
+                        cursor: None,
+                        store: store_id.clone(),
+                        kind: kind.to_string(),
+                        id: t.id.to_string(),
+                        slug: t.slug.clone(),
+                        message: None,
+                        activity: None,
+                        assignment: None,
+                        turn: None,
+                        milestone,
+                    });
+                    event_time += event_started.elapsed();
+                },
+            );
         }
         // The stream owes this write an echo: prove it current, or bridge the store while
         // it lags, so external writes stay visible too (HS2-P702Y8). Never blocks.
