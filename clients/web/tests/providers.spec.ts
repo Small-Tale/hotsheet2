@@ -18215,6 +18215,62 @@ test('schedules an hourly AI command, previews it, edits it to minutes, and relo
   }
 });
 
+// HS2-FMKC4Q: the Commands page header comes and goes across widths. Removing a slot above the keyed
+// work area made Kerf's morph move that node, and without moveBefore (WebKit) the move light-dismissed
+// the open Edit Command popover. The shell now keeps its header slots at every width.
+test('keeps Edit Command open with its draft across a wide-narrow-wide resize (HS2-FMKC4Q) @ci-webkit', async ({
+  page,
+}, testInfo) => {
+  let stored: unknown[] = [{ id: 'checks', title: 'Run checks', program: 'npm', args: ['test'] }];
+  await mockProject(page);
+  await page.route('**/__hotsheet/project-api/*/commands', (route) => {
+    if (route.request().method() === 'GET') return route.fulfill({ json: stored });
+    if (route.request().method() === 'PUT') {
+      stored = route.request().postDataJSON() as unknown[];
+      return route.fulfill({ json: stored });
+    }
+    return route.fallback();
+  });
+  await page.route('**/__hotsheet/project-api/*/command-runs', (route) =>
+    route.request().method() === 'GET' ? route.fulfill({ json: [] }) : route.fallback(),
+  );
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  await openMockedProject(page);
+  await page.getByLabel('Settings View').click();
+  await page.getByRole('button', { name: 'Commands', exact: true }).click();
+  const row = page.locator('[data-component="command-settings-editor"] [data-command-id="checks"]').first(),
+    commandDialog = page.locator('#command-editor-dialog'),
+    label = commandDialog.getByLabel('Button Label');
+  await row.dblclick();
+  await expect(label).toHaveValue('Run checks');
+  await label.fill('Run checks draft');
+  // Tag the open node with an expando (the morph syncs attributes) so a rebuilt dialog cannot pass.
+  await commandDialog.evaluate((node) => Object.assign(node, { fmkc4qProbe: true }));
+  const pageHeader = page.locator('.app-shell__page-header');
+  for (const [name, width, height] of [
+    ['wide', 1440, 900],
+    ['medium', 900, 800],
+    ['narrow', 390, 844],
+    ['wide-again', 1440, 900],
+  ] as const) {
+    await page.setViewportSize({ width, height });
+    // The resize does cross the header's appearance: shown below the wide layout, hidden in it.
+    await expect(pageHeader).toBeVisible({ visible: width < 1440 });
+    await expect(commandDialog).toBeVisible();
+    expect(await commandDialog.evaluate((node) => node.matches(':popover-open'))).toBe(true);
+    expect(await commandDialog.evaluate((node) => 'fmkc4qProbe' in node)).toBe(true);
+    await expect(label).toHaveValue('Run checks draft');
+    await page.screenshot({
+      path: testInfo.outputPath(`hs2-fmkc4q-command-editor-${name}.png`),
+      animations: 'disabled',
+    });
+  }
+  await commandDialog.getByRole('button', { name: 'Done' }).click();
+  await expect.poll(() => commandDialog.evaluate((node) => node.matches(':popover-open'))).toBe(false);
+  await expect.poll(() => (stored[0] as { title?: string }).title).toBe('Run checks draft');
+});
+
 test('runs an AI command action chosen in its editor from the sidebar, and schedules inherit or override it (HS2-17Y2EC)', async ({
   page,
 }, testInfo) => {

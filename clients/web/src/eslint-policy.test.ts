@@ -348,6 +348,15 @@ describe('web ESLint policy', () => {
     expect(flows.match(/@ci-smoke @ci-webkit/g)).toHaveLength(3);
   });
 
+  it('HS2-FMKC4Q runs the Edit Command resize regression in the required WebKit route', () => {
+    // Only engines without moveBefore (WebKit) closed the popover when the morph moved its ancestor.
+    const packageSource = readFileSync(new URL('../package.json', import.meta.url), 'utf8');
+    const script = packageSource.match(/"test:ci:webkit": "([^"]+)"/)?.[1];
+    expect(script).toContain('tests/providers.spec.ts');
+    const spec = readFileSync(new URL('../tests/providers.spec.ts', import.meta.url), 'utf8');
+    expect(spec.match(/wide-narrow-wide resize \(HS2-FMKC4Q\) @ci-webkit'/g)).toHaveLength(1);
+  });
+
   it('HS2-9HPSW9 runs the note click re-flow regression in the required WebKit route', () => {
     // WebKit has no scroll anchoring, so it is the stricter engine for the HS2-628K80 re-flow.
     const packageSource = readFileSync(new URL('../package.json', import.meta.url), 'utf8');
