@@ -13,9 +13,13 @@
 .note-card__time {
   flex: none;
 }
-/* Hover/focus-revealed note actions beside the timestamp. */
+/* Hover/focus-revealed note actions beside the timestamp. At rest they take no inline size
+   (HS2-D6RRST), so the kind label and time keep the header's width; the buttons stay focusable, so
+   Tab reaches them and :focus-within reveals them. A pointer without hover keeps them shown. */
 .note-card__actions {
   display: inline-flex;
+  max-width: 0;
+  overflow: hidden;
   opacity: 0;
   align-items: center;
   gap: var(--kui-space-2xs);
@@ -23,7 +27,16 @@
 }
 .note-card:hover .note-card__actions,
 .note-card:focus-within .note-card__actions {
+  max-width: none;
+  overflow: visible;
   opacity: 1;
+}
+@media (hover: none) {
+  .note-card__actions {
+    max-width: none;
+    overflow: visible;
+    opacity: 1;
+  }
 }
 /* Reading scale (HS2-MGVE50): a reading surface such as the large-text reader sets the unitless
    --hotsheet-reading-scale on its own root; each reading part multiplies its own ordinary size by it

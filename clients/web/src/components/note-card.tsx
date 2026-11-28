@@ -491,9 +491,13 @@ export function NoteCard({
     >
       <Row className="note-card__header" hAlign="space-between" vAlign="middle" gap="m">
         <strong class="note-card__kind">
+          {/* HS2-D6RRST: one line; when revealed note actions leave too little room, Kerf truncation
+              ellipsizes the label (keeping it as the title) rather than wrapping or pushing the time out. */}
           <Text
             variant="span"
             size="compact"
+            wrap="truncate"
+            title={title ?? presentation.label}
             color={
               kind === 'feedback_needed' || kind === 'feedback_draft'
                 ? uiColor('warning-on-quiet')
@@ -508,7 +512,8 @@ export function NoteCard({
             {title ?? presentation.label}
           </Text>
         </strong>
-        <Row className="note-card__header-end" vAlign="middle" gap="2xs">
+        {/* The trailing group never shrinks (HS2-D6RRST); the kind label absorbs a tight width. */}
+        <Row className="note-card__header-end" vAlign="middle" gap="2xs" flex="none">
           {repairable && !responseRemoved && (
             <PopupMenu
               label="Note Actions"

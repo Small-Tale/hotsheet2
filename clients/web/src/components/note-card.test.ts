@@ -27,6 +27,31 @@ describe('NoteCard', () => {
       'AI Fix This Note',
     );
   });
+  it('HS2-D6RRST keeps the header label on one truncating line beside a non-shrinking trailing group', () => {
+    const markup = String(
+      NoteCard({
+        id: 'synthetic-note',
+        kind: 'feedback_needed',
+        author: 'Codex',
+        time: '45d ago',
+        body: 'Which store?',
+        repairable: true,
+        editable: true,
+        deletable: true,
+      }),
+    );
+    // The label is Kerf Text truncation that keeps the full label as its title.
+    expect(markup).toMatch(/class="note-card__kind"><span title="Feedback needed"[^>]*data-wrap="truncate"/u);
+    // Edit Note and Delete Note render in the collapsible actions span before the time.
+    expect(markup).toMatch(
+      /note-card__actions"[\s\S]*Edit Note[\s\S]*Delete Note[\s\S]*<time class="note-card__time">/u,
+    );
+    // The collapsed actions take no width at rest and reveal on hover, focus, or a hover-less pointer.
+    const css = readFileSync(resolve(import.meta.dirname, 'note-card.css'), 'utf8');
+    expect(css).toMatch(/\.note-card__actions \{[^}]*max-width: 0;[^}]*overflow: hidden;/u);
+    expect(css).toMatch(/\.note-card:focus-within \.note-card__actions \{[^}]*max-width: none;/u);
+    expect(css).toMatch(/@media \(hover: none\) \{\s*\.note-card__actions \{[^}]*max-width: none;/u);
+  });
   it('HS2-Q0GWXT keeps manual metadata actions visible with provider and response reasons', () => {
     const base = {
       id: 'synthetic-note',
