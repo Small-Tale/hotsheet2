@@ -396,6 +396,7 @@ notifications-and-links	wireNotificationSettings	document.body
 notifications-and-links	wireRemoteDevicesSettings	document.body
 notifications-and-links	wireRegisteredProjectsSettings	document.body
 search-and-composer	wireTicketSearchFields	document.body
+search-and-composer	delegateCapture	document.body	'paste'	'[data-search-field-editor]'
 search-and-composer	wireSearchFields	document.body
 search-and-composer	document.addEventListener	'pointerdown'
 search-and-composer	document.addEventListener	'pointerup'

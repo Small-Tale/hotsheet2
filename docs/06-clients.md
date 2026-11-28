@@ -4179,7 +4179,13 @@ the toolbar grows downward without clipping or moving peer controls. A chip can 
 editable text through its labeled edit action or a double-click, while removal leaves the search
 focused at its former position. The expanded
 search field keeps its single-line 1.5428125rem corner radius as content wraps onto additional
-lines, instead of changing to a different radius. Both workspace and global
+lines, instead of changing to a different radius. A paste into any Kerf search field (workspace
+search, the saved-view query, guidance search, and terminal search) inserts the clipboard's
+plain text only, with line breaks folded to spaces, at the caret and at the field's own type
+size; the caret ends after the pasted text, and Undo removes the paste as one step. Kerf's
+SearchField pastes plain text (KF-BACCQE); until its paste joins the browser's undo history
+(KF-TBH48Z), Hot Sheet inserts it first through the browser's text-insertion command
+(HS2-PQWZRG). Both workspace and global
 ticket search also accept case-insensitive
 `AND`, `OR`, and `NOT`, with parentheses and the conventional `NOT` → `AND` → `OR`
 precedence. `is:` predicates cover Up Next, an unexpired active claim, open (`not_started` or

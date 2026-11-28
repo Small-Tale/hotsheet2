@@ -1,7 +1,7 @@
 import { readSearchField } from '@kerfjs/ui/search-field';
 import type { SearchFieldModel } from '@kerfjs/ui/search-field-model';
 import { wireSearchFields } from '@kerfjs/ui/wire-search-fields';
-import { attr, delegate, type Signal } from 'kerfjs';
+import { attr, delegate, delegateCapture, type Signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
 import { type TicketRow as WireTicketRow } from '../api';
@@ -21,6 +21,7 @@ import { draftFiles } from '../draft-file-recovery';
 import { type InlineSearchToken } from '../inline-search';
 import { restoreInlineSearchCaret } from '../inline-search-caret';
 import { isWhitespaceOnlySearch, keepSearchOpenForShadowTarget } from '../search-collapse';
+import { pastePlainSearchText } from '../search-paste';
 import { TERMINAL_SEARCH_FIELD_ID } from '../terminal-search';
 import { type BulkTicketAction } from '../ticket-bulk-operations';
 import { saveLastTicketCategory } from '../ticket-category-preference';
@@ -210,6 +211,13 @@ export function wireSearchAndComposerInteractions(dependencies: SearchAndCompose
           focusField(id, offset === undefined ? undefined : offset + raw.length);
         });
       },
+    }),
+  );
+  // Every search field pastes plain text that Undo can reverse. Registered before Kerf's own
+  // capture paste handler, which then skips the default-prevented event (HS2-PQWZRG, KF-TBH48Z).
+  lifetime.add(
+    delegateCapture(document.body, 'paste', '[data-search-field-editor]', (event, target) => {
+      pastePlainSearchText(event as ClipboardEvent, target as HTMLElement);
     }),
   );
   // Kerf owns the token-search editor chrome, collapsible reveal/focus/Escape/empty-blur, Enter
