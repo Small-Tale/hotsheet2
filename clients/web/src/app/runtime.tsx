@@ -6651,6 +6651,7 @@ export async function startHotSheetWebClient() {
       expandedCodeReviewCommits,
       fieldConflict,
       fieldConflictResolution,
+      feedbackChoiceSelections: readerFeedbackChoiceSelections,
       inspectorTab,
       liveClaimNotice,
       advisoryClaimNotice,

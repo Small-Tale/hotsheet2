@@ -130,6 +130,9 @@ describe('ticket content editor wiring (HS2-KM3DNM)', () => {
     handler('dblclick', 'data-feedback-prompt-body')(onText, body);
     // A double-click on a link inside the prompt keeps the link's own action.
     handler('dblclick', 'data-feedback-prompt-body')(onLink, body);
+    // HS2-08EAH1: a double-click on a sidebar choice option is two toggles, never Edit Note.
+    const onChoice = { target: { closest: (selector: string) => (selector.includes('[data-choice-id]') ? {} : null) } };
+    handler('dblclick', 'data-feedback-prompt-body')(onChoice, body);
     expect(bindings.beginPrompt.mock.calls).toEqual([
       ['p1', button],
       ['p1', body],

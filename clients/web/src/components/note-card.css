@@ -72,6 +72,11 @@
   min-width: 0;
   padding: var(--kui-space-2xs);
 }
+/* The sidebar's non-replyable prompt (HS2-08EAH1) has no response-target blocks to align with, so its
+   prose and questions sit on the note body's own edge. */
+.note-card__feedback-prompt[data-replyable='false'] .note-card__feedback-question {
+  padding: 0;
+}
 .note-card__feedback-block {
   position: relative;
   min-width: 0;

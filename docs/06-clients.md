@@ -5959,7 +5959,13 @@ can present either state without loading full ticket notes.
 In the sidebar inspector, each pending feedback note or marked description has a full-width
 **Respond to Feedback** action directly below its body. It is omitted from answered asks
 and from reader mode itself. Activating it opens reader mode on Info,
-scrolls the active source into view, and focuses its response editor. Reader descriptions
+scrolls the active source into view, and focuses its response editor. A pending feedback note
+whose prompt holds `CHOICE` groups shows them in the sidebar as the same selectable lists as the
+reader (the production `FeedbackPrompt`, HS2-08EAH1), stacked full width so they wrap in the
+narrow rail. Its prose stays plain Markdown there (inline replies are written in the reader, and a
+double-click on the prose still opens Edit Note, while a double-click on an option only toggles
+it). Sidebar and reader share one selection state, so Respond to Feedback opens the reader with the
+sidebar's choices already selected and the reader's Respond posts the same response. Reader descriptions
 reuse the same Markdown choice selection, inline reply, optional general response, and
 No response needed controls as feedback notes; submitting adds a regular response note.
 Large reader text applies to active feedback prompts and choices as well as ordinary,

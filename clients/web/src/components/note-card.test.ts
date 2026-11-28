@@ -353,6 +353,38 @@ describe('NoteCard', () => {
     expect(markup).toContain('placeholder="Additional response (optional)"');
   });
 
+  it('HS2-08EAH1 offers selectable choice groups on a sidebar prompt without inline reply targets', () => {
+    const props = {
+      id: 'sidebar-choices',
+      kind: 'feedback_needed' as const,
+      author: 'Codex',
+      time: 'Now',
+      body: 'Two decisions.\n\nCHOICE: Which store?\n- Ticket store\n- Document store\n\nCHOICE: When?\n- On launch\n- On command\n- Never\n\nAnything else?',
+      respondToFeedback: true,
+      selectedChoices: ['choice-2'],
+    };
+    const markup = String(NoteCard(props));
+    expect(markup.match(/role="grid"/g)).toHaveLength(2);
+    expect(markup).toContain('aria-label="Feedback Choices 1: Which store?"');
+    expect(markup).toContain('aria-label="Feedback Choices 2: When?"');
+    expect(markup.match(/data-action="toggle-feedback-choice"/g)).toHaveLength(5);
+    expect(markup.match(/aria-selected="true"/g)).toHaveLength(1);
+    expect(markup).not.toContain('CHOICE:');
+    // The prose stays plain: inline replies belong to the reader, and no response editor opens here.
+    expect(markup).not.toContain('add-inline-feedback-reply');
+    expect(markup).not.toContain('name="note-body"');
+    expect(markup).toContain('data-replyable="false"');
+    expect(markup).toContain('data-feedback-prompt-body="true"');
+    expect(markup).toContain('data-action="respond-to-feedback"');
+    // The reader keeps its own replyable prompt; answered (regular) and choice-less prompts stay prose.
+    const reader = String(NoteCard({ ...props, readerMode: true }));
+    expect(reader).toContain('add-inline-feedback-reply');
+    expect(reader).not.toContain('data-replyable');
+    expect(String(NoteCard({ ...props, kind: 'regular' }))).not.toContain('toggle-feedback-choice');
+    expect(String(NoteCard({ ...props, body: 'Please answer' }))).not.toContain('toggle-feedback-choice');
+    expect(String(NoteCard({ ...props, editing: true, editingPrompt: true }))).not.toContain('toggle-feedback-choice');
+  });
+
   it('renders multi-line and lettered choice details under each label (HS2-EWF0FT)', () => {
     const markup = String(
       NoteCard({
