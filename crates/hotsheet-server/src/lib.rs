@@ -1843,7 +1843,7 @@ pub fn app(state: AppState) -> Router {
         // The latest CI run a local tool observed (HS2-M8HHEA); no inbound exposure.
         .route(
             "/checkouts/{reference}/ci-status",
-            post(ci_status::report_ci_status),
+            post(ci_status::report_ci_status).delete(ci_status::clear_ci_status),
         )
         .route(
             "/checkouts/{reference}/worker-plan",

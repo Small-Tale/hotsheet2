@@ -194,6 +194,9 @@ describe('newestCi (HS2-E16ZEK)', () => {
       shortSha: '1a2b3c4',
       ageMs: 12 * MIN,
       runUrl: 'https://ci.example.test/runs/7',
+      // HS2-7PSBHQ: the run Clear CI Status would name.
+      checkout: 'demo-ab12',
+      reportedAtMs: NOW - 12 * MIN,
     });
   });
 
@@ -208,6 +211,17 @@ describe('newestCi (HS2-E16ZEK)', () => {
         reported_at_ms: NOW - MIN,
       }),
     });
-    expect(newestCi([running], NOW)).toEqual({ status: 'in_progress', branch: 'main', ageMs: 20 * MIN });
+    expect(newestCi([running], NOW)).toEqual({
+      status: 'in_progress',
+      branch: 'main',
+      ageMs: 20 * MIN,
+      checkout: 'demo-ab12',
+      reportedAtMs: NOW - MIN,
+    });
+    // A report without a checkout or report time names no run to clear (HS2-7PSBHQ).
+    const anonymous = liveStateFixture({ ci: ci({ checkout: null, reported_at_ms: null }) });
+    const shown = newestCi([anonymous], NOW);
+    expect(shown.checkout).toBeUndefined();
+    expect(shown.reportedAtMs).toBeUndefined();
   });
 });

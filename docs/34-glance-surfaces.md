@@ -224,6 +224,14 @@ the default) and `m1-project-sidebar-live-{light,dark}` (expanded).
   `main CI unknown` with `seen 2h 05m ago`, without the sha so it fits the sidebar; the Stats tile word is a
   quiet `Unknown`, like `No CI reported`. The display clock stops at the bound. A GitHub Actions run is
   normally followed to its end by the server first ([32](32-notifier-plugins.md) §32.8.5).
+- **Clear CI Status (HS2-7PSBHQ, shipped).** While the run shows as unknown, right-clicking the Live section
+  (or pressing the context-menu key on its focused toggle) opens a Kerf `PopupMenu` context menu, as for the
+  other sidebar entries, with one item, **Clear CI Status** (Lucide `eraser`). It asks the project's server to
+  forget that stored run (`DELETE /checkouts/{reference}/ci-status` with the run's `reported_at_ms`, so a
+  newer report is never cleared unseen); the pushed live state then removes the chip and row. Outside presses
+  and Escape close the menu. The Live section is one toggle button, so there is no nested overflow button;
+  other CI states offer no menu and keep the browser's own. A restarted server also re-checks such a run once
+  ([32](32-notifier-plugins.md) §32.8.5).
 - **Remote project tabs (HS2-4R99XY).** A cross-server tab shows the same gauges and chips, from the remote
   server's own live state. The browser's `remote:<binding>:<checkout>` id never equals the remote server's
   checkout id, and the remote server may host a store whose id the local server also uses, so each remote

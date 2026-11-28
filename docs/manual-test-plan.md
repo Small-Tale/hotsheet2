@@ -168,6 +168,19 @@ stale branch. Have each collaborator preserve local work, restore to the exact r
 head, run `hotsheet checkout compact <source> <project> --recover`, and resume writes.
 Keep the mirror backup until both confirm recovery. No real shared store is rewritten.
 
+### Stale main CI re-check against real GitHub (HS2-7PSBHQ)
+
+With `gh auth status` signed in and a project whose `ci-status.json` holds a
+`main` run reported `in_progress` more than 6 hours ago (report one with
+`hotsheet-cli ci report --status in_progress` and a real finished run's
+40-character `--sha`, `--run-url`, `--workflow`, `--branch main`, then stop the
+server and set its `reported_at_ms` back), restart the server. Within a few
+minutes the sidebar's `CI · unknown` chip turns into that run's real verdict
+(no chip for a pass, `CI failed` for a failure) with no further report. Then
+report another stale run without a token available, confirm it stays
+`CI · unknown`, right-click the Live section, choose Clear CI Status, and
+confirm the chip goes away and `hotsheet-cli live-state` shows `unavailable`.
+
 ### Launched-agent sandbox recovery (HS2-DVZXSD)
 
 Launch Claude Code and Codex for a project whose ticket store is the sibling

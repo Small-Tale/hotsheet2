@@ -636,6 +636,13 @@ public URL is needed, and the source is independent of the ticket provider.
   - **Bounds.** A run is followed for 6 hours after its report, GitHub Actions' default job timeout;
     then the follower asks the watch to stop watching. A restarted server follows again the stored
     runs still in flight that were reported within that time.
+  - **Re-check after a restart (HS2-7PSBHQ).** A stored run still in flight that was reported
+    before that window (its follower never started: an older server, no token then, or a server
+    stopped for the whole run) is re-checked once when the server starts. A retained watch of the
+    same target with a verdict records that verdict at once; otherwise the watch is ensured again and
+    followed for at most 15 minutes, enough for the monitor's first observations of a run that ended
+    long ago. The server still never polls. With no token, no monitor, or another CI's run, nothing
+    is re-checked, and the run stays unknown until it is cleared or a newer run is reported.
   - **Not followed.** Another CI's URL, a run without the fields above, a run this server already
     follows (`follow: following`; `ensure_ci_watch` also keeps one Job per target across processes),
     no GitHub token (`GH_TOKEN`, `GITHUB_TOKEN`, or a successful `gh auth token`, checked at most
@@ -653,6 +660,15 @@ public URL is needed, and the source is independent of the ticket provider.
   project's main CI (about 35 minutes), and a followed GitHub run gets its verdict well before then.
   The client computes it (`clients/web/src/ci-staleness.ts`) from the pushed timestamps and its
   render-only display clock, so the server pushes nothing for it.
+- **Clearing a run (HS2-7PSBHQ).** `DELETE /checkouts/{reference}/ci-status` forgets the run
+  stored for a checkout; with `reported_at_ms`, only while the stored run is still the one reported
+  then, so a newer report is kept. The answer names the checkout, whether it `cleared`, the run
+  still stored (or `unavailable`), and the linked stores, whose live state is pushed again and then
+  shows the newest run another linked checkout reported, or none. It is idempotent, and the next
+  report stores a run again; the provider keeps the run itself. The headless form is
+  `hotsheet-cli ci clear [--checkout <ref>] [--reported-at-ms <ms>]`, and the project sidebar's Live
+  section offers it as **Clear CI Status** while the run shows as unknown
+  ([34](34-glance-surfaces.md)). Unknown runs are not cleared on their own.
 - **Other CI systems.** Any CI that can run a command on the developer's machine, or a local
   watcher that learns of a run, reports it the same way, for example:
   `hotsheet-cli ci report --status success --branch main --sha <commit> --workflow <name>

@@ -515,6 +515,8 @@ describe('UX demo catalog', () => {
       'lucide-icon-picker': 'Icon-picker sub-control of CommandSettingsEditor (demoed).',
       'project-restore-error': 'Project-restore failure state rendered within AppShell (demoed).',
       'project-tab-context-menu': 'Context menu for ProjectTabBar (demoed via ProjectTabBar).',
+      'live-ci-context-menu':
+        'Clear CI Status context menu for ProjectLiveSection (HS2-7PSBHQ; demoed via ProjectLiveSection).',
       'provider-model-effort-menu':
         'Shared Provider/Model/Effort submenu composed into DriveOptionsMenu and AIConversation (demoed).',
       'repository-setup': 'Initialize/remote setup steps rendered within RepositoryStatusPopover (demoed).',

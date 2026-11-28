@@ -440,6 +440,97 @@ test('HS2-CC7TCB shows a stale running CI report as unknown, without a clock', a
   }
 });
 
+// HS2-7PSBHQ: a run reported running and never ended stayed `CI · unknown` with no way to clear it. While it
+// shows as unknown, the shipped sidebar's Live section opens a context menu (right-click, or the context-menu
+// key on its focused toggle) with Clear CI Status; choosing it makes the real server forget the stored run, and
+// the pushed live state removes the chip. A run that is not unknown offers no menu. Captured wide, medium,
+// narrow and wide again, light and dark, with the menu open.
+test('HS2-7PSBHQ clears a stale CI report from the Live section context menu', async ({ page, browserName }) => {
+  test.setTimeout(150_000);
+  const server = await realTicketServer();
+  try {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await openProject(page, server);
+    const sidebar = page.locator('section[aria-label="Project sidebar"]').first();
+    const live = sidebar.locator('[data-component="project-live-section"]');
+    await expect(live).toHaveAttribute('data-mode', 'compact', { timeout: 30_000 });
+    const chip = live.locator('[data-live-chip="ci"]'),
+      menu = page.locator('[data-context-menu="live-ci"]'),
+      item = menu.getByRole('menuitem', { name: 'Clear CI Status' });
+
+    // A fresh running report offers no menu: right-click leaves the browser's own.
+    await server.request(`/checkouts/${server.checkoutId}/ci-status`, 'POST', {
+      status: 'in_progress',
+      branch: 'main',
+      sha: '8f6c8d81f0a1',
+      workflow: 'CI',
+      started_at_ms: Date.now() - 5 * 60_000,
+    });
+    await expect(chip).toHaveText(/^CI · \d+:\d\d$/u, { timeout: 30_000 });
+    await expect(live).not.toHaveAttribute('data-ci-clear-checkout', /./u);
+    await chip.click({ button: 'right' });
+    await expect(menu).toHaveCount(0);
+
+    // Two hours and ten minutes later the run shows as unknown and names the run Clear CI Status forgets.
+    await page.clock.setFixedTime(Date.now() + (2 * 60 + 10) * 60_000);
+    await expect(chip).toHaveText('CI · unknown', { timeout: 30_000 });
+    await expect(live).toHaveAttribute('data-ci-clear-checkout', server.checkoutId);
+
+    // Right-click opens the menu at the pointer; Escape closes it; the context-menu key on the focused
+    // toggle opens it again below the toggle.
+    await chip.click({ button: 'right' });
+    await expect(item).toBeVisible();
+    await expect(item.locator('[data-lucide="eraser"]')).toBeAttached();
+    await page.keyboard.press('Escape');
+    await expect(menu).toHaveCount(0);
+    const toggle = live.getByRole('button', { name: /^Show live details\. / });
+    await toggle.focus();
+    await toggle.dispatchEvent('contextmenu', { clientX: 0, clientY: 0, bubbles: true, cancelable: true });
+    await expect(item).toBeVisible();
+    // Opening the menu does not switch the section's mode.
+    await expect(live).toHaveAttribute('data-mode', 'compact');
+
+    const capture = async (name: string) => {
+      // The menu fades in; capture it settled.
+      if (await menu.count())
+        await menu.evaluate((node) =>
+          Promise.all(node.getAnimations({ subtree: true }).map((animation) => animation.finished)),
+        );
+      await page.screenshot({ path: `target/visual-captures/hs2-7psbhq-${browserName}-${name}.png` });
+    };
+    for (const width of [1280, 1024, 390, 1280]) {
+      await page.keyboard.press('Escape');
+      await expect(menu).toHaveCount(0);
+      await page.setViewportSize({ width, height: 900 });
+      const showSidebar = page.getByRole('button', { name: 'Show Project Sidebar' });
+      if (await showSidebar.isVisible()) await showSidebar.click();
+      await chip.click({ button: 'right' });
+      await expect(item).toBeVisible();
+      const box = await item.boundingBox();
+      expect((box?.x ?? -1) >= 0 && (box?.x ?? 0) + (box?.width ?? 0) <= width).toBe(true);
+      await capture(`menu-${width}`);
+    }
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await capture('menu-dark-1280');
+    await page.emulateMedia({ colorScheme: 'light' });
+
+    await item.click();
+    await expect(menu).toHaveCount(0);
+    await expect(chip).toHaveCount(0, { timeout: 30_000 });
+    await expect(live).not.toHaveAttribute('data-ci-clear-checkout', /./u);
+    // The server forgot the run: its live state reports none, and the expanded section has no CI row.
+    const state = await server.request<{ stores: { ci: { status: string } }[] }>('/live-state');
+    expect(state.stores.map((store) => store.ci.status)).toEqual(['unavailable']);
+    await toggle.click();
+    await expect(live).toHaveAttribute('data-mode', 'expanded');
+    await expect(live.locator('[data-live-row="ci"]')).toHaveCount(0);
+    await page.mouse.move(640, 880);
+    await capture('cleared-expanded-1280');
+  } finally {
+    await server.stop(page);
+  }
+});
+
 // HS2-4R99XY: a cross-server (remote) project tab shows the same Live gauges and badges as a local one. The
 // browser's `remote:<binding>:<checkout>` id never equals the remote server's checkout id, so the section reads
 // the tab's own live store by the remote checkout id; a reported failing run still reaches its chip.

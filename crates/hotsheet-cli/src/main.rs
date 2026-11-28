@@ -549,6 +549,7 @@ enum Cmd {
     },
     /// Report a CI run to the local server, which pushes it as `main` CI in the live state of
     /// the checkout's linked stores (HS2-M8HHEA). Meant for the tool already watching CI.
+    /// `ci clear` forgets a stored run (HS2-7PSBHQ).
     Ci {
         #[command(subcommand)]
         cmd: CiCmd,

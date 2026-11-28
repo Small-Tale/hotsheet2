@@ -500,6 +500,19 @@ pub(crate) enum CiCmd {
         #[arg(long)]
         finished_at_ms: Option<i64>,
     },
+    /// Forget the CI run stored for a checkout (HS2-7PSBHQ), such as one last reported
+    /// running long ago whose end nobody reported. Idempotent; prints whether a run was
+    /// cleared and the run still stored. The next report stores a run again.
+    Clear {
+        /// A registered checkout id, alias, or root. Defaults to the checkout of the current
+        /// directory that links the selected store.
+        #[arg(long)]
+        checkout: Option<String>,
+        /// Clear only while the stored run is the one reported at this time (its
+        /// `reported_at_ms`), so a newer report is kept.
+        #[arg(long)]
+        reported_at_ms: Option<i64>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -939,17 +952,43 @@ fn cmd_live_state(store: &Path, all: bool) -> Result<()> {
 
 /// Report a CI run (HS2-M8HHEA) through the same `POST /checkouts/{reference}/ci-status`
 /// route any other reporter uses; the server validates it and pushes it in the live state.
+/// `ci clear` (HS2-7PSBHQ) forgets the stored run through `DELETE` on the same route.
 fn cmd_ci(store: &Path, cmd: CiCmd) -> Result<()> {
-    let CiCmd::Report {
-        status,
-        checkout,
-        branch,
-        sha,
-        run_url,
-        workflow,
-        started_at_ms,
-        finished_at_ms,
-    } = cmd;
+    let (checkout, method, body, query) = match cmd {
+        CiCmd::Report {
+            status,
+            checkout,
+            branch,
+            sha,
+            run_url,
+            workflow,
+            started_at_ms,
+            finished_at_ms,
+        } => (
+            checkout,
+            "POST",
+            Some(serde_json::json!({
+                "status": status,
+                "branch": branch,
+                "sha": sha,
+                "run_url": run_url,
+                "workflow": workflow,
+                "started_at_ms": started_at_ms,
+                "finished_at_ms": finished_at_ms,
+            })),
+            String::new(),
+        ),
+        // HS2-7PSBHQ: the headless form of the sidebar's Clear CI Status.
+        CiCmd::Clear {
+            checkout,
+            reported_at_ms,
+        } => (
+            checkout,
+            "DELETE",
+            None,
+            reported_at_ms.map_or_else(String::new, |at| format!("?reported_at_ms={at}")),
+        ),
+    };
     let checkout = match checkout {
         Some(checkout) => checkout,
         None => {
@@ -967,20 +1006,14 @@ fn cmd_ci(store: &Path, cmd: CiCmd) -> Result<()> {
                 .into_owned()
         }
     };
-    let body = serde_json::json!({
-        "status": status,
-        "branch": branch,
-        "sha": sha,
-        "run_url": run_url,
-        "workflow": workflow,
-        "started_at_ms": started_at_ms,
-        "finished_at_ms": finished_at_ms,
-    });
     let answer = local_server_json_with_body(
         store,
-        "POST",
-        &format!("checkouts/{}/ci-status", urlencoding_component(&checkout)),
-        Some(&body),
+        method,
+        &format!(
+            "checkouts/{}/ci-status{query}",
+            urlencoding_component(&checkout)
+        ),
+        body.as_ref(),
     )?;
     println!("{}", serde_json::to_string_pretty(&answer)?);
     Ok(())

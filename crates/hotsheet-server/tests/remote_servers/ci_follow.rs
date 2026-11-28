@@ -238,3 +238,157 @@ async fn hs2_cc7tcb_no_token_another_ci_or_no_monitor_follows_nothing_and_a_rest
     assert_eq!(ci["sha"], sha.as_str());
     assert_eq!(ci["finished_at_ms"], UPDATED_MS);
 }
+
+/// A stored run reported `hours` ago and never ended, as an older server left it.
+fn store_stale_run(home: &Path, checkout: &str, sha: &str, hours: i64) -> i64 {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as i64;
+    let reported = now - hours * 60 * 60 * 1000;
+    let file = json!({"version": 1, "checkouts": {checkout: {
+        "status": "in_progress", "branch": "main", "sha": sha, "run_url": RUN_PAGE,
+        "workflow": "CI", "started_at_ms": CREATED_MS, "finished_at_ms": null,
+        "reported_at_ms": reported}}});
+    std::fs::create_dir_all(home).unwrap();
+    std::fs::write(
+        hotsheet_server::ci_status::ci_status_path(home),
+        serde_json::to_vec(&file).unwrap(),
+    )
+    .unwrap();
+    reported
+}
+
+/// HS2-7PSBHQ: a run reported in flight 36 h ago, before any follower, and never ended
+/// showed `CI · unknown` for good. A restarted server re-checks it once and records the
+/// verdict GitHub has; a later restart settles from the retained watch's verdict without
+/// starting another watch.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn hs2_7psbhq_a_restart_rechecks_a_run_left_in_flight_past_the_follow_window() {
+    assert!(hotsheet_aitools::test_permission_vault_available());
+    hotsheet_aitools::enable_test_permission_vault();
+    let provider = Provider::default();
+    let url = provider.start();
+    let fx = fixture();
+    let sha = "3".repeat(40);
+    provider.run(9, &sha, Some("success"));
+    store_stale_run(&fx.home, &fx.checkout, &sha, 36);
+
+    let restarted = state(&fx.source, &fx.home)
+        .with_ci_follow(CiFollow::new(Some(monitor(&url)), Arc::new(Token(true))));
+    let _router = app(restarted.clone());
+    let mut events = restarted.subscribe();
+    restarted.spawn_ci_follow_recovery();
+    let ci = next_ci(&mut events, |ci| ci["status"] == "success").await;
+    assert_eq!(ci["sha"], sha.as_str());
+    assert_eq!(ci["finished_at_ms"], UPDATED_MS);
+    let jobs = JobStore::at(&fx.home).list(&fx.checkout).unwrap().jobs;
+    assert_eq!(jobs.len(), 1, "one re-check watch");
+
+    // The same stale report again (an older server wrote it back): the retained green
+    // watch settles it at once, and no second watch starts.
+    store_stale_run(&fx.home, &fx.checkout, &sha, 36);
+    let again = state(&fx.source, &fx.home)
+        .with_ci_follow(CiFollow::new(Some(monitor(&url)), Arc::new(Token(true))));
+    let _router = app(again.clone());
+    let mut events = again.subscribe();
+    again.spawn_ci_follow_recovery();
+    let ci = next_ci(&mut events, |ci| ci["status"] == "success").await;
+    assert_eq!(ci["sha"], sha.as_str());
+    assert_eq!(
+        JobStore::at(&fx.home)
+            .list(&fx.checkout)
+            .unwrap()
+            .jobs
+            .len(),
+        1
+    );
+    assert_eq!(again.ci_follow().following(), 0);
+}
+
+/// HS2-7PSBHQ: `DELETE /checkouts/{reference}/ci-status` forgets the stored run the caller
+/// saw, pushes the linked store's live state without it, keeps a newer report, and is
+/// idempotent.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn hs2_7psbhq_clearing_forgets_only_the_run_the_caller_saw() {
+    let fx = fixture();
+    let sha = "4".repeat(40);
+    let reported = store_stale_run(&fx.home, &fx.checkout, &sha, 36);
+    let host =
+        state(&fx.source, &fx.home).with_ci_follow(CiFollow::new(None, Arc::new(Token(false))));
+    let router = app(host.clone());
+    let mut events = host.subscribe();
+    let route = format!("/checkouts/{}/ci-status", fx.checkout);
+
+    // Unauthenticated callers cannot clear.
+    let (status, _) = api(router.clone(), "DELETE", &route, Value::Null, false).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    // A run reported at another time than the one named is kept.
+    let (status, kept) = api(
+        router.clone(),
+        "DELETE",
+        &format!("{route}?reported_at_ms={}", reported - 1),
+        Value::Null,
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{kept}");
+    assert_eq!(kept["cleared"], false);
+    assert_eq!(kept["ci"]["status"], "in_progress");
+    assert_eq!(kept["ci"]["reported_at_ms"], reported);
+
+    let (status, cleared) = api(
+        router.clone(),
+        "DELETE",
+        &format!("{route}?reported_at_ms={reported}"),
+        Value::Null,
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{cleared}");
+    assert_eq!(cleared["checkout"], fx.checkout.as_str());
+    assert_eq!(cleared["cleared"], true);
+    assert_eq!(cleared["ci"]["status"], "unavailable");
+    assert_eq!(cleared["stores"].as_array().unwrap().len(), 1);
+    let ci = next_ci(&mut events, |ci| ci["status"] == "unavailable").await;
+    assert_eq!(ci["checkout"], Value::Null);
+    assert!(
+        hotsheet_server::ci_status::load_runs(&hotsheet_server::ci_status::ci_status_path(
+            &fx.home
+        ))
+        .is_empty()
+    );
+
+    // Idempotent, and a later report stores a run again.
+    let (_, again) = api(router.clone(), "DELETE", &route, Value::Null, true).await;
+    assert_eq!(again["cleared"], false);
+    assert_eq!(again["ci"]["status"], "unavailable");
+    let (_, reported_again) = api(
+        router.clone(),
+        "POST",
+        &route,
+        json!({"status": "success", "sha": sha}),
+        true,
+    )
+    .await;
+    assert_eq!(reported_again["applied"], true);
+    // A query that is not a time is refused; an unknown checkout is not found.
+    let (status, _) = api(
+        router.clone(),
+        "DELETE",
+        &format!("{route}?reported_at_ms=soon"),
+        Value::Null,
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let (status, _) = api(
+        router,
+        "DELETE",
+        "/checkouts/no-such-checkout/ci-status",
+        Value::Null,
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}

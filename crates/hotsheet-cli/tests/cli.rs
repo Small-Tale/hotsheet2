@@ -2517,6 +2517,7 @@ fn hs2_jttqmy_live_state_reads_the_local_server_snapshot() {
 /// HS2-M8HHEA: `ci report` posts the run to the local server's
 /// `POST /checkouts/{reference}/ci-status`, naming an explicit checkout or the checkout of the
 /// current directory, and prints the server's answer; outside a checkout it asks for one.
+/// HS2-7PSBHQ: `ci clear` sends `DELETE` to the same route the same way.
 #[test]
 fn hs2_m8hhea_ci_report_posts_the_run_to_the_local_server() {
     use std::io::{BufRead, BufReader, Read, Write};
@@ -2567,6 +2568,9 @@ fn hs2_m8hhea_ci_report_posts_the_run_to_the_local_server() {
     let expected = [
         "POST /checkouts/demo-1234/ci-status HTTP/1.1".to_string(),
         format!("POST /checkouts/{encoded}/ci-status HTTP/1.1"),
+        // HS2-7PSBHQ: `ci clear` forgets the stored run through `DELETE` on the same route.
+        "DELETE /checkouts/demo-1234/ci-status?reported_at_ms=17 HTTP/1.1".to_string(),
+        format!("DELETE /checkouts/{encoded}/ci-status HTTP/1.1"),
     ];
     let server = std::thread::spawn(move || {
         let mut bodies = Vec::new();
@@ -2592,7 +2596,11 @@ fn hs2_m8hhea_ci_report_posts_the_run_to_the_local_server() {
             }
             let mut body = vec![0; length];
             reader.read_exact(&mut body).unwrap();
-            bodies.push(serde_json::from_slice::<serde_json::Value>(&body).unwrap());
+            bodies.push(if body.is_empty() {
+                serde_json::Value::Null
+            } else {
+                serde_json::from_slice::<serde_json::Value>(&body).unwrap()
+            });
             let answer = serde_json::json!({"checkout": "demo-1234", "applied": true,
                 "ci": {"status": "success"}, "stores": ["mine"]})
             .to_string();
@@ -2659,7 +2667,35 @@ fn hs2_m8hhea_ci_report_posts_the_run_to_the_local_server() {
     let invalid = cli(&project, &["ci", "report", "--status", "passed"]);
     assert!(!invalid.status.success());
 
+    let cleared = cli(
+        &elsewhere,
+        &[
+            "ci",
+            "clear",
+            "--checkout",
+            "demo-1234",
+            "--reported-at-ms",
+            "17",
+        ],
+    );
+    assert!(
+        cleared.status.success(),
+        "{}",
+        String::from_utf8_lossy(&cleared.stderr)
+    );
+    let clear_from_cwd = cli(&project, &["ci", "clear"]);
+    assert!(
+        clear_from_cwd.status.success(),
+        "{}",
+        String::from_utf8_lossy(&clear_from_cwd.stderr)
+    );
+    let clear_outside = cli(&elsewhere, &["ci", "clear"]);
+    assert!(!clear_outside.status.success());
+    assert!(String::from_utf8_lossy(&clear_outside.stderr).contains("pass --checkout"));
+
     let bodies = server.join().unwrap();
+    assert_eq!(bodies[2], serde_json::Value::Null, "a clear sends no body");
+    assert_eq!(bodies[3], serde_json::Value::Null);
     assert_eq!(
         bodies[0],
         serde_json::json!({"status": "success", "branch": "main", "sha": "abcdef1",

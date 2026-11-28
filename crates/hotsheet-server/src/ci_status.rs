@@ -331,6 +331,28 @@ impl CiReports {
         })
     }
 
+    /// HS2-7PSBHQ: remove the stored run of `checkout`. With `seen`, only while the stored
+    /// run is still the one reported at `seen` ms, so a run reported after the caller looked
+    /// is never cleared unseen. Returns whether a run was removed and the run left stored.
+    pub(crate) fn clear(
+        &self,
+        machine_home: &Path,
+        checkout: &str,
+        seen: Option<i64>,
+    ) -> (bool, Option<CiRun>) {
+        self.with_runs(machine_home, |runs| {
+            let matches = runs
+                .get(checkout)
+                .is_some_and(|stored| seen.is_none_or(|seen| stored.reported_at_ms == seen));
+            if !matches {
+                return (false, runs.get(checkout).cloned());
+            }
+            runs.remove(checkout);
+            save_runs(&ci_status_path(machine_home), runs);
+            (true, None)
+        })
+    }
+
     /// The newest run among `checkouts`, as the live state's `ci` member.
     pub(crate) fn live(&self, machine_home: &Path, checkouts: &[String]) -> LiveCi {
         self.with_runs(machine_home, |runs| newest(runs, checkouts))
@@ -379,6 +401,17 @@ pub(crate) fn apply_run(
     run: CiRun,
 ) -> (bool, CiRun, Vec<String>) {
     let (applied, stored) = state.ci_reports.record(state.machine_home(), checkout, run);
+    let stores = linked_stores(state, checkout);
+    if applied {
+        for store in &stores {
+            crate::live_state::touch(state, store);
+        }
+    }
+    (applied, stored, stores)
+}
+
+/// The hosted stores linked to `checkout`, whose live state shows its run.
+fn linked_stores(state: &AppState, checkout: &str) -> Vec<String> {
     let mut stores: Vec<String> = state
         .host
         .locations()
@@ -391,12 +424,7 @@ pub(crate) fn apply_run(
         .map(|(id, _)| id)
         .collect();
     stores.sort();
-    if applied {
-        for store in &stores {
-            crate::live_state::touch(state, store);
-        }
-    }
-    (applied, stored, stores)
+    stores
 }
 
 impl AppState {
@@ -448,6 +476,72 @@ pub(crate) async fn report_ci_status(
         applied,
         stores,
         follow,
+    }))
+}
+
+/// The query of `DELETE /checkouts/{reference}/ci-status`.
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CiClearQuery {
+    /// Clear only while the stored run is the one reported at this time (the run the caller
+    /// saw). Without it, whatever run is stored is cleared.
+    #[serde(default)]
+    pub reported_at_ms: Option<i64>,
+}
+
+/// The response of `DELETE /checkouts/{reference}/ci-status`.
+#[derive(Debug, Serialize)]
+pub struct CiClearResponse {
+    /// The resolved checkout id.
+    pub checkout: String,
+    /// False when nothing was stored, or a newer run than the one named was stored.
+    pub cleared: bool,
+    /// The run still stored for this checkout, or `unavailable`.
+    pub ci: LiveCi,
+    /// Hosted stores linked to this checkout.
+    pub stores: Vec<String>,
+}
+
+/// `DELETE /checkouts/{reference}/ci-status` — forget the CI run stored for a checkout
+/// (HS2-7PSBHQ), such as a run last reported running long ago whose end nobody reported.
+/// Idempotent: clearing nothing answers `cleared: false`. A cleared run's stores push their
+/// live state again, which then shows the newest run another linked checkout reported, or
+/// none. The provider keeps the run itself; the next report stores it again.
+pub(crate) async fn clear_ci_status(
+    State(state): State<AppState>,
+    RoutePath(reference): RoutePath<String>,
+    axum::extract::Query(query): axum::extract::Query<CiClearQuery>,
+) -> Result<Json<CiClearResponse>, ApiError> {
+    let checkout = state
+        .checkout_registry
+        .describe(&reference)
+        .map_err(crate::routes::checkouts::checkout_lookup_error)?;
+    let checkout_id = checkout.id.clone();
+    let (cleared, stored, stores) = tokio::task::spawn_blocking(move || {
+        let (cleared, stored) =
+            state
+                .ci_reports
+                .clear(state.machine_home(), &checkout_id, query.reported_at_ms);
+        let stores = linked_stores(&state, &checkout_id);
+        if cleared {
+            for store in &stores {
+                crate::live_state::touch(&state, store);
+            }
+        }
+        (cleared, stored, stores)
+    })
+    .await
+    .map_err(|_| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "clearing the CI status did not finish",
+        )
+    })?;
+    Ok(Json(CiClearResponse {
+        ci: stored.map_or_else(LiveCi::unavailable, |run| LiveCi::of(&checkout.id, &run)),
+        checkout: checkout.id,
+        cleared,
+        stores,
     }))
 }
 
@@ -653,5 +747,40 @@ mod tests {
         std::fs::write(&path, br#"{"version": 99, "checkouts": {}}"#).unwrap();
         assert!(load_runs(&path).is_empty());
         assert!(load_runs(&dir.path().join("missing.json")).is_empty());
+    }
+
+    #[test]
+    fn hs2_7psbhq_clear_removes_only_the_run_the_caller_saw_and_persists() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join("home");
+        let reports = CiReports::default();
+        // Nothing stored: nothing cleared, repeatedly.
+        assert_eq!(reports.clear(&home, "a", None), (false, None));
+        reports.record(&home, "a", run(CiStatus::InProgress, Some(10), 100));
+        reports.record(&home, "b", run(CiStatus::Success, Some(10), 100));
+        // A newer report than the one the caller saw is kept.
+        let (cleared, kept) = reports.clear(&home, "a", Some(99));
+        assert!(!cleared);
+        assert_eq!(kept.unwrap().reported_at_ms, 100);
+        // The run the caller saw is removed, the other checkout's run is untouched.
+        assert_eq!(reports.clear(&home, "a", Some(100)), (true, None));
+        assert_eq!(reports.clear(&home, "a", Some(100)), (false, None));
+        assert_eq!(
+            reports
+                .live(&home, &["a".into(), "b".into()])
+                .checkout
+                .as_deref(),
+            Some("b")
+        );
+        // Persisted: a restarted server no longer has it.
+        let restarted = CiReports::default();
+        assert_eq!(
+            restarted.live(&home, &["a".into()]).status,
+            CiStatus::Unavailable
+        );
+        // Without a time, whatever is stored is cleared; a new report stores again.
+        assert!(restarted.clear(&home, "b", None).0);
+        let (applied, _) = restarted.record(&home, "a", run(CiStatus::Queued, Some(1), 5));
+        assert!(applied, "a cleared checkout accepts any later report");
     }
 }

@@ -9,7 +9,7 @@ import { StateBanner } from '@kerfjs/ui/state-banner';
 import { Text } from '@kerfjs/ui/text';
 import { BatteryWarning, Cpu, HardDrive, type IconNode, MemoryStick, Thermometer, Timer, WifiOff } from 'lucide';
 
-import { CI_PRESENTATION, ciRow } from '../ci-presentation';
+import { CI_PRESENTATION, ciClearTarget, ciRow } from '../ci-presentation';
 import type { HostHealthSignalId } from '../host-health';
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
 import { LIVE_STATE_ICONS } from '../live-state-icons';
@@ -108,13 +108,18 @@ function detailRow(kind: string, icon: { icon: IconNode; name: string }, label: 
  * conditions past a threshold keep a full-width callout in both modes (§34.1).
  */
 export function ProjectLiveSection({ summary, callouts = [], expanded = false }: ProjectLiveSectionProps) {
-  const chips = summary ? liveChips(summary) : [];
+  const chips = summary ? liveChips(summary) : [],
+    // HS2-7PSBHQ: a run shown as unknown can be cleared from the section's context menu.
+    clear = summary ? ciClearTarget(summary.ci) : undefined;
   return (
     <section
       class="project-live-section"
       data-component="project-live-section"
       data-mode={expanded ? 'expanded' : 'compact'}
       aria-label="Live"
+      {...(clear
+        ? { 'data-ci-clear-checkout': clear.checkout, 'data-ci-clear-reported-at-ms': String(clear.reportedAtMs) }
+        : {})}
     >
       {/* 16px between the gauges and badges and the host callouts (HS2-0EQMZZ); callouts stay 8px apart. */}
       <List gap="m">
