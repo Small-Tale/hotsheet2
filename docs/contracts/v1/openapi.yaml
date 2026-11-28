@@ -20240,6 +20240,49 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+  /ai-hooks/subagent-progress:
+    post:
+      operationId: report_subagent_progress
+      description:
+        Record a Claude subagent hook (start, stop, or a tool call inside the subagent) as progress for the usage store
+        of the registered checkout containing the session's directory (HS2-X0ZSZ8). A directory outside every checkout
+        records nothing.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubagentProgressRequest'
+      responses:
+        '200':
+          description: Whether the report moved a store's progress, and which store.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - recorded
+                  - store
+                properties:
+                  recorded:
+                    type: boolean
+                  store:
+                    type:
+                      - string
+                      - 'null'
+                additionalProperties: false
+        '400':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
 components:
   securitySchemes:
     HotsheetSecret:
@@ -36607,6 +36650,37 @@ components:
           type: object
           additionalProperties: true
       additionalProperties: false
+    SubagentProgressRequest:
+      description:
+        One Claude subagent hook reduced by the hook to identifiers and the session's working directory (HS2-X0ZSZ8).
+      type: object
+      required:
+        - event
+        - session_id
+        - cwd
+      properties:
+        event:
+          type: string
+          enum:
+            - start
+            - stop
+            - tool
+        session_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        cwd:
+          type: string
+          description: Absolute directory of the Claude session.
+          maxLength: 4096
+        agent_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        agent_type:
+          type: string
+          minLength: 1
+          maxLength: 128
     ClaudeTurnRequest:
       type: object
       required:

@@ -2276,6 +2276,27 @@ skips `UserPromptSubmit` and `Stop` when they carry `matcher: "*"`. A new sessio
 report its transcript path before creating the file; the server starts that cursor at
 byte zero and waits briefly for the final append after `Stop`.
 
+**Subagent progress from any Claude session (HS2-X0ZSZ8).** Setup also installs Claude's
+`SubagentStart` and `SubagentStop` hooks, without a `matcher` (every agent type) and with a
+5-second timeout, through the same adapter. They fire for each subagent a session spawns.
+Their input carries `session_id`, `transcript_path`, `cwd`, `agent_id`, and `agent_type`;
+`SubagentStop` adds `agent_transcript_path`, `last_assistant_message`, and
+`stop_hook_active`. A tool call made inside a subagent fires the already installed
+`PreToolUse` hook with the subagent's `agent_id`, which serves as a heartbeat between start and
+stop. Outside a Hot Sheet terminal, the adapter reduces each of these to `{event, session_id,
+cwd, agent_id, agent_type}` (`event` is `start`, `stop`, or `tool`) and POSTs it to
+`/ai-hooks/subagent-progress`. It uses the inherited route when there is one, else the machine
+host's instance record, so a session started in its own shell, an IDE, or the desktop app
+reaches the running host. Tool input, transcript paths, and the subagent's last message never
+leave the hook. The server takes the usage store of the registered checkout containing `cwd`
+and records the report as progress for it (`docs/32` §32.8.1). A directory outside every
+checkout records nothing. The adapter prints nothing and exits 0, so a `SubagentStop` hook never
+blocks a subagent from finishing. In a Hot Sheet terminal and in a driven headless session it
+sends nothing, because the server already follows those subagents' transcripts. `hotsheet-cli
+doctor --project <dir>` reports a set-up project whose hooks lack a declared event, with the
+`setup` command that repairs it. `setup <tool>` and `setup --refresh` install the events
+idempotently and keep the user's own hooks.
+
 Codex halts are therefore detected best-effort from the session's own rollout file
 (HS2-CYHAWB). Hot Sheet's Codex terminals host their session in process (`--no-daemon`,
 HS2-4J7WCV), and the host appends every turn to

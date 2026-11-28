@@ -373,7 +373,9 @@ Two stuck signals cover sessions that still hold claims (HS2-P57XHV):
   write that changes its notes, status, phase, title, or details (creating a ticket is
   such a write, HS2-JTTQMY), or a newly recorded model response in the store: a Claude
   terminal session's own or one of its background subagents', a Codex terminal's, or a
-  driven turn's (HS2-PPZQX9). A claim renewal is not
+  driven turn's (HS2-PPZQX9). A Claude subagent hook from any session also counts: its
+  start, its stop, or one of its tool calls, reported for the checkout containing the
+  session's directory (HS2-X0ZSZ8, `docs/05`). A claim renewal is not
   progress, so a session that keeps renewing while doing nothing is still reported. The
   message reads "Hot Sheet project _name_ may be stuck", has severity `warning`, and names
   the held claims. Each idle episode is reported once, and progress re-arms it.
@@ -388,7 +390,9 @@ detection. They are stored as `project_activity` in `notifications.json`. Record
 responses count as progress because terminal usage is now recorded as each response
 finishes, not when the turn ends (HS2-W2GNTT), and background subagents' transcripts are
 followed too (HS2-JW6N67). A session that mostly waits on background agents therefore keeps
-progressing (HS2-PPZQX9). Token counts themselves never decide anything.
+progressing (HS2-PPZQX9). A Claude session started outside a Hot Sheet terminal has no
+followed transcript. Its installed subagent hooks report instead, so its background agents
+also keep the store Active (HS2-X0ZSZ8). Token counts themselves never decide anything.
 
 These state words (Active, Stopped, May be stuck, Stalled, Halted) are also the vocabulary of the
 glance surfaces (standby, sidebars, and Stats), which add **Waiting on you**; see

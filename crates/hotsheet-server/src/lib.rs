@@ -2939,6 +2939,11 @@ pub fn app(state: AppState) -> Router {
             "/terminals/{id}/claude-activity",
             post(report_claude_activity),
         )
+        // Claude subagent hooks from any session count as live progress (HS2-X0ZSZ8).
+        .route(
+            "/ai-hooks/subagent-progress",
+            post(routes::subagent_progress::report_subagent_progress),
+        )
         // Live hotsheet-mcp presence leases (HS2-HNXE38).
         .route(
             "/mcp-presence",

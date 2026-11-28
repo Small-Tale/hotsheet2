@@ -3858,12 +3858,26 @@ async fn hs2_jw6n67_claude_subagent_usage_is_recorded_once_and_resumes_after_res
     let before_ms = (time::OffsetDateTime::now_utc().unix_timestamp_nanos() / 1_000_000) as i64;
     append(&agent("a2"), "a2-2", 4, true, Some("end_turn"));
     until(&[1, 2, 4]).await;
-    let live = hotsheet_server::live_state::refresh_at(
-        &first_state,
-        &store_id,
-        time::OffsetDateTime::now_utc(),
-    )
-    .unwrap();
+    // The follower writes the metric first and notes the progress after persisting its
+    // offsets, so a loaded run can read the metric before the progress (HS2-X0ZSZ8 review).
+    let progressed = |live: &hotsheet_server::live_state::LiveStoreState| {
+        live.activity
+            .last_progress_ms
+            .is_some_and(|at| at >= before_ms)
+    };
+    let deadline = std::time::Instant::now() + WATCHER_WAIT;
+    let live = loop {
+        let live = hotsheet_server::live_state::refresh_at(
+            &first_state,
+            &store_id,
+            time::OffsetDateTime::now_utc(),
+        )
+        .unwrap();
+        if progressed(&live) || std::time::Instant::now() >= deadline {
+            break live;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    };
     assert!(
         live.activity
             .last_progress_ms

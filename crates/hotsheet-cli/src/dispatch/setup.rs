@@ -716,6 +716,9 @@ pub(crate) fn cmd_permission_hook(installed_agent: Option<&str>) -> Result<()> {
     // HS2-5YCGH5: narrate an interactive Claude session in a Hot Sheet terminal. Best effort and
     // silent; never changes the hook's decision or output.
     report_claude_activity_hook(installed_agent, &input);
+    // HS2-X0ZSZ8: a subagent starting, finishing or calling a tool is progress for the
+    // checkout's store. Best effort and silent, like the narration report above.
+    report_subagent_progress(installed_agent, &input);
 
     // Session lifecycle events report a halted or resumed AI session (HS2-HJ4D1H), and a session
     // that started or ended with these hooks active (HS2-EV1XK3), to the Hot Sheet terminal this
@@ -880,6 +883,51 @@ fn report_claude_activity_hook(installed_agent: Option<&str>, input: &serde_json
         .timeout_global(Some(std::time::Duration::from_secs(2)))
         .build()
         .send(payload.to_string());
+}
+
+/// Report a Claude subagent's start, finish or tool call as progress for the store of the
+/// checkout containing the session's directory (HS2-X0ZSZ8). A Hot Sheet terminal session is
+/// skipped: the server already follows its subagent transcripts (HS2-JW6N67, HS2-PPZQX9), as
+/// it records a driven headless session's turns. A session started anywhere else has no
+/// inherited route, so the hook addresses the machine host the desktop app or a headless launch
+/// runs. No host, no reachable server or a failed post sends nothing and changes no output.
+fn report_subagent_progress(installed_agent: Option<&str>, input: &serde_json::Value) {
+    if installed_agent != Some("claude")
+        || std::env::var("HOTSHEET_CLAUDE_PRETOOLUSE").as_deref() == Ok("1")
+    {
+        return;
+    }
+    let Some(payload) = hotsheet_cli::permission_hook::subagent_progress_payload(input) else {
+        return;
+    };
+    if hook_terminal_id(installed_agent).is_some() {
+        return;
+    }
+    let Some((url, secret)) = hook_server_route().or_else(machine_host_route) else {
+        return;
+    };
+    let endpoint = format!("{}/ai-hooks/subagent-progress", url.trim_end_matches('/'));
+    let _ = hotsheet_http::agent()
+        .post(&endpoint)
+        .header("X-Hotsheet-Secret", &secret)
+        .header("Content-Type", "application/json")
+        .config()
+        .timeout_global(Some(std::time::Duration::from_secs(2)))
+        .build()
+        .send(payload.to_string());
+}
+
+/// The running machine host's route, for a hook that inherited none (HS2-X0ZSZ8).
+fn machine_host_route() -> Option<(String, String)> {
+    let home = hotsheet_plugins::hotsheet_home();
+    let anchor = hotsheet_cli::external_launch::machine_host_store(&home);
+    hotsheet_cli::external_launch::discover_local_host(
+        &anchor,
+        &home,
+        hotsheet_cli::external_launch::HostScope::Machine,
+    )
+    .ok()
+    .map(|server| (server.url, server.secret.into_inner()))
 }
 
 fn report_claude_turn_hook(

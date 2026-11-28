@@ -1946,11 +1946,18 @@ fn claude_hook_reports_halted_and_resumed_sessions() {
         "UserPromptSubmit",
         "SessionStart",
         "SessionEnd",
+        "SubagentStart",
+        "SubagentStop",
     ] {
         assert_eq!(
             hooks.event_matchers.get(event).map(String::as_str),
             Some("")
         );
+    }
+    // HS2-X0ZSZ8: subagent hooks report progress and are bounded, unlike a permission ask.
+    for event in ["SubagentStart", "SubagentStop"] {
+        assert!(hooks.additional_events.iter().any(|value| value == event));
+        assert_eq!(hooks.event_timeout_seconds.get(event), Some(&5));
     }
     assert_eq!(hooks.command, "hotsheet-cli permission-hook --agent claude");
 }

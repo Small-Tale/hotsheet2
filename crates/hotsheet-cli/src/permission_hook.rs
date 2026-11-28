@@ -323,9 +323,98 @@ pub fn claude_activity_payload(input: &Value) -> Option<Value> {
     Some(serde_json::json!({ "session_id": session, "hook": hook }))
 }
 
+/// What a Claude subagent hook reports as progress for its checkout's store (HS2-X0ZSZ8), or
+/// `None` for any other hook. `SubagentStart` and `SubagentStop` mark a subagent (including a
+/// background agent) starting and finishing; a `PreToolUse` that carries the subagent's
+/// `agent_id` is one of its tool calls, the heartbeat between them. The server resolves the
+/// store from `cwd`, so a session started outside a Hot Sheet terminal reports too. Only
+/// identifiers leave the hook: the event, session, agent id and type, and the working
+/// directory. Tool input, transcript paths and the subagent's last message never do.
+pub fn subagent_progress_payload(input: &Value) -> Option<Value> {
+    let text = |key: &str| {
+        input
+            .get(key)
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+    };
+    let agent_id = text("agent_id");
+    let event = match text("hook_event_name")? {
+        "SubagentStart" => "start",
+        "SubagentStop" => "stop",
+        "PreToolUse" if agent_id.is_some() => "tool",
+        _ => return None,
+    };
+    let mut payload = json!({
+        "event": event,
+        "session_id": text("session_id")?,
+        "cwd": text("cwd")?,
+    });
+    for (key, value) in [("agent_id", agent_id), ("agent_type", text("agent_type"))] {
+        if let Some(value) = value {
+            payload[key] = value.into();
+        }
+    }
+    Some(payload)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hs2_x0zsz8_subagent_hooks_map_to_progress_without_content() {
+        // The documented SubagentStop payload: only identifiers are forwarded.
+        let stop = json!({
+            "session_id": "abc123", "transcript_path": "/p/abc123.jsonl", "cwd": "/work/app",
+            "permission_mode": "default", "hook_event_name": "SubagentStop",
+            "stop_hook_active": false, "agent_id": "def456", "agent_type": "Explore",
+            "agent_transcript_path": "/p/abc123/subagents/agent-def456.jsonl",
+            "last_assistant_message": "private analysis text",
+        });
+        assert_eq!(
+            subagent_progress_payload(&stop),
+            Some(json!({
+                "event": "stop", "session_id": "abc123", "cwd": "/work/app",
+                "agent_id": "def456", "agent_type": "Explore",
+            }))
+        );
+        let start = json!({
+            "session_id": "abc123", "transcript_path": "/p/abc123.jsonl", "cwd": "/work/app",
+            "hook_event_name": "SubagentStart", "agent_id": "agent-abc123",
+            "agent_type": "general-purpose",
+        });
+        assert_eq!(subagent_progress_payload(&start).unwrap()["event"], "start");
+        // A subagent's tool call carries its agent id; its input never leaves the hook.
+        let tool = json!({
+            "session_id": "abc123", "cwd": "/work/app", "hook_event_name": "PreToolUse",
+            "tool_name": "Bash", "tool_input": {"command": "cat secrets"}, "agent_id": "def456",
+        });
+        let payload = subagent_progress_payload(&tool).unwrap();
+        assert_eq!(payload["event"], "tool");
+        assert!(!payload.to_string().contains("secrets"));
+        // The main conversation's tool calls and other events are not subagent progress.
+        for input in [
+            json!({"session_id": "s", "cwd": "/w", "hook_event_name": "PreToolUse",
+                   "tool_name": "Bash", "agent_id": " "}),
+            json!({"session_id": "s", "cwd": "/w", "hook_event_name": "PreToolUse",
+                   "tool_name": "Bash"}),
+            json!({"session_id": "s", "cwd": "/w", "hook_event_name": "Stop"}),
+            json!({"session_id": "s", "cwd": "/w", "hook_event_name": "PostToolUse",
+                   "agent_id": "a"}),
+            // Without a session or a directory there is nothing to attribute.
+            json!({"cwd": "/w", "hook_event_name": "SubagentStop"}),
+            json!({"session_id": "s", "hook_event_name": "SubagentStart"}),
+            Value::Null,
+        ] {
+            assert_eq!(subagent_progress_payload(&input), None, "{input}");
+        }
+        // Subagent events are neither session lifecycle nor permission events, so a Hot
+        // Sheet terminal never mistakes SubagentStop for the session's own Stop.
+        assert_eq!(session_hook_event(&stop), None);
+        assert_eq!(permission_hook_event(&stop), PermissionHookEvent::Other);
+        assert_eq!(claude_activity_payload(&stop), None);
+    }
 
     #[test]
     fn hs2_ssmdq1_only_an_unconnected_terminal_asks_the_hook_to_reconnect() {

@@ -32,6 +32,7 @@ pub(crate) mod resource_claims;
 pub(crate) mod session_messages;
 pub(crate) mod standby;
 pub(crate) mod store_scoped;
+pub(crate) mod subagent_progress;
 pub(crate) mod sync_kick;
 pub(crate) mod terminals;
 pub(crate) mod ticket_creation_settings;

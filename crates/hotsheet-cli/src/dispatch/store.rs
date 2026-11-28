@@ -978,6 +978,7 @@ pub(crate) fn cmd_doctor(path: &PathBuf, project: &Path) -> Result<()> {
     }
 
     issues += print_repository_size(path, project);
+    issues += print_missing_hooks(path, project);
 
     print_onboarding_report(path, project);
     if issues == 0 {
@@ -986,6 +987,30 @@ pub(crate) fn cmd_doctor(path: &PathBuf, project: &Path) -> Result<()> {
     } else {
         bail!("{issues} issue(s) found")
     }
+}
+
+/// HS2-X0ZSZ8: report each set-up tool whose installed hooks lack an event its plugin now
+/// declares (for example Claude's subagent progress hooks), with the headless repair command.
+/// Returns the number of issues.
+fn print_missing_hooks(store: &Path, project: &Path) -> usize {
+    let mut issues = 0;
+    for plugin in hotsheet_plugins::all_plugins(&hotsheet_plugins::default_dirs()) {
+        let Some(missing) = hotsheet_plugins::setup::missing_hook_events(project, &plugin)
+            .filter(|missing| !missing.is_empty())
+        else {
+            continue;
+        };
+        println!(
+            "  ! {} hooks miss {}; run: hotsheet-cli -C \"{}\" setup {} --project \"{}\"",
+            plugin.manifest.product_name,
+            missing.join(", "),
+            store.display(),
+            plugin.id(),
+            project.display()
+        );
+        issues += 1;
+    }
+    issues
 }
 
 /// The repository size section of `doctor` (HS2-P1GYWH): the registered checkout for
