@@ -643,7 +643,8 @@ test('labels converted demo specimens through Kerf CatalogExample, not app-owned
     ['ticket-code-review', 7], // HS2-MCGCPQ adds the follow-up link action examples
     ['ticket-attachments', 7],
     ['attachment-gallery', 1],
-    ['ticket-info-panel', 2],
+    // HS2-0MET3B added the sidebar description feedback specimen (HS2-BJS41W).
+    ['ticket-info-panel', 3],
     ['list', 3],
     ['list-header', 2],
     ['list-item', 5],
@@ -8744,9 +8745,12 @@ test('dims finished tickets in the list and uses the shared Tags menu header', a
   const tagsHeader = page
     .locator('[data-component="ticket-info-panel"]:not([data-placeholder]) [data-component="list-header"]')
     .filter({ hasText: 'Tags' });
-  await expect(tagsHeader).toHaveCount(1);
-  await expect(tagsHeader.getByRole('button', { name: 'Add tag' }).locator('[data-lucide="plus"]')).toBeVisible();
-  await expect(tagsHeader.getByRole('button', { name: 'Add tag' })).toBeEnabled();
+  // Two loaded panels: the main one and HS2-0MET3B's description feedback specimen (HS2-BJS41W).
+  await expect(tagsHeader).toHaveCount(2);
+  await expect(
+    tagsHeader.first().getByRole('button', { name: 'Add tag' }).locator('[data-lucide="plus"]'),
+  ).toBeVisible();
+  await expect(tagsHeader.first().getByRole('button', { name: 'Add tag' })).toBeEnabled();
   const placeholderTags = page
     .locator('[data-component="ticket-info-panel"][data-placeholder="true"] [data-component="list-header"]')
     .filter({ hasText: 'Tags' });
