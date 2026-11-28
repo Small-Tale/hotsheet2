@@ -16,6 +16,8 @@ pub mod advisory_claim_ledger;
 pub mod advisory_claim_v2;
 pub mod analytics;
 pub mod annotation_activity;
+pub mod announcer_ai;
+pub mod announcer_milestones;
 pub mod calibration;
 pub mod checkout_order;
 pub mod checkout_page;

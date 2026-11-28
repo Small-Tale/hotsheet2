@@ -3,6 +3,7 @@ import type {
   AiCommandRun,
   AiToolDefaults,
   AiToolDescriptor,
+  AnnouncerAiSettings,
   CalibrationReport,
   Checkout,
   CheckoutActivityEvent,
@@ -776,6 +777,12 @@ export const parseProviderDescriptor = shape<ProviderDescriptor>(
 
 /** `GET /tts/voices` (HS2-CEZVSE). */
 export const parseTtsVoices = shape<TtsVoice>('speech voice', { name: isString, lang: isString }).list;
+
+/** `GET`/`PUT /announcer/settings` (HS2-G3HJZH). */
+export const parseAnnouncerAiSettings = shape<AnnouncerAiSettings>('announcer settings', {
+  ai_importance: isBoolean,
+  ai_rewrite: isBoolean,
+});
 
 /** `PUT /checkouts/{reference}/sources/{connection_id}/ticket-prefix` (HS2-8QJ6W3). */
 export const parseTicketPrefix = shape<{ ticket_prefix: string }>('ticket prefix', { ticket_prefix: isString });

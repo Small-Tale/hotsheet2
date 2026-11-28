@@ -1225,13 +1225,28 @@ through a task that reads and searches the code, edits a few files, runs tests,
 and commits. Listen for a few minutes: routine reading, searching and editing
 should appear on screen as an occasional summary ("codex looked through the code
 for …") but not be said (HS2-G3HJZH), and neither should turn starts and ends;
-nothing said should be "ran zsh" or a path or flag. Test runs, commits, ticket
-claims and permission requests should be said promptly in the first person ("I
-ran the unit tests, and they passed"), the first utterance and any switch to
+nothing said should be "ran zsh" or a path or flag. Test runs, commits and
+permission requests should be said promptly in the first person ("I ran the unit
+tests, and they passed"); ticket claims are said as milestones instead (below). The first utterance and any switch to
 another project should start "For <project>," (HS2-MR8GA4), and a Codex test run
 should say whether it passed. Judge whether the pace feels edited rather than
 exhaustive. Unit and browser tests pin the policy; only listening can judge the
 pace.
+
+### Announcer ticket milestones with the real AI tool (HS2-G3HJZH)
+
+Automated tests never run a real model. On a machine signed in to `claude`, with
+the Announcer open and Live on and both **Milestones** switches on, have an agent
+claim a synthetic ticket, post a `## Preliminary thoughts` note with a
+`note_summary`, file a follow-up with `--follow-up-to`, ask a `feedback_needed`
+question, and complete it. Within about 5 to 25 seconds of each write, listen for a
+conversational first-person line that names the ticket's short slug ("For <project>,
+I started investigating …"); a bare claim or a test phase may be shown but not
+said. Turn **AI wording** off and repeat a note: the template line ("An update on
+… (SLUG): …") is said. Turn **AI importance** off: the rule decides what is said.
+Sign out of `claude` (or rename it on PATH) and confirm templates and rules still
+work. Judge whether the AI's choices of what to say match "important / interesting
+milestones, tests / task completions / failures, permissions / questions".
 
 ### Grid sidebar touch swipe on a phone or tablet (HS2-EZSQDF)
 

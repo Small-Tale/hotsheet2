@@ -34,6 +34,7 @@ import {
   parseAiCommandRun,
   parseAiToolDefaults,
   parseAiToolDescriptor,
+  parseAnnouncerAiSettings,
   parseCalibrationReport,
   parseCheckout,
   parseCheckoutActivity,
@@ -392,6 +393,12 @@ export type Capabilities = Record<
   /** Structured, revisable ratings and the provider feedback query. */
   ai_feedback?: boolean;
 };
+/** The machine-wide switches for announcer milestones (`GET`/`PUT /announcer/settings`, HS2-G3HJZH). Off,
+ * the server uses its rule score and template line instead of the person's AI tool. */
+export interface AnnouncerAiSettings {
+  ai_importance: boolean;
+  ai_rewrite: boolean;
+}
 /** One voice a server speech provider offers (`GET /tts/voices`, HS2-CEZVSE). */
 export interface TtsVoice {
   /** The value the provider accepts as a synthesis `voice`. */
@@ -2840,6 +2847,9 @@ export class Api {
   ttsProviders = () => this.parsed(parseStringList, '/tts/providers');
   /** One server speech provider's voices, for the announcer's Voice menu (HS2-CEZVSE). */
   ttsVoices = (provider: string) => this.parsed(parseTtsVoices, `/tts/voices?provider=${encodeURIComponent(provider)}`);
+  announcerSettings = () => this.parsed(parseAnnouncerAiSettings, '/announcer/settings');
+  setAnnouncerSettings = (change: Partial<AnnouncerAiSettings>) =>
+    this.parsed(parseAnnouncerAiSettings, '/announcer/settings', { method: 'PUT', body: JSON.stringify(change) });
   synthesizeSpeech = async (text: string, provider: string, voice?: string): Promise<Blob> => {
     const headers = new Headers({ 'Content-Type': 'application/json', 'X-Hotsheet-Secret': this.secret });
     const response = await fetch(`${this.origin}/tts/synthesize`, {

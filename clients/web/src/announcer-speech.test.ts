@@ -354,3 +354,16 @@ describe('the agent speaks for itself (HS2-G3HJZH)', () => {
     );
   });
 });
+
+describe('announcer speech for ticket milestones (HS2-G3HJZH)', () => {
+  it('says the line the server worded, not the structured summary', () => {
+    expect(
+      announcerSpokenText({
+        tool: 'claude',
+        kind: 'blocked',
+        summary: '**HS2-QXVHPB** Colors needs your answer: Which accent',
+        detail: { milestone: 'question', spoken: 'I have a question about Colors (QXVHPB).', speak: true },
+      }),
+    ).toBe('I have a question about Colors (QXVHPB).');
+  });
+});

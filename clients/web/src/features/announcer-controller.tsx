@@ -30,7 +30,7 @@ import {
   saveAnnouncerSettings,
 } from '../announcer-settings';
 import { announcerUtterance } from '../announcer-utterance';
-import { type ActivityEvent, Api, type TtsVoice } from '../api';
+import { type ActivityEvent, type AnnouncerAiSettings, Api, type TtsVoice } from '../api';
 import { AnnouncerOverlay } from '../components/announcer-overlay';
 import type { Project } from '../interactions/types';
 import { regionCommitRoutes } from '../resizable-region-commits';
@@ -106,6 +106,42 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
       },
       () => undefined,
     );
+  };
+  // HS2-G3HJZH: the server's machine-wide milestone switches, read when the announcer opens.
+  const aiSettings = signal<AnnouncerAiSettings | undefined>(undefined);
+  let aiSettingsGeneration = 0;
+  const aiApi = () => {
+    const primary = projects.peek().at(0);
+    return primary ? new Api(primary.apiPath) : undefined;
+  };
+  const loadAiSettings = () => {
+    const generation = ++aiSettingsGeneration;
+    void aiApi()
+      ?.announcerSettings()
+      .then(
+        (read) => {
+          if (generation === aiSettingsGeneration) aiSettings.value = read;
+        },
+        () => {
+          if (generation === aiSettingsGeneration) aiSettings.value = undefined;
+        },
+      );
+  };
+  const changeAiSetting = (change: Partial<AnnouncerAiSettings>) => {
+    const generation = ++aiSettingsGeneration;
+    const current = aiSettings.peek();
+    // Shown at once; the server's answer is the record.
+    if (current) aiSettings.value = { ...current, ...change };
+    void aiApi()
+      ?.setAnnouncerSettings(change)
+      .then(
+        (saved) => {
+          if (generation === aiSettingsGeneration) aiSettings.value = saved;
+        },
+        () => {
+          if (generation === aiSettingsGeneration) aiSettings.value = current;
+        },
+      );
   };
   const refreshVoices = () => {
     if (typeof speechSynthesis === 'undefined' || typeof speechSynthesis.getVoices !== 'function') return;
@@ -411,8 +447,10 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
         clearDiff();
         open.value = !open.peek();
         lastSpokenProject = undefined;
-        if (open.peek()) void loadDigest();
-        else {
+        if (open.peek()) {
+          void loadDigest();
+          loadAiSettings();
+        } else {
           live.value = false;
           cancelSpeech();
           scheduleSettle();
@@ -492,6 +530,11 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
         if (chosen !== undefined) rate.value = chosen;
         break;
       }
+      case 'ai-importance':
+      case 'ai-rewrite':
+        // Machine-wide on the server, not a device setting.
+        changeAiSetting({ [setting === 'ai-importance' ? 'ai_importance' : 'ai_rewrite']: value === 'on' });
+        return;
       case 'clear-history': {
         cancelSpeech();
         clearDiff();
@@ -562,6 +605,7 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
               : announcerVoiceChoices(serverVoices.value, navigator.language, voice.value)
           }
           rate={rate.value}
+          ai={aiSettings.value}
         />
       );
       return detached.value

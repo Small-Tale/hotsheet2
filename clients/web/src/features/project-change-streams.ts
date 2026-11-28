@@ -1,6 +1,7 @@
 import type { Signal } from 'kerfjs';
 
 import { applyConversationActivity, applyConversationEvent } from '../ai-conversation';
+import { ticketMilestone } from '../announcer-milestone';
 import {
   type ActivityEvent,
   Api,
@@ -524,7 +525,11 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
               }
               if (event.kind === 'activity' && event.activity) {
                 const activity = event.activity,
-                  connection = conversationForActivity(current, activity.tool, activity.session);
+                  // A ticket milestone is the server's account of ticket writes, not a step of one
+                  // conversation's turn (HS2-G3HJZH).
+                  connection = ticketMilestone(activity)
+                    ? undefined
+                    : conversationForActivity(current, activity.tool, activity.session);
                 onActivity?.(current, event.store, activity);
                 if (connection)
                   updateConversation(connection.id, (state) => applyConversationActivity(state, activity), true);

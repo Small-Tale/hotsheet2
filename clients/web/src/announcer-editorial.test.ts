@@ -282,3 +282,48 @@ describe('live narration says headlines, not minutiae (HS2-G3HJZH)', () => {
     expect(entry.narration.split('\n')[0]).toBe('codex looked through the code for alpha.');
   });
 });
+
+describe('announcer ticket milestones (HS2-G3HJZH)', () => {
+  const milestone = (seconds: number, kind: string, speak: boolean) =>
+    step(seconds, 'plan', 'Started **HS2-QXVHPB** Code organization. Initial thoughts: files are long', {
+      importance: speak ? 'high' : 'normal',
+      detail: {
+        milestone: kind,
+        spoken: 'I started investigating a ticket focusing on Code organization (QXVHPB).',
+        speak,
+      },
+    });
+
+  it('tells a milestone on its own, shown structured and said as the server worded it', () => {
+    const entries = editAnnouncerReel(
+      [command(0, 'rg -n alpha src'), milestone(1, 'initial_thoughts', true), command(2, 'rg -n beta src')],
+      settledLater,
+    );
+    expect(entries.map((entry) => entry.level)).toEqual(['routine', 'headline', 'routine']);
+    const [, told] = entries;
+    expect(told.narration).toBe('Started **HS2-QXVHPB** Code organization. Initial thoughts: files are long');
+    expect(told.spoken).toBe('I started investigating a ticket focusing on Code organization (QXVHPB).');
+    expect(announcerSpeaks(told)).toBe(true);
+  });
+
+  it('says a milestone only when the server selected it, whatever its importance', () => {
+    const [quiet] = editAnnouncerReel([milestone(0, 'started', false)], settledLater);
+    expect(quiet.level).toBe('headline');
+    expect(announcerSpeaks(quiet)).toBe(false);
+  });
+
+  it('leaves ticket commands, builds and installs to the milestones unless they fail', () => {
+    const entries = editAnnouncerReel(
+      [
+        command(0, 'hotsheet-cli claim HS2-AAAAAA'),
+        command(1, 'npm run build'),
+        command(2, 'npm ci'),
+        command(3, 'npm run build', { detail: { command: 'npm run build', exit_code: 1 } }),
+        command(4, 'cargo test', { detail: { command: 'cargo test', exit_code: 0 } }),
+        command(5, 'git push origin main'),
+      ],
+      settledLater,
+    );
+    expect(entries.map((entry) => announcerSpeaks(entry))).toEqual([false, false, false, true, true, true]);
+  });
+});

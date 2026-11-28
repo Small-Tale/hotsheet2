@@ -340,9 +340,10 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/features/announcer-controller.tsx # Announcer playback, provider choice, live-stream composition and on-demand current diff (HS2-5PSQJQ, HS2-A93BHS)
     src/announcer-layout.ts   #   Docked announcer height bounds, detached state and floating placement, per-device persistence (HS2-BS0XFK, HS2-51X25Z)
     src/announcer-speech.ts   #   Deterministic spoken summaries and step intents; unwraps shells and wrappers, never reads a literal command, first person (HS2-R5Q2GY, HS2-RKYCTP, HS2-G3HJZH)
-    src/announcer-editorial.ts #  Pure editorial policy: headlines vs routine steps folded per agent and 45 s window; live says headlines only (HS2-RKYCTP, HS2-G3HJZH)
+    src/announcer-editorial.ts #  Pure editorial policy: headlines vs routine steps folded per agent and 45 s window; live says headlines only, milestones when selected (HS2-RKYCTP, HS2-G3HJZH)
     src/announcer-utterance.ts #  What is said for an entry given the last project spoken: "For {project}, …" on a change (HS2-MR8GA4)
-    src/announcer-settings.ts #   Announcer engine, voice, speed, cleared-history persistence and settings menu entries (HS2-PRCC6V)
+    src/announcer-milestone.ts #  Reads a server ticket milestone's spoken line and speak flag from an activity event (HS2-G3HJZH)
+    src/announcer-settings.ts #   Announcer engine, voice, speed, cleared-history persistence and settings menu entries, Milestones AI switches (HS2-PRCC6V, HS2-G3HJZH)
     src/resizable-region-commits.ts # Routes the root wireResizableRegions commits to their owners by region id (HS2-BS0XFK)
     src/components/announcer-overlay.tsx # Sidebar-docked section, picture-in-picture card, or detached floating PinnablePopoverSurface with the current activity item (HS2-5PSQJQ, HS2-BS0XFK, HS2-7YD7S9, HS2-51X25Z)
     src/app/wire-interactions.ts # Behavior-sensitive ordering owner for the twelve interaction registration groups
@@ -713,6 +714,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/provider_outbox.rs #   durable Jira write-behind admission, dispatch state and per-row dispatch leases, provisional projection, 30-day payload compaction, and v2 retry-floor pruning (HS2-056R8P/HS2-X5AJ7M/HS2-QA1VEF/HS2-NJQVQF)
       src/identity.rs        #   current-user identity: current_user_email (git user.email) + resolve_me — the `me` sentinel for assignee/review filters (docs/10 §10.3, HS2-TCDTCH)
       src/activity.rs        #   cross-tool activity events (docs/15, HS2-KP31ZE/4C68Y8/26M48F): ActivityEvent/Kind/Importance + deterministic per-session volume admission/coalescing + bounded rolling store/timeline + mappers; server persists then broadcasts the same admitted payloads on WS/poll
+      src/announcer_milestones.rs # pure ticket milestones for the Announcer: snapshot diffing, coalescing, rule scores, shown/spoken templates, activity event (HS2-G3HJZH)
+      src/announcer_ai.rs    #   AI importance and wording contract: prompts, JSON reply parsing, line acceptance, AiBudget, DecisionCache, Decider (HS2-G3HJZH)
       src/roster.rs          #   Roster/Person: committed people.json (git email → name/github); display_name; docs/10 §10.2 (HS2-20)
       src/saved_views.rs     #   saved views (shared settings `views`): load/replace/validate plus ViewQuery, the web search language evaluated against one ticket for notification rules (HS2-G8NXNC)
       src/distclaim.rs       #   git-native distributed claim/lease: refs/hotsheet/claims/<ulid> push-CAS (first-wins), force-with-lease renew/steal, ls-remote enumerate, expiry sweep (docs/08 §8.5, HS2-84)
@@ -844,6 +847,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/routes/checkouts/removal.rs # HS2-X4RZ73 `DELETE /checkouts/{reference}[?dry_run=true]`: 409 while a presence lease names the checkout, then the shared remove_checkout and an unhost sweep
       src/hosting.rs         #   AppState store hosting: host_store/unhost sweep, repository watchers, instance registration, configured-store startup
       src/activity_capture.rs #  AppState::record_activity + optional deterministic activity distillation (and its tests)
+      src/announcer_milestones.rs # Ticket writes into announcer milestones: bus subscriber, coalesced batches, claude CLI importance/wording, /announcer/settings (HS2-G3HJZH)
       src/events.rs          #   ChangeEvent/EventLog long-poll ring + AppState::emit/changed_many_in/removed_in, IndexRepairs queue shared with watchers: retried on the next write and on a bounded watcher backoff (HS2-JD7TK0, HS2-5BAEX9)
       src/api_error.rs       #   ApiError ({ "error": ..., "code"? }) and its From conversions; `ticket_changed` code on stale expected tokens (HS2-9S8CV1); `write_behind_unavailable` code on the queued-batch refusal without a durable outbox (HS2-DEVEYE)
       src/dto.rs             #   request/response DTOs
@@ -1669,6 +1673,7 @@ eligibility rule for the note menu and AI repair preview. External `note_trailer
 Ticket groups (HS2-3XNTSD, HS2-9KZSD4, [35-ticket-groups.md](35-ticket-groups.md)):
 
 - Project time zone and due-date deadlines (HS2-SZF152, docs/38 §38.3): `crates/hotsheet-ticketing/src/project_time_zone.rs` (shared-only `time_zone` setting, validation, `project_time_zone`, pure `deadline_instant_ms` / `is_overdue` / `is_due_within` / `due_day_offset`; tests in `project_time_zone_tests.rs`), route `crates/hotsheet-server/src/routes/time_zone_settings.rs`, CLI `settings get|set time_zone` in `crates/hotsheet-cli/src/dispatch/setup.rs`; client `clients/web/src/project-time-zone.ts` (choice labels), `src/features/project-time-zone-settings.ts` (controller + wire helper), `src/components/project-time-zone-setting.tsx` (Project Settings › General › Time Zone), demo `src/ux-demo/project-time-zone-setting-demo.tsx`, spec `tests/project-time-zone.spec.ts`.
+- Announcer ticket milestones (HS2-G3HJZH): `crates/hotsheet-ticketing/src/announcer_milestones.rs` (ticket diffing, coalescing, rule scores, shown and spoken templates), `crates/hotsheet-ticketing/src/announcer_ai.rs` (classify and rewrite prompts, reply parsing, budget, cache, `MilestoneAi` trait), `crates/hotsheet-server/src/announcer_milestones.rs` (subscriber, `claude` CLI adapter, `GET`/`PUT /announcer/settings`), client `clients/web/src/announcer-milestone.ts`.
 - Automatic grouping of new tickets (HS2-FN018Q): `crates/hotsheet-ticketing/src/groups/auto.rs` (prompt and reply contract), `crates/hotsheet-server/src/auto_group.rs` (bus subscriber, coalesced default-AI turn), setting `auto_group_new_tickets` in `crates/hotsheet-ticketing/src/settings.rs`, route `routes/ticket_creation_settings.rs`.
   `crates/hotsheet-model/src/group.rs` owns group ids (`is_group_id`, `new_group_id`), the
   legacy-name reader rule (`GroupValue`), name normalization, and the comparison keys every

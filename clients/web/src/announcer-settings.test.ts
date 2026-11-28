@@ -20,7 +20,7 @@ const memory = (initial?: string) => {
   };
 };
 
-const icons = { voice: 'V' as never, speed: 'S' as never, clear: 'C' as never };
+const icons = { voice: 'V' as never, speed: 'S' as never, milestones: 'M' as never, clear: 'C' as never };
 const items = (entries: readonly PopupMenuEntry[]) =>
   entries.filter((entry): entry is PopupMenuItem => entry.kind !== 'heading' && entry.kind !== 'divider');
 const checked = (entries: readonly PopupMenuEntry[]) =>
@@ -101,7 +101,7 @@ describe('announcer settings menu (HS2-PRCC6V)', () => {
 
   it('offers voice, speed, and clear history, each with an icon', () => {
     const top = items(menu());
-    expect(top.map((entry) => entry.label)).toEqual(['Voice', 'Speed', 'Clear history']);
+    expect(top.map((entry) => entry.label)).toEqual(['Voice', 'Speed', 'Milestones', 'Clear history']);
     expect(top.every((entry) => entry.icon)).toBe(true);
   });
 
@@ -122,7 +122,7 @@ describe('announcer settings menu (HS2-PRCC6V)', () => {
   });
 
   it('offers only the default voice for a server engine without listed voices and disables an empty clear', () => {
-    const [voice, , clear] = items(menu({ provider: 'macos-say', voices: [], voice: '', hasHistory: false }));
+    const [voice, , , clear] = items(menu({ provider: 'macos-say', voices: [], voice: '', hasHistory: false }));
     expect(checked(voice.submenu ?? [])).toEqual(['Mac voice on server', 'Default voice']);
     expect(items(voice.submenu ?? []).some((entry) => entry.label === 'Alex')).toBe(false);
     expect(clear).toMatchObject({ disabled: true, disabledReason: 'No activity to clear' });
@@ -145,5 +145,39 @@ describe('announcer settings menu (HS2-PRCC6V)', () => {
       'data-announcer-setting': 'voice',
       'data-announcer-value': 'Anna (German (Germany))',
     });
+  });
+});
+
+describe('announcer milestone switches (HS2-G3HJZH)', () => {
+  const milestones = (ai?: { ai_importance: boolean; ai_rewrite: boolean }) =>
+    items(
+      announcerSettingsMenu({
+        providers: [],
+        provider: 'browser',
+        voices: [],
+        voice: '',
+        rate: 1,
+        hasHistory: true,
+        ai,
+        icons,
+      }),
+    ).find((entry) => entry.label === 'Milestones');
+
+  it('checks each server switch and carries the value it changes to', () => {
+    const switches = items(milestones({ ai_importance: true, ai_rewrite: false })?.submenu ?? []);
+    expect(switches.map((entry) => entry.label)).toEqual(['AI importance', 'AI wording']);
+    expect(checked(switches)).toEqual(['AI importance']);
+    expect(switches.map((entry) => entry.attributes)).toEqual([
+      { 'data-announcer-setting': 'ai-importance', 'data-announcer-value': 'off' },
+      { 'data-announcer-setting': 'ai-rewrite', 'data-announcer-value': 'on' },
+    ]);
+    expect(switches.every((entry) => !entry.disabled)).toBe(true);
+  });
+
+  it('disables the switches until the server answers', () => {
+    const switches = items(milestones()?.submenu ?? []);
+    expect(checked(switches)).toEqual([]);
+    for (const entry of switches)
+      expect(entry).toMatchObject({ disabled: true, disabledReason: 'Server settings are unavailable' });
   });
 });

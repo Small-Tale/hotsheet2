@@ -16053,6 +16053,70 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/Announce'
+  /announcer/settings:
+    get:
+      operationId: get_announcer_settings
+      responses:
+        '200':
+          description: The machine-wide announcer milestone switches (HS2-G3HJZH); both default to on.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ai_importance
+                  - ai_rewrite
+                properties:
+                  ai_importance:
+                    type: boolean
+                  ai_rewrite:
+                    type: boolean
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    put:
+      operationId: put_announcer_settings
+      responses:
+        '200':
+          description: Both switches after the update.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ai_importance
+                  - ai_rewrite
+                properties:
+                  ai_importance:
+                    type: boolean
+                  ai_rewrite:
+                    type: boolean
+        '400':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ai_importance:
+                  type: boolean
+                ai_rewrite:
+                  type: boolean
   /host-health:
     get:
       operationId: get_host_health

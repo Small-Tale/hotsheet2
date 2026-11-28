@@ -581,7 +581,10 @@ adapter that cannot list voices returns an empty list; an unknown provider is 40
 failed listing 503, HS2-CEZVSE). On macOS the server supplies `macos-say`, passing
 narration through stdin and converting the temporary audio to WAV; the temporary files
 are removed after the response is built. Its voices come from `say -v '?'`, parsed by
-`tts::parse_say_voices`.
+`tts::parse_say_voices`. `GET`/`PUT /announcer/settings` read and write the machine-wide
+announcer milestone switches `{ai_importance, ai_rewrite}` (both default on; a `PUT` body may
+name either), which decide whether ticket milestones are scored and worded by the person's AI
+tool or by rules and templates (HS2-G3HJZH, `docs/15` §15.6.1).
 
 #### Route reference: runs, views, lifecycle, bridge probe, announce
 
