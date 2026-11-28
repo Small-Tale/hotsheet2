@@ -5,11 +5,53 @@ import { expect, type Page, test } from '@playwright/test';
 import { withoutGitRepositoryEnv } from '../scripts/repository-env.mjs';
 import { remoteProjectId } from '../src/remote-projects/identity';
 import { demoHostHealth, demoLiveState } from '../src/ux-demo/live-section-fixtures';
+import { fakeGithubActions } from './fake-github-actions';
 import { openMockedProject, projectTab } from './open-mocked-project';
 import { showProjectSidebarAt } from './project-sidebar-layout';
 import { proxyFetch, realTicketServer } from './real-ticket-server';
 
 type Server = Awaited<ReturnType<typeof realTicketServer>>;
+
+/** Live CI fixtures use the real monitor with a loopback provider and a synthetic token. */
+async function watchedCiFixture() {
+  const provider = await fakeGithubActions();
+  try {
+    const server = await realTicketServer({ env: { ...provider.env(), HOTSHEET_JOB_MONITOR_AUTOSTART: 'on' } });
+    const repository = 'acme/widgets';
+    const sha = '9f8e7d6c5b4a'.padEnd(40, '0');
+    return {
+      server,
+      async report(
+        id: number,
+        workflow: string,
+        status: 'queued' | 'in_progress' | 'failure',
+        startedAtMs: number,
+        finishedAtMs?: number,
+      ) {
+        if (status !== 'failure') provider.run(repository, { id, sha, workflow, status });
+        await server.request(`/checkouts/${server.checkoutId}/ci-status`, 'POST', {
+          status,
+          branch: 'main',
+          sha,
+          workflow,
+          run_url: `https://github.com/${repository}/actions/runs/${String(id)}`,
+          started_at_ms: startedAtMs,
+          ...(finishedAtMs === undefined ? {} : { finished_at_ms: finishedAtMs }),
+        });
+      },
+      async stop(page: Page) {
+        try {
+          await server.stop(page);
+        } finally {
+          await provider.close();
+        }
+      },
+    };
+  } catch (error) {
+    await provider.close();
+    throw error;
+  }
+}
 
 /** Open the real app on an isolated server through the dev proxy, as archive-load-more does. */
 async function openProject(
@@ -259,7 +301,8 @@ test('HS2-505PHC labels the Live CI chip with its elapsed time and ticks without
   page,
 }, testInfo) => {
   test.setTimeout(150_000);
-  const server = await realTicketServer();
+  const fixture = await watchedCiFixture();
+  const { server } = fixture;
   try {
     await page.routeWebSocket(/.*/, (route) => {
       void route.close();
@@ -277,23 +320,14 @@ test('HS2-505PHC labels the Live CI chip with its elapsed time and ticks without
     const chip = live.locator('[data-live-chip="ci"]');
     await expect(chip).toHaveCount(0);
 
-    const report = (status: 'in_progress' | 'queued' | 'failure', startedAtMs: number, finishedAtMs?: number) =>
-      server.request(`/checkouts/${server.checkoutId}/ci-status`, 'POST', {
-        status,
-        branch: 'main',
-        sha: '9f8e7d6c5b4a',
-        workflow: 'CI',
-        started_at_ms: startedAtMs,
-        ...(finishedAtMs === undefined ? {} : { finished_at_ms: finishedAtMs }),
-      });
     // Queued first: a word, no clock. (A later report only replaces it when it did not start earlier.)
-    await report('queued', Date.now() - 90_000);
+    await fixture.report(1, 'CI', 'queued', Date.now() - 90_000);
     await expect(chip).toHaveText('CI · queued', { timeout: 30_000 });
     await expect(chip).toHaveAttribute('title', 'main CI queued · 9f8e7d6');
     await expect(chip.locator('[data-lucide="clock"]')).toBeVisible();
 
     // Running from a start 65 seconds ago: `CI · 1:05` or a second or two later, then it counts up.
-    await report('in_progress', Date.now() - 65_000);
+    await fixture.report(1, 'CI', 'in_progress', Date.now() - 65_000);
     await expect(chip).toHaveText(/^CI · 1:0\d$/u, { timeout: 30_000 });
     await expect(chip).toHaveAttribute('data-tone', 'neutral');
     await expect(chip).toHaveAttribute('title', /^main CI running for 1:\d\d · 9f8e7d6$/u);
@@ -345,7 +379,7 @@ test('HS2-505PHC labels the Live CI chip with its elapsed time and ticks without
 
     // Failed: a word in the danger tone, and the clock stops.
     const now = Date.now();
-    await report('failure', now - 65_000, now - 1_000);
+    await fixture.report(1, 'CI', 'failure', now - 65_000, now - 1_000);
     await expect(chip).toHaveText('CI failed', { timeout: 30_000 });
     await expect(chip).toHaveAttribute('data-tone', 'danger');
     await expect(chip.locator('[data-lucide="circle-x"]')).toBeVisible();
@@ -353,7 +387,7 @@ test('HS2-505PHC labels the Live CI chip with its elapsed time and ticks without
     await page.emulateMedia({ colorScheme: 'light' });
     await capture('failed-1280');
   } finally {
-    await server.stop(page);
+    await fixture.stop(page);
   }
 });
 
@@ -361,7 +395,10 @@ test('HS2-505PHC labels the Live CI chip with its elapsed time and ticks without
 // believed for 2 h after its report; then it cannot be verified and the Live section shows nothing for it, in
 // both modes, and the display clock stops. The browser clock is moved past the bound instead of waiting; the
 // server stamps the report time and its `verify_by_ms` itself.
-test('HS2-D3JJ49 shows nothing for a running CI report that can no longer be verified', async ({ page }) => {
+test('HS2-D3JJ49 shows nothing for a running CI report that can no longer be verified', async ({
+  page,
+  browserName,
+}) => {
   test.setTimeout(150_000);
   const server = await realTicketServer();
   try {
@@ -376,7 +413,7 @@ test('HS2-D3JJ49 shows nothing for a running CI report that can no longer be ver
     const chip = live.locator('[data-live-chip="ci"]');
 
     // Reported running, 5 minutes in, by a reporter that never reports again and no watch follows.
-    const answer = await server.request<{ follow: string; ci: { verification: string; verify_by_ms: number } }>(
+    const answer = await server.request<{ follow: string; ci: { verification: string; verify_by_ms: number | null } }>(
       `/checkouts/${server.checkoutId}/ci-status`,
       'POST',
       {
@@ -387,17 +424,30 @@ test('HS2-D3JJ49 shows nothing for a running CI report that can no longer be ver
         started_at_ms: Date.now() - 5 * 60_000,
       },
     );
-    expect(answer.follow).not.toBe('started');
-    expect(answer.ci.verification).toBe('verified');
-    await expect(chip).toHaveText(/^CI · 5:\d\d$/u, { timeout: 30_000 });
-
-    // Two hours and ten minutes later, on this machine's clock: the next display tick removes the chip.
-    await page.clock.setFixedTime(Date.now() + (2 * 60 + 10) * 60_000);
-    await expect(chip).toHaveCount(0, { timeout: 30_000 });
-    await expect(live).not.toContainText('unknown');
+    expect(answer.follow).toBe('none');
+    expect(answer.ci).toMatchObject({ verification: 'unverifiable', verify_by_ms: null });
+    const snapshot = await server.request<{ stores: { ci_runs: unknown[] }[] }>('/live-state');
+    expect(snapshot.stores[0]?.ci_runs).toEqual([]);
+    for (const width of [1280, 1024, 390, 1280]) {
+      await showProjectSidebarAt(page, width);
+      await expect(chip).toHaveCount(0);
+      await live.screenshot({ path: `target/visual-captures/hs2-d3jj49-${browserName}-unfollowed-${width}.png` });
+    }
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await live.screenshot({ path: `target/visual-captures/hs2-d3jj49-${browserName}-unfollowed-dark-1280.png` });
     await live.getByRole('button', { name: /^Show live details\. / }).click();
     await expect(live).toHaveAttribute('data-mode', 'expanded');
-    await expect(live.locator('[data-live-row="ci"]')).toHaveCount(0);
+    const rows = live.locator('[data-live-row="ci"]');
+    await expect(rows).toHaveCount(0);
+    await server.request(`/checkouts/${server.checkoutId}/ci-status`, 'POST', {
+      status: 'success',
+      branch: 'main',
+      sha: '8f6c8d81f0a1',
+      workflow: 'CI',
+      finished_at_ms: Date.now(),
+    });
+    await expect(rows).toHaveCount(1);
+    await expect(rows.first()).toContainText('passed');
   } finally {
     await server.stop(page);
   }
@@ -408,7 +458,8 @@ test('HS2-D3JJ49 shows nothing for a running CI report that can no longer be ver
 // and dark, in Chromium and WebKit.
 test('HS2-D3JJ49 shows each running CI run as its own chip and row @ci-webkit', async ({ page, browserName }) => {
   test.setTimeout(150_000);
-  const server = await realTicketServer();
+  const fixture = await watchedCiFixture();
+  const { server } = fixture;
   try {
     await page.setViewportSize({ width: 1280, height: 900 });
     await openProject(page, server);
@@ -416,17 +467,8 @@ test('HS2-D3JJ49 shows each running CI run as its own chip and row @ci-webkit', 
     const live = sidebar.locator('[data-component="project-live-section"]');
     await expect(live).toHaveAttribute('data-mode', 'compact', { timeout: 30_000 });
     const chips = live.locator('[data-live-chip="ci"]');
-    for (const [workflow, startedAgoMs] of [
-      ['CI', 65_000],
-      ['Platforms', 190_000],
-    ] as const)
-      await server.request(`/checkouts/${server.checkoutId}/ci-status`, 'POST', {
-        status: 'in_progress',
-        branch: 'main',
-        sha: '9f8e7d6c5b4a',
-        workflow,
-        started_at_ms: Date.now() - startedAgoMs,
-      });
+    await fixture.report(1, 'CI', 'in_progress', Date.now() - 65_000);
+    await fixture.report(2, 'Platforms', 'in_progress', Date.now() - 190_000);
     await expect(chips).toHaveCount(2, { timeout: 30_000 });
     const platforms = chips.filter({ hasText: /^Platforms · \d+:\d\d$/u }),
       ci = chips.filter({ hasText: /^CI · \d+:\d\d$/u });
@@ -477,7 +519,7 @@ test('HS2-D3JJ49 shows each running CI run as its own chip and row @ci-webkit', 
       await capture(`rows-${width}`);
     }
   } finally {
-    await server.stop(page);
+    await fixture.stop(page);
   }
 });
 
@@ -487,7 +529,8 @@ test('HS2-D3JJ49 shows each running CI run as its own chip and row @ci-webkit', 
 // again, light and dark, with the menu open.
 test('HS2-7PSBHQ clears one CI run from the Live section context menu', async ({ page, browserName }) => {
   test.setTimeout(150_000);
-  const server = await realTicketServer();
+  const fixture = await watchedCiFixture();
+  const { server } = fixture;
   try {
     await page.setViewportSize({ width: 1280, height: 900 });
     await openProject(page, server);
@@ -497,16 +540,8 @@ test('HS2-7PSBHQ clears one CI run from the Live section context menu', async ({
     const chips = live.locator('[data-live-chip="ci"]'),
       menu = page.locator('[data-context-menu="live-ci"]'),
       items = menu.getByRole('menuitem');
-    const report = (workflow: string) =>
-      server.request(`/checkouts/${server.checkoutId}/ci-status`, 'POST', {
-        status: 'in_progress',
-        branch: 'main',
-        sha: '8f6c8d81f0a1',
-        workflow,
-        started_at_ms: Date.now() - 5 * 60_000,
-      });
-    await report('CI');
-    await report('Platforms');
+    await fixture.report(1, 'CI', 'in_progress', Date.now() - 5 * 60_000);
+    await fixture.report(2, 'Platforms', 'in_progress', Date.now() - 5 * 60_000);
     await expect(chips).toHaveCount(2, { timeout: 30_000 });
     const platforms = chips.filter({ hasText: /^Platforms · / });
 
@@ -574,7 +609,7 @@ test('HS2-7PSBHQ clears one CI run from the Live section context menu', async ({
     await page.mouse.move(640, 880);
     await capture('cleared-expanded-1280');
   } finally {
-    await server.stop(page);
+    await fixture.stop(page);
   }
 });
 

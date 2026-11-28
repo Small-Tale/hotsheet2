@@ -30,7 +30,7 @@ fn workflow_run(workflow: &str, status: CiStatus, started: i64) -> CiRun {
 }
 
 fn single(home: &Path, reports: &CiReports, checkout: &str) -> LiveCi {
-    reports.live(home, &[checkout.to_owned()], 0).0
+    reports.live(home, &[checkout.to_owned()]).0
 }
 
 #[test]
@@ -57,9 +57,9 @@ fn hs2_m8hhea_report_validation_accepts_a_full_run_and_normalizes_it() {
     let minimal = report("queued").into_run(1).unwrap();
     assert_eq!(minimal.status, CiStatus::Queued);
     assert_eq!(minimal.sha, None);
-    // ...and a run in flight is believed for the trust window.
-    assert_eq!(minimal.verification, Verification::Verified);
-    assert_eq!(minimal.verify_by_ms, Some(1 + REPORT_TRUST_MS));
+    // An active report alone carries no verified provider observation.
+    assert_eq!(minimal.verification(), Verification::Unverifiable);
+    assert_eq!(minimal.verify_by_ms, None);
 }
 
 #[test]
@@ -164,74 +164,96 @@ fn hs2_m8hhea_staleness_keeps_the_newest_run_and_terminal_states() {
     assert!(!running.supersedes(&done));
 }
 
-/// HS2-D3JJ49: every verification transition, including transient → verified, transient →
-/// unverifiable, a re-check waiting on its first answer, and the trust window.
+/// HS2-D3JJ49: an initial outage cannot reveal a reported run. A later one retains an
+/// established state until a successful observation or an unsettled end.
 #[test]
 fn hs2_d3jj49_verification_transitions() {
     use VerificationEvent::*;
-    let fresh = || report("in_progress").into_run(1_000).unwrap();
-    let window = 1_000 + REPORT_TRUST_MS;
+    let mut flight = report("in_progress").into_run(1_000).unwrap();
+    assert_eq!(flight.verification(), Verification::Unverifiable);
+    assert!(!flight.verify(Unreachable));
+    assert!(!flight.visible());
 
-    // Reported: verified for the trust window, then unverifiable.
-    let reported = fresh();
-    assert_eq!(reported.verification_at(window), Verification::Verified);
-    assert_eq!(
-        reported.verification_at(window + 1),
-        Verification::Unverifiable
-    );
-    assert!(reported.visible_at(window) && !reported.visible_at(window + 1));
+    assert!(flight.verify(Confirmed));
+    assert!(flight.visible());
+    assert!(!flight.verify(Confirmed));
+    assert!(flight.verify(Unreachable));
+    assert_eq!(flight.verification(), Verification::Transient);
+    assert!(flight.visible());
+    assert!(!flight.verify(Unreachable));
+    assert!(flight.verify(Confirmed));
+    assert_eq!(flight.verification(), Verification::Verified);
+    assert!(flight.verify(Unreachable));
+    assert!(flight.verify(Unsettled));
+    assert!(!flight.visible());
 
-    // A follower confirms it: verified with no time limit.
-    let mut followed = fresh();
-    assert!(followed.verify(Confirmed));
-    assert_eq!(followed.verify_by_ms, None);
-    assert_eq!(followed.verification_at(i64::MAX), Verification::Verified);
-    assert!(
-        !followed.verify(Confirmed),
-        "a repeated event changes nothing"
-    );
-
-    // The provider is unreachable for now: transient, still shown with no time limit...
-    assert!(followed.verify(Unreachable));
-    assert_eq!(followed.verification_at(i64::MAX), Verification::Transient);
-    assert!(followed.visible_at(i64::MAX));
-    assert!(!followed.verify(Unreachable));
-    // ...transient → verified when the watch reads the provider again...
-    assert!(followed.verify(Confirmed));
-    assert_eq!(followed.verification, Verification::Verified);
-    // ...and transient → unverifiable when the watch ends without a verdict (a 404).
-    followed.verify(Unreachable);
-    assert!(followed.verify(Unsettled));
-    assert_eq!(followed.verification, Verification::Unverifiable);
-    assert!(!followed.visible_at(0));
-
-    // A follower that stops (no token after a restart) falls back to the report's window.
-    let mut fallback = fresh();
-    fallback.verify(Confirmed);
-    assert!(fallback.verify(Unfollowed));
-    assert_eq!(fallback.verify_by_ms, Some(window));
-
-    // A re-check hides the run until the watch confirms it; a provider error meanwhile
-    // keeps it hidden rather than showing it as transient.
-    let mut recheck = fresh();
-    assert!(recheck.verify(Recheck));
-    assert!(!recheck.visible_at(0));
-    assert!(!recheck.verify(Unreachable));
-    assert_eq!(recheck.verification, Verification::Unverifiable);
-    assert!(recheck.verify(Confirmed));
-    assert!(recheck.visible_at(i64::MAX));
-    // A re-check that settles nothing stays hidden.
-    let mut unsettled = fresh();
-    unsettled.verify(Recheck);
-    assert!(!unsettled.verify(Unsettled));
-    assert!(!unsettled.visible_at(0));
-
-    // A finished run is verified for good and ignores every event.
+    for event in [Recheck, Unfollowed] {
+        assert!(flight.verify(Confirmed));
+        assert!(flight.verify(event));
+        assert!(!flight.visible());
+        assert!(!flight.verify(Unreachable));
+    }
     let mut done = report("success").into_run(5).unwrap();
     for event in [Confirmed, Unfollowed, Unreachable, Recheck, Unsettled] {
         assert!(!done.verify(event), "{event:?}");
-        assert_eq!(done.verification_at(i64::MAX), Verification::Verified);
+        assert_eq!(done.verification(), Verification::Verified);
     }
+}
+
+#[test]
+fn hs2_d3jj49_an_active_refresh_keeps_evidence_only_for_the_same_flight() {
+    let mut known = workflow_run("CI", CiStatus::InProgress, 10);
+    known.run_url = Some("https://github.com/o/r/actions/runs/1".into());
+    known.verify(VerificationEvent::Unreachable);
+    let mut repeat = known.clone();
+    repeat.reported_at_ms += 1;
+    repeat.verify(VerificationEvent::Unfollowed);
+    let mut runs = vec![known];
+    assert_eq!(
+        record_run(&mut runs, repeat.clone()).1.verification(),
+        Verification::Transient
+    );
+
+    repeat.run_url = Some("https://github.com/o/r/actions/runs/2".into());
+    assert!(!record_run(&mut runs, repeat).1.visible());
+}
+
+#[test]
+fn hs2_d3jj49_an_old_watch_cannot_confirm_or_finish_a_replacement() {
+    use VerificationEvent::Confirmed;
+    let dir = tempfile::tempdir().unwrap();
+    let home = dir.path();
+    let reports = CiReports::default();
+    let mut previous = report("in_progress").into_run(1).unwrap();
+    previous.run_url = Some("https://github.com/o/r/actions/runs/1".into());
+    reports.record(home, "a", previous.clone());
+    let replacement = CiRun {
+        run_url: Some("https://github.com/o/r/actions/runs/2".into()),
+        reported_at_ms: 2,
+        ..previous.clone()
+    };
+    reports.record(home, "a", replacement.clone());
+    assert!(!reports.verify(home, "a", &previous, Confirmed));
+    assert_eq!(
+        reports.with_current_flight(home, "a", &previous, || "old stop"),
+        None
+    );
+    assert_eq!(
+        reports.with_current_flight(home, "a", &replacement, || "current stop"),
+        Some("current stop")
+    );
+    let old_verdict = CiRun {
+        status: CiStatus::Success,
+        ..previous.clone()
+    };
+    assert!(
+        !reports
+            .record_matching(home, "a", old_verdict, Some(&previous))
+            .0
+    );
+    assert_eq!(single(home, &reports, "a").status, CiStatus::Unavailable);
+    assert!(reports.verify(home, "a", &replacement, Confirmed));
+    assert_eq!(single(home, &reports, "a").run_url, replacement.run_url);
 }
 
 /// HS2-D3JJ49: one run per branch and workflow per checkout; a stale report of one pair
@@ -276,8 +298,8 @@ fn hs2_d3jj49_several_runs_are_kept_per_branch_and_workflow() {
 #[test]
 fn hs2_d3jj49_live_runs_show_each_visible_run_newest_first() {
     let mut runs = CiRunsByCheckout::new();
-    assert!(live_runs(&runs, &["a".into()], 0).is_empty());
-    assert_eq!(newest(&runs, &["a".into()], 0), LiveCi::unavailable());
+    assert!(live_runs(&runs, &["a".into()]).is_empty());
+    assert_eq!(newest(&runs, &["a".into()]), LiveCi::unavailable());
     let hidden = {
         let mut run = workflow_run("Release", CiStatus::InProgress, 900);
         run.verify(VerificationEvent::Unsettled);
@@ -300,7 +322,7 @@ fn hs2_d3jj49_live_runs_show_each_visible_run_newest_first() {
         "c".to_owned(),
         vec![workflow_run("Docs", CiStatus::Queued, 999)],
     );
-    let shown = live_runs(&runs, &["b".into(), "a".into(), "a".into()], 0);
+    let shown = live_runs(&runs, &["b".into(), "a".into(), "a".into()]);
     let summary: Vec<(Option<&str>, Option<&str>, Option<i64>)> = shown
         .iter()
         .map(|ci| {
@@ -324,17 +346,9 @@ fn hs2_d3jj49_live_runs_show_each_visible_run_newest_first() {
             .iter()
             .all(|ci| ci.verification == Some(Verification::Verified))
     );
-    assert_eq!(newest(&runs, &["a".into(), "b".into()], 0), shown[0]);
-    // The trust window ends for every run in flight that nothing follows.
-    let mut window = CiRunsByCheckout::new();
-    window.insert(
-        "a".to_owned(),
-        vec![report("in_progress").into_run(0).unwrap()],
-    );
-    assert_eq!(live_runs(&window, &["a".into()], REPORT_TRUST_MS).len(), 1);
-    assert!(live_runs(&window, &["a".into()], REPORT_TRUST_MS + 1).is_empty());
+    assert_eq!(newest(&runs, &["a".into(), "b".into()]), shown[0]);
     // An unlinked checkout list reports unavailable explicitly.
-    let none = newest(&runs, &[], 0);
+    let none = newest(&runs, &[]);
     assert_eq!(none.status, CiStatus::Unavailable);
     assert_eq!(
         serde_json::to_value(&none).unwrap(),
@@ -379,8 +393,7 @@ fn hs2_m8hhea_reports_persist_and_bad_files_are_ignored() {
 }
 
 /// HS2-D3JJ49: a version 1 file (one run per checkout, no verification) migrates on load.
-/// Its run in flight gets the trust window of its report, so one reported long ago is not
-/// shown; a finished run stays verified; the next save writes version 2.
+/// Its active run starts hidden and its finished run stays visible. The next save writes v2.
 #[test]
 fn hs2_d3jj49_an_old_single_record_file_migrates() {
     let dir = tempfile::tempdir().unwrap();
@@ -396,13 +409,11 @@ fn hs2_d3jj49_an_old_single_record_file_migrates() {
     std::fs::write(ci_status_path(&home), serde_json::to_vec(&legacy).unwrap()).unwrap();
     let runs = load_runs(&ci_status_path(&home));
     assert_eq!(runs["a"].len(), 1);
-    assert_eq!(runs["a"][0].verify_by_ms, Some(1_000 + REPORT_TRUST_MS));
-    assert_eq!(runs["b"][0].verify_by_ms, None);
-    let checkouts = ["a".to_owned(), "b".to_owned()];
-    assert_eq!(live_runs(&runs, &checkouts, 1_000).len(), 2);
-    let later = live_runs(&runs, &checkouts, 1_001 + REPORT_TRUST_MS);
-    assert_eq!(later.len(), 1, "the old run in flight is no longer shown");
-    assert_eq!(later[0].checkout.as_deref(), Some("b"));
+    assert_eq!(runs["a"][0].verification(), Verification::Unverifiable);
+    assert_eq!(runs["b"][0].verification(), Verification::Verified);
+    let shown = live_runs(&runs, &["a".to_owned(), "b".to_owned()]);
+    assert_eq!(shown.len(), 1);
+    assert_eq!(shown[0].checkout.as_deref(), Some("b"));
 
     // The next save writes version 2 with both runs.
     let reports = CiReports::default();
@@ -412,10 +423,41 @@ fn hs2_d3jj49_an_old_single_record_file_migrates() {
     let raw: serde_json::Value =
         serde_json::from_slice(&std::fs::read(ci_status_path(&home)).unwrap()).unwrap();
     assert_eq!(raw["version"], 2);
-    assert_eq!(
-        raw["checkouts"]["a"][0]["verify_by_ms"],
-        1_000 + REPORT_TRUST_MS
-    );
+    assert_eq!(raw["checkouts"]["a"][0]["verification"], "unverifiable");
+    assert!(raw["checkouts"]["a"][0]["verify_by_ms"].is_null());
+}
+
+#[test]
+fn hs2_d3jj49_v2_report_only_rows_hide_even_before_the_old_deadline() {
+    let mut old = workflow_run("CI", CiStatus::InProgress, 10);
+    old.verify_by_ms = Some(i64::MAX);
+    let finished = CiRun {
+        status: CiStatus::Success,
+        workflow: Some("Done".into()),
+        ..old.clone()
+    };
+    let observed = workflow_run("Platforms", CiStatus::Queued, 20);
+    let mut missing_evidence =
+        serde_json::to_value(workflow_run("Missing", CiStatus::Queued, 30)).unwrap();
+    missing_evidence
+        .as_object_mut()
+        .unwrap()
+        .remove("verification");
+    let bytes = serde_json::to_vec(&serde_json::json!({"version": 2, "checkouts": {
+        "a": [old, finished, observed, missing_evidence]
+    }}))
+    .unwrap();
+    let mut runs = parse_runs(&bytes).unwrap();
+    let shown = live_runs(&runs, &["a".into()]);
+    assert_eq!(shown.len(), 2);
+    assert_eq!(shown[0].workflow.as_deref(), Some("Platforms"));
+    assert_eq!(shown[1].workflow.as_deref(), Some("Done"));
+    let old = &mut runs.get_mut("a").unwrap()[0];
+    assert!(!old.verify(VerificationEvent::Unreachable));
+    assert!(!old.visible());
+    assert!(old.verify(VerificationEvent::Confirmed));
+    assert_eq!(old.verify_by_ms, None);
+    assert!(old.visible());
 }
 
 #[test]
@@ -469,7 +511,7 @@ fn hs2_7psbhq_clear_removes_only_the_run_the_caller_saw_and_persists() {
     assert_eq!(reports.clear(&home, "a", &at(100)), (false, Vec::new()));
     assert_eq!(
         reports
-            .live(&home, &["a".into(), "b".into()], 0)
+            .live(&home, &["a".into(), "b".into()])
             .0
             .checkout
             .as_deref(),

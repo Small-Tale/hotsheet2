@@ -135,12 +135,15 @@ async fn hs2_cc7tcb_a_reported_run_in_flight_is_followed_to_its_failure() {
     assert_eq!(started["applied"], true, "{started}");
     assert_eq!(started["follow"], "started", "{started}");
     assert_eq!(started["ci"]["status"], "in_progress");
+    assert_eq!(started["ci"]["verification"], "unverifiable");
     assert!(matches!(
         MonitorSlot::at(&fx.home).state().unwrap(),
         SlotState::Held(_)
     ));
 
-    // Reporting it again starts nothing new: the same follower and one watch Job.
+    let shown = next_ci(&mut events, |ci| ci["verification"] == "verified").await;
+    assert_eq!(shown["status"], "in_progress");
+    // Reporting it again retains the observation and starts nothing new.
     let (status, again) = api(
         router.clone(),
         "POST",
@@ -151,6 +154,7 @@ async fn hs2_cc7tcb_a_reported_run_in_flight_is_followed_to_its_failure() {
     .await;
     assert_eq!(status, StatusCode::OK, "{again}");
     assert_eq!(again["follow"], "following", "{again}");
+    assert_eq!(again["ci"]["verification"], "verified", "{again}");
     assert_eq!(host.ci_follow().following(), 1);
     let jobs = JobStore::at(&fx.home).list(&fx.checkout).unwrap().jobs;
     assert_eq!(jobs.len(), 1, "one watch Job for the run");
@@ -206,6 +210,8 @@ async fn hs2_cc7tcb_no_token_another_ci_or_no_monitor_follows_nothing_and_a_rest
     assert_eq!(status, StatusCode::OK, "{answer}");
     assert_eq!(answer["applied"], true);
     assert_eq!(answer["follow"], "no_token", "{answer}");
+    assert_eq!(answer["ci"]["verification"], "unverifiable", "{answer}");
+    assert!(answer["ci"]["verify_by_ms"].is_null());
     assert!(no_jobs());
     assert_eq!(slot.state().unwrap(), SlotState::Free);
 
@@ -216,6 +222,8 @@ async fn hs2_cc7tcb_no_token_another_ci_or_no_monitor_follows_nothing_and_a_rest
     let (_, answer) = api(following, "POST", &route, gitlab, true).await;
     assert_eq!(answer["applied"], true);
     assert_eq!(answer["follow"], "none", "{answer}");
+    assert_eq!(answer["ci"]["verification"], "unverifiable", "{answer}");
+    assert!(answer["ci"]["verify_by_ms"].is_null());
     assert!(no_jobs());
 
     // A server that starts no monitor stores the run without following it...
@@ -224,6 +232,8 @@ async fn hs2_cc7tcb_no_token_another_ci_or_no_monitor_follows_nothing_and_a_rest
     let (_, answer) = api(offline, "POST", &route, in_flight(&sha, RUN_PAGE), true).await;
     assert_eq!(answer["applied"], true);
     assert_eq!(answer["follow"], "off", "{answer}");
+    assert_eq!(answer["ci"]["verification"], "unverifiable", "{answer}");
+    assert!(answer["ci"]["verify_by_ms"].is_null());
     assert!(no_jobs());
     assert_eq!(slot.state().unwrap(), SlotState::Free);
 
@@ -313,12 +323,11 @@ async fn hs2_7psbhq_a_restart_rechecks_a_run_left_in_flight_past_the_follow_wind
 async fn hs2_7psbhq_clearing_forgets_only_the_run_the_caller_saw() {
     let fx = fixture();
     let sha = "4".repeat(40);
-    // HS2-D3JJ49: reported an hour ago, so it is still shown (a 36 h old one is hidden).
+    // The clear endpoint can address a stored run independently of glance visibility.
     let reported = store_stale_run(&fx.home, &fx.checkout, &sha, 1);
     let host =
         state(&fx.source, &fx.home).with_ci_follow(CiFollow::new(None, Arc::new(Token(false))));
     let router = app(host.clone());
-    let mut events = host.subscribe();
     let route = format!("/checkouts/{}/ci-status", fx.checkout);
 
     // Unauthenticated callers cannot clear.
@@ -336,6 +345,7 @@ async fn hs2_7psbhq_clearing_forgets_only_the_run_the_caller_saw() {
     assert_eq!(status, StatusCode::OK, "{kept}");
     assert_eq!(kept["cleared"], false);
     assert_eq!(kept["ci"]["status"], "in_progress");
+    assert_eq!(kept["ci"]["verification"], "unverifiable");
     assert_eq!(kept["ci"]["reported_at_ms"], reported);
 
     let (status, cleared) = api(
@@ -351,8 +361,8 @@ async fn hs2_7psbhq_clearing_forgets_only_the_run_the_caller_saw() {
     assert_eq!(cleared["cleared"], true);
     assert_eq!(cleared["ci"]["status"], "unavailable");
     assert_eq!(cleared["stores"].as_array().unwrap().len(), 1);
-    let ci = next_ci(&mut events, |ci| ci["status"] == "unavailable").await;
-    assert_eq!(ci["checkout"], Value::Null);
+    let live = serde_json::to_value(hotsheet_server::live_state::snapshot_all(&host)).unwrap();
+    assert_eq!(live["stores"][0]["ci"]["status"], "unavailable");
     assert!(
         hotsheet_server::ci_status::load_runs(&hotsheet_server::ci_status::ci_status_path(
             &fx.home
@@ -434,6 +444,7 @@ async fn hs2_d3jj49_an_outage_keeps_the_run_shown_and_a_404_hides_it() {
     let fx = fixture();
     let sha = "5".repeat(40);
     provider.run(9, &sha, None);
+    provider.fail_with(Some(503));
     let host = state(&fx.source, &fx.home)
         .with_ci_follow(CiFollow::new(Some(monitor(&url)), Arc::new(Token(true))));
     let router = app(host.clone());
@@ -450,11 +461,21 @@ async fn hs2_d3jj49_an_outage_keeps_the_run_shown_and_a_404_hides_it() {
     .await;
     assert_eq!(status, StatusCode::OK, "{started}");
     assert_eq!(started["follow"], "started", "{started}");
-    // Followed: verified with no trust window.
-    assert_eq!(started["ci"]["verification"], "verified", "{started}");
+    assert_eq!(started["ci"]["verification"], "unverifiable", "{started}");
     assert_eq!(started["ci"]["verify_by_ms"], Value::Null, "{started}");
+    let first_read = provider.clone();
+    assert!(
+        tokio::task::spawn_blocking(move || first_read.requested_beyond(0))
+            .await
+            .unwrap()
+    );
+    let live = serde_json::to_value(hotsheet_server::live_state::snapshot_all(&host)).unwrap();
+    assert_eq!(live["stores"][0]["ci_runs"], json!([]), "{live}");
+    provider.fail_with(None);
+    let ci = next_ci(&mut events, |ci| ci["verification"] == "verified").await;
+    assert_eq!(ci["status"], "in_progress");
 
-    // The provider fails for now: the run stays shown, in progress, as transient.
+    // The known run stays shown, in progress, when the provider fails again.
     provider.fail_with(Some(503));
     let ci = next_ci(&mut events, |ci| ci["verification"] == "transient").await;
     assert_eq!(ci["status"], "in_progress");
@@ -480,44 +501,45 @@ async fn hs2_d3jj49_an_outage_keeps_the_run_shown_and_a_404_hides_it() {
     );
 }
 
-/// HS2-D3JJ49: several runs in flight (two workflows, a second branch) are each shown, a
-/// run that nothing can follow is believed only for its report's trust window, and Clear
-/// applies per run.
+/// HS2-D3JJ49: several independently observed runs remain visible. An unsupported report
+/// is stored while the per-run clear and the glance response only show known flights.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn hs2_d3jj49_several_runs_are_each_shown_and_cleared_per_run() {
     let fx = fixture();
+    let sha = "6".repeat(40);
+    let settings = [("CI", "main"), ("Platforms", "main"), ("CI", "docs")];
+    let observed: Vec<_> = settings
+        .into_iter()
+        .enumerate()
+        .map(|(index, (workflow, branch))| {
+            json!({"status": "in_progress", "branch": branch, "sha": sha,
+            "workflow": workflow, "started_at_ms": CREATED_MS + index as i64,
+            "reported_at_ms": CREATED_MS + 10 + index as i64, "verification": "verified"})
+        })
+        .collect();
+    let file = json!({"version": 2, "checkouts": {fx.checkout.as_str(): observed}});
+    std::fs::write(
+        hotsheet_server::ci_status::ci_status_path(&fx.home),
+        serde_json::to_vec(&file).unwrap(),
+    )
+    .unwrap();
     let host =
         state(&fx.source, &fx.home).with_ci_follow(CiFollow::new(None, Arc::new(Token(false))));
     let router = app(host.clone());
     let mut events = host.subscribe();
     let route = format!("/checkouts/{}/ci-status", fx.checkout);
-    let sha = "6".repeat(40);
-    for (workflow, branch, started) in [
-        ("CI", "main", CREATED_MS),
-        ("Platforms", "main", CREATED_MS + 1),
-        ("CI", "docs", CREATED_MS + 2),
-    ] {
-        let (status, answer) = api(
-            router.clone(),
-            "POST",
-            &route,
-            json!({"status": "in_progress", "branch": branch, "sha": sha,
-                "workflow": workflow, "started_at_ms": started}),
-            true,
-        )
-        .await;
-        assert_eq!(status, StatusCode::OK, "{answer}");
-        assert_eq!(answer["applied"], true);
-        assert_eq!(answer["follow"], "none", "{answer}");
-        // Nothing follows it: the report's trust window applies.
-        assert_eq!(answer["ci"]["verification"], "verified");
-        let by = answer["ci"]["verify_by_ms"].as_i64().unwrap();
-        assert_eq!(
-            by - answer["ci"]["reported_at_ms"].as_i64().unwrap(),
-            hotsheet_server::ci_status::REPORT_TRUST_MS
-        );
-    }
-    let runs = next_runs(&mut events, |runs| runs.len() == 3).await;
+    let (_, unsupported) = api(
+        router.clone(),
+        "POST",
+        &route,
+        json!({"status": "queued", "branch": "main", "sha": sha, "workflow": "Unsupported",
+            "started_at_ms": CREATED_MS + 3}),
+        true,
+    )
+    .await;
+    assert_eq!(unsupported["ci"]["verification"], "unverifiable");
+    let snapshot = serde_json::to_value(hotsheet_server::live_state::snapshot_all(&host)).unwrap();
+    let runs = snapshot["stores"][0]["ci_runs"].as_array().unwrap();
     let shown: Vec<(&str, &str)> = runs
         .iter()
         .map(|ci| {
@@ -561,7 +583,7 @@ async fn hs2_d3jj49_several_runs_are_each_shown_and_cleared_per_run() {
     .await;
     assert_eq!(status, StatusCode::OK, "{cleared}");
     assert_eq!(cleared["cleared"], true);
-    assert_eq!(cleared["runs"].as_array().unwrap().len(), 2, "{cleared}");
+    assert_eq!(cleared["runs"].as_array().unwrap().len(), 3, "{cleared}");
     let runs = next_runs(&mut events, |runs| runs.len() == 2).await;
     assert!(
         runs.iter()
@@ -574,9 +596,8 @@ async fn hs2_d3jj49_several_runs_are_each_shown_and_cleared_per_run() {
     assert_eq!(all["ci"]["status"], "unavailable");
 }
 
-/// HS2-D3JJ49: an old single-record file migrates; its run reported 36 h ago in flight is
-/// hidden, and a restart that cannot re-check it (no GitHub token) keeps it hidden rather
-/// than showing it as unknown. The file is rewritten as version 2.
+/// HS2-D3JJ49: a v1 active run is hidden, and a restart that cannot re-check it keeps it
+/// hidden. Its file is rewritten on the next report that changes the stored runs.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn hs2_d3jj49_an_unverifiable_old_run_stays_hidden_after_migration() {
     let fx = fixture();
@@ -589,14 +610,12 @@ async fn hs2_d3jj49_an_unverifiable_old_run_stays_hidden_after_migration() {
     tokio::task::spawn_blocking(move || hotsheet_server::ci_follow::resume(&resumed))
         .await
         .unwrap();
-    let raw: Value = serde_json::from_slice(
-        &std::fs::read(hotsheet_server::ci_status::ci_status_path(&fx.home)).unwrap(),
-    )
-    .unwrap();
-    assert_eq!(raw["version"], 2, "{raw}");
-    let stored = &raw["checkouts"][fx.checkout.as_str()];
-    assert_eq!(stored[0]["status"], "in_progress", "{raw}");
-    assert_eq!(stored[0]["verification"], "unverifiable", "{raw}");
+    let stored = hotsheet_server::ci_status::load_runs(
+        &hotsheet_server::ci_status::ci_status_path(&fx.home),
+    );
+    let old = &stored[&fx.checkout][0];
+    assert_eq!(old.status, hotsheet_server::ci_status::CiStatus::InProgress);
+    assert!(!old.visible());
     let live = serde_json::to_value(hotsheet_server::live_state::snapshot_all(&host)).unwrap();
     let store = &live["stores"][0];
     assert_eq!(store["ci"]["status"], "unavailable", "{live}");

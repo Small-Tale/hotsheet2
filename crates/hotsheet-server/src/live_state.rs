@@ -585,11 +585,7 @@ fn build(state: &AppState, store: &str, now: OffsetDateTime) -> Option<LiveStore
     });
     let waiting = waiting_of(&waiting_rows);
     let (checkouts, name) = crate::notification_router::store_identity(state, store);
-    let (ci, ci_runs) = state.ci_reports.live(
-        state.machine_home(),
-        &checkouts,
-        (now.unix_timestamp_nanos() / 1_000_000) as i64,
-    );
+    let (ci, ci_runs) = state.ci_reports.live(state.machine_home(), &checkouts);
     let mut stores = state.live_states.stores.lock_or_recover();
     let live = stores.entry(store.to_string()).or_default();
     let tokens = token_rate(live, &entry.store, now);

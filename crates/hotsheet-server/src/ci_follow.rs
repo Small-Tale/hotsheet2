@@ -9,12 +9,12 @@
 //! monitor polls GitHub with its conditional requests and rate-limit backoff; the server
 //! itself still never polls. A follower thread waits on the Job store's file changes,
 //! and when the watch reaches a verdict it records the finished run through the same
-//! record-and-push path as a reported one ([`crate::ci_status::apply_run`]).
+//! record-and-push path as a reported one ([`crate::ci_status::apply_verdict`]).
 //!
 //! Nothing is followed for another CI's URL, for a run without a full commit, branch,
 //! and workflow, for a run this server already follows, or when no GitHub token is
-//! available. Such a run is shown only for its report's trust window, then is
-//! unverifiable and hidden (HS2-D3JJ49); the user can clear any shown run (HS2-7PSBHQ).
+//! available. An active run with no usable watcher is hidden immediately (HS2-D3JJ49);
+//! the user can clear any shown run (HS2-7PSBHQ).
 //!
 //! HS2-7PSBHQ: a restarted server re-checks once a stored run still in flight that was
 //! reported before the follow window ([`recheck_stale`]), so a run whose follower never
@@ -42,7 +42,10 @@ use hotsheet_sync::LockExt;
 use serde::Serialize;
 
 use crate::AppState;
-use crate::ci_status::{CiReport, CiRun, REPORT_TRUST_MS, VerificationEvent};
+use crate::ci_status::{CiReport, CiRun, VerificationEvent};
+
+/// A restarted watcher rechecks runs reported longer ago than this.
+pub const RECONFIRM_AFTER_MS: i64 = 2 * 60 * 60 * 1000;
 
 /// How long after its report a run is followed. GitHub Actions cancels a job after 6 h
 /// by default (`timeout-minutes: 360`), so a run still unfinished then is not worth
@@ -77,9 +80,8 @@ pub enum FollowState {
 }
 
 impl FollowState {
-    /// HS2-D3JJ49: whether a follower watches the run now, so it, not the report's trust
-    /// window, keeps the run verified.
-    pub fn confirms(self) -> bool {
+    /// Whether a watcher can still observe the run at its provider.
+    pub(crate) fn is_following(self) -> bool {
         matches!(self, FollowState::Started | FollowState::Following)
     }
 }
@@ -89,14 +91,19 @@ impl FollowState {
 /// [`VerificationEvent::Unreachable`]; a read that found the run at the provider
 /// (`run_status`) is [`VerificationEvent::Confirmed`]. A Job that has not read the provider
 /// yet, or that finished, says nothing here: its verdict or end is handled by the follower.
-pub fn watch_event(job: &Job) -> Option<VerificationEvent> {
+fn watch_event(job: &Job, run_id: u64) -> Option<VerificationEvent> {
     match job.status {
         Status::Lost => Some(VerificationEvent::Unreachable),
         Status::Queued | Status::Running | Status::Waiting => {
             if job.latest.get(WATCH_STATE_KEY).map(String::as_str) == Some("retrying") {
                 Some(VerificationEvent::Unreachable)
             } else if job.latest.contains_key("run_status") {
-                Some(VerificationEvent::Confirmed)
+                let observed = job.latest.get("run_id").and_then(|id| id.parse().ok());
+                Some(if observed == Some(run_id) {
+                    VerificationEvent::Confirmed
+                } else {
+                    VerificationEvent::Unsettled
+                })
             } else {
                 None
             }
@@ -204,10 +211,10 @@ fn enterprise_host(api_root: Option<&str>) -> Option<String> {
     (!host.is_empty()).then(|| host.to_ascii_lowercase())
 }
 
-/// `owner/name` of the repository a GitHub Actions run page belongs to:
+/// Repository and exact run id from a GitHub Actions run page:
 /// `https://github.com/<owner>/<name>/actions/runs/<id>[/…]`, or the same on the host of
 /// the configured GitHub Enterprise Server API root. Any other URL is not followed.
-pub fn github_run_repo(url: &str, api_root: Option<&str>) -> Option<String> {
+fn github_run_page(url: &str, api_root: Option<&str>) -> Option<(String, u64)> {
     let rest = url.trim().strip_prefix("https://")?;
     let rest = rest.split(['?', '#']).next()?;
     let mut parts = rest.split('/');
@@ -217,7 +224,8 @@ pub fn github_run_repo(url: &str, api_root: Option<&str>) -> Option<String> {
     }
     let (owner, name) = (parts.next()?, parts.next()?);
     let (actions, runs, id) = (parts.next()?, parts.next()?, parts.next()?);
-    let id_ok = !id.is_empty() && id.bytes().all(|byte| byte.is_ascii_digit());
+    let run_id = id.parse::<u64>().ok()?;
+    let id_ok = id.bytes().all(|byte| byte.is_ascii_digit());
     let named = |part: &str| {
         !part.is_empty()
             && part
@@ -225,19 +233,21 @@ pub fn github_run_repo(url: &str, api_root: Option<&str>) -> Option<String> {
                 .all(|byte| byte.is_ascii_alphanumeric() || b"-_.".contains(&byte))
     };
     (actions == "actions" && runs == "runs" && id_ok && named(owner) && named(name))
-        .then(|| format!("{owner}/{name}"))
+        .then(|| (format!("{owner}/{name}"), run_id))
 }
 
 /// The CI gate the watch follows for a reported run: only a run that is still queued or
 /// running, on a GitHub Actions run page, with a full 40-character commit, a branch,
 /// and a workflow. Without all of them there is nothing exact to follow.
-pub fn follow_target(run: &CiRun, api_root: Option<&str>) -> Option<CiTarget> {
+fn follow_target(run: &CiRun, api_root: Option<&str>) -> Option<(CiTarget, u64)> {
     if run.status.is_terminal() {
         return None;
     }
-    let repo = github_run_repo(run.run_url.as_deref()?, api_root)?;
+    let (repo, run_id) = github_run_page(run.run_url.as_deref()?, api_root)?;
     let sha = run.sha.as_deref().filter(|sha| sha.len() == 40)?;
-    CiTarget::new(&repo, sha, run.workflow.as_deref()?, run.branch.as_deref()?).ok()
+    let target =
+        CiTarget::new(&repo, sha, run.workflow.as_deref()?, run.branch.as_deref()?).ok()?;
+    Some((target, run_id))
 }
 
 /// The finished run a watch Job's verdict stands for, as a report: green is `success`,
@@ -285,9 +295,9 @@ pub fn aligned_start(mut report: CiReport, followed: &CiRun) -> CiReport {
     report
 }
 
-fn follow_key(checkout: &str, target: &CiTarget) -> String {
+fn follow_key(checkout: &str, target: &CiTarget, run_url: &str) -> String {
     format!(
-        "{checkout}\n{}\n{}\n{}\n{}",
+        "{checkout}\n{}\n{}\n{}\n{}\n{run_url}",
         target.repo, target.sha, target.workflow, target.branch
     )
 }
@@ -326,14 +336,28 @@ fn watch_job(store: &JobStore, checkout: &str, target: &CiTarget, recheck: bool)
 
 /// Record the verdict of a finished watch `job` as the end of `followed`. Returns whether
 /// the watch named a finished run.
-fn record_verdict(state: &AppState, checkout: &str, job: &Job, followed: &CiRun) -> bool {
+fn record_verdict(
+    state: &AppState,
+    checkout: &str,
+    job: &Job,
+    followed: &CiRun,
+    run_id: u64,
+) -> bool {
+    let observed = job
+        .outcome
+        .as_ref()
+        .and_then(|outcome| outcome.refs.get("run_id"))
+        .and_then(|id| id.parse().ok());
+    if observed != Some(run_id) {
+        return false;
+    }
     let Some(report) = verdict_report(job).map(|report| aligned_start(report, followed)) else {
         return false;
     };
     let Ok(run) = report.into_run(now_ms()) else {
         return false;
     };
-    crate::ci_status::apply_run(state, checkout, run);
+    crate::ci_status::apply_verdict(state, checkout, followed, run);
     true
 }
 
@@ -371,14 +395,18 @@ fn follow(
     recheck: bool,
 ) -> FollowState {
     let api_root = std::env::var(API_URL_ENV).ok();
-    let Some(target) = follow_target(run, api_root.as_deref()) else {
+    let Some((target, run_id)) = follow_target(run, api_root.as_deref()) else {
         return FollowState::None;
     };
     let follow = state.ci_follow();
     let Some(monitor) = follow.monitor.clone() else {
         return FollowState::Off;
     };
-    let key = follow_key(checkout, &target);
+    let key = follow_key(
+        checkout,
+        &target,
+        run.run_url.as_deref().unwrap_or_default(),
+    );
     if follow.following.lock_or_recover().contains(&key) {
         return FollowState::Following;
     }
@@ -392,7 +420,7 @@ fn follow(
         // Only a re-check takes a final verdict; nothing is left to follow either way.
         // HS2-D3JJ49: a verdict that names no finished run settles nothing.
         Some(Watch::Final(job)) => {
-            if !record_verdict(state, checkout, &job, run) {
+            if !record_verdict(state, checkout, &job, run, run_id) {
                 crate::ci_status::apply_verification(
                     state,
                     checkout,
@@ -418,7 +446,13 @@ fn follow(
         let key = key.clone();
         move || {
             follow_until_verdict(
-                &state, &store, &checkout, &target, &job.id, &followed, deadline,
+                &state,
+                &store,
+                &checkout,
+                (&target, run_id),
+                &job.id,
+                &followed,
+                deadline,
             );
             state.ci_follow().following.lock_or_recover().remove(&key);
         }
@@ -439,7 +473,7 @@ fn follow_until_verdict(
     state: &AppState,
     store: &JobStore,
     checkout: &str,
-    target: &CiTarget,
+    (target, run_id): (&CiTarget, u64),
     job_id: &str,
     followed: &CiRun,
     deadline: i64,
@@ -455,6 +489,14 @@ fn follow_until_verdict(
     // One waiter for the whole follow, not one per store change (HS2-N1QDZW).
     let kept = KeptWaiter::default();
     loop {
+        if state.is_stopping()
+            || state
+                .ci_reports
+                .with_current_flight(state.machine_home(), checkout, followed, || ())
+                .is_none()
+        {
+            return;
+        }
         let Ok(reading) = gate_state(store, checkout, target) else {
             return;
         };
@@ -462,7 +504,7 @@ fn follow_until_verdict(
         if reading.state.is_final() {
             let recorded = job
                 .as_ref()
-                .is_some_and(|job| record_verdict(state, checkout, job, followed));
+                .is_some_and(|job| record_verdict(state, checkout, job, followed, run_id));
             if !recorded {
                 unsettled();
             }
@@ -472,16 +514,18 @@ fn follow_until_verdict(
             unsettled();
             return;
         }
-        if state.is_stopping() {
-            return;
-        }
-        if let Some(event) = job.as_ref().and_then(watch_event) {
+        if let Some(event) = job.as_ref().and_then(|job| watch_event(job, run_id)) {
             crate::ci_status::apply_verification(state, checkout, followed, event);
         }
         let left = deadline.saturating_sub(now_ms());
         if left <= 0 {
             let id = reading.job_id.as_deref().unwrap_or(job_id);
-            let _ = store.stop_watching(checkout, id);
+            let _ = state.ci_reports.with_current_flight(
+                state.machine_home(),
+                checkout,
+                followed,
+                || store.stop_watching(checkout, id),
+            );
             unsettled();
             return;
         }
@@ -496,12 +540,12 @@ fn follow_until_verdict(
 }
 
 /// HS2-D3JJ49: how a restarted server treats a stored run still in flight, reported
-/// `age_ms` ago. A run within the report's trust window is followed and keeps its
-/// verification; an older one is hidden until its re-check confirms it. Past the follow
+/// `age_ms` ago. A recent provider observation is retained while its watcher resumes.
+/// An older one is hidden until a fresh provider observation. Past the follow
 /// window the re-check is short ([`recheck_stale`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Resume {
-    /// Follow for the rest of the follow window; the report still vouches for the run.
+    /// Continue following; keep any prior provider observation.
     Follow,
     /// Follow for the rest of the follow window, hidden until the watch confirms the run.
     Reconfirm,
@@ -513,7 +557,7 @@ pub enum Resume {
 pub fn resume_plan(age_ms: i64) -> Resume {
     if age_ms >= FOLLOW_LIMIT_MS {
         Resume::Recheck
-    } else if age_ms > REPORT_TRUST_MS {
+    } else if age_ms > RECONFIRM_AFTER_MS {
         Resume::Reconfirm
     } else {
         Resume::Follow
@@ -523,9 +567,8 @@ pub fn resume_plan(age_ms: i64) -> Resume {
 /// HS2-CC7TCB: a restarted server follows the stored runs that are still in flight and
 /// were reported within [`FOLLOW_LIMIT_MS`]. HS2-7PSBHQ: one reported before that, which
 /// nothing ended, is re-checked once ([`recheck_stale`]) instead of staying unknown.
-/// HS2-D3JJ49: a run reported longer ago than the trust window is hidden until confirmed,
-/// and a run nothing can follow now falls back to its report's trust window. Idle when
-/// there are none.
+/// An older observation needs reconfirmation and an active run that cannot be followed is
+/// hidden immediately.
 pub fn resume(state: &AppState) {
     let now = now_ms();
     for (checkout, runs) in state.ci_reports_snapshot() {
@@ -546,13 +589,13 @@ pub fn resume(state: &AppState) {
                 Resume::Recheck => recheck_stale(state, &checkout, &run),
                 Resume::Follow | Resume::Reconfirm => follow_reported(state, &checkout, &run),
             };
-            if plan == Resume::Follow {
-                let event = if follow.confirms() {
-                    VerificationEvent::Confirmed
-                } else {
-                    VerificationEvent::Unfollowed
-                };
-                crate::ci_status::apply_verification(state, &checkout, &run, event);
+            if !follow.is_following() {
+                crate::ci_status::apply_verification(
+                    state,
+                    &checkout,
+                    &run,
+                    VerificationEvent::Unfollowed,
+                );
             }
         }
     }
@@ -601,9 +644,12 @@ mod tests {
             "https://github.com/acme/widgets/actions/runs/2983/attempts/2",
             "https://GitHub.com/acme/my_repo.js/actions/runs/1?check_suite_focus=true",
         ] {
-            assert!(github_run_repo(url, None).is_some(), "{url}");
+            assert!(github_run_page(url, None).is_some(), "{url}");
         }
-        assert_eq!(github_run_repo(URL, None).as_deref(), Some("acme/widgets"));
+        assert_eq!(
+            github_run_page(URL, None),
+            Some(("acme/widgets".into(), 2983))
+        );
         for url in [
             "http://github.com/acme/widgets/actions/runs/1",
             "https://gitlab.com/acme/widgets/-/pipelines/1",
@@ -614,24 +660,25 @@ mod tests {
             "https://ci.example.test/acme/widgets/actions/runs/1",
             "https://github.com/acme",
         ] {
-            assert_eq!(github_run_repo(url, None), None, "{url}");
+            assert_eq!(github_run_page(url, None), None, "{url}");
         }
         // GitHub Enterprise Server: the host of the configured API root, HTTPS only.
         let ghe = "https://ghe.example.test/acme/widgets/actions/runs/5";
-        assert_eq!(github_run_repo(ghe, None), None);
+        assert_eq!(github_run_page(ghe, None), None);
         assert_eq!(
-            github_run_repo(ghe, Some("https://ghe.example.test/api/v3")).as_deref(),
-            Some("acme/widgets")
+            github_run_page(ghe, Some("https://ghe.example.test/api/v3")),
+            Some(("acme/widgets".into(), 5))
         );
         assert_eq!(
-            github_run_repo(ghe, Some("http://ghe.example.test/api/v3")),
+            github_run_page(ghe, Some("http://ghe.example.test/api/v3")),
             None
         );
     }
 
     #[test]
     fn hs2_cc7tcb_a_target_needs_a_run_in_flight_with_a_full_commit_branch_and_workflow() {
-        let target = follow_target(&run(CiStatus::InProgress), None).unwrap();
+        let (target, run_id) = follow_target(&run(CiStatus::InProgress), None).unwrap();
+        assert_eq!(run_id, 2983);
         assert_eq!(
             (target.repo.as_str(), target.sha.as_str()),
             ("acme/widgets", SHA)
@@ -807,33 +854,43 @@ mod tests {
         };
         // Not read yet: nothing to say.
         for status in [Status::Queued, Status::Running, Status::Waiting] {
-            assert_eq!(watch_event(&with_latest(status, &[])), None, "{status:?}");
+            assert_eq!(
+                watch_event(&with_latest(status, &[]), 9),
+                None,
+                "{status:?}"
+            );
         }
         // A read that found the run confirms it.
         let observed = [("run_status", "in_progress"), ("run_id", "9")];
         assert_eq!(
-            watch_event(&with_latest(Status::Running, &observed)),
+            watch_event(&with_latest(Status::Running, &observed), 9),
             Some(VerificationEvent::Confirmed)
         );
         assert_eq!(
-            watch_event(&with_latest(Status::Waiting, &[("run_status", "queued")])),
-            Some(VerificationEvent::Confirmed)
+            watch_event(
+                &with_latest(
+                    Status::Waiting,
+                    &[("run_status", "queued"), ("run_id", "8")]
+                ),
+                9
+            ),
+            Some(VerificationEvent::Unsettled)
         );
         // A read that failed for now, even after an earlier answer, is unreachable; so is
         // a lost monitor.
         let retrying = [("run_status", "in_progress"), (WATCH_STATE_KEY, "retrying")];
         assert_eq!(
-            watch_event(&with_latest(Status::Running, &retrying)),
+            watch_event(&with_latest(Status::Running, &retrying), 9),
             Some(VerificationEvent::Unreachable)
         );
         assert_eq!(
-            watch_event(&with_latest(Status::Lost, &[])),
+            watch_event(&with_latest(Status::Lost, &[]), 9),
             Some(VerificationEvent::Unreachable)
         );
         // A finished Job is the follower's business (verdict or end), not an event.
         for status in [Status::Succeeded, Status::Failed, Status::Cancelled] {
             assert_eq!(
-                watch_event(&with_latest(status, &observed)),
+                watch_event(&with_latest(status, &observed), 9),
                 None,
                 "{status:?}"
             );
@@ -843,13 +900,13 @@ mod tests {
     #[test]
     fn hs2_d3jj49_a_restart_reconfirms_runs_past_the_trust_window() {
         assert_eq!(resume_plan(0), Resume::Follow);
-        assert_eq!(resume_plan(REPORT_TRUST_MS), Resume::Follow);
-        assert_eq!(resume_plan(REPORT_TRUST_MS + 1), Resume::Reconfirm);
+        assert_eq!(resume_plan(RECONFIRM_AFTER_MS), Resume::Follow);
+        assert_eq!(resume_plan(RECONFIRM_AFTER_MS + 1), Resume::Reconfirm);
         assert_eq!(resume_plan(FOLLOW_LIMIT_MS - 1), Resume::Reconfirm);
         assert_eq!(resume_plan(FOLLOW_LIMIT_MS), Resume::Recheck);
-        assert!(FollowState::Started.confirms() && FollowState::Following.confirms());
+        assert!(FollowState::Started.is_following() && FollowState::Following.is_following());
         for state in [FollowState::None, FollowState::NoToken, FollowState::Off] {
-            assert!(!state.confirms(), "{state:?}");
+            assert!(!state.is_following(), "{state:?}");
         }
     }
 

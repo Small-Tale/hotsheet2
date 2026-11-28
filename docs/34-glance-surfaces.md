@@ -228,10 +228,10 @@ the default) and `m1-project-sidebar-live-{light,dark}` (expanded).
   server keeps the newest run per branch and workflow and lists at most 8.
 - **Unverifiable CI runs (HS2-D3JJ49, replacing HS2-CC7TCB's `CI · unknown`).** A run that cannot be
   verified shows nothing: no chip, no row, and the Stats tile falls back to the newest run it can show or
-  No CI reported. That covers a run in flight that nothing follows once 2 hours pass after its report, a
-  run the provider no longer knows, and a restart's re-check that settled nothing
+  No CI reported. An active report without a confirmed provider observation is hidden immediately.
+  A run the provider no longer knows or a restart re-check that settles nothing is also hidden
   ([32](32-notifier-plugins.md) §32.8.5). A run whose provider is only unreachable for now (a network or
-  service error, a rate limit) keeps its chip with its last known face; its title ends
+  service error, a rate limit) keeps its chip if a watch previously confirmed the run; its title ends
   `provider unreachable, retrying`. The display clock stops once no chip ticks; it never issues a request.
 - **Clear CI Status (HS2-7PSBHQ, HS2-D3JJ49, shipped).** Right-clicking a CI chip or row opens a Kerf
   `PopupMenu` context menu, as for the other sidebar entries, with **Clear CI Status** (Lucide `eraser`)

@@ -1942,8 +1942,7 @@ export interface LiveCi {
    */
   verification?: LiveCiVerification | null;
   /**
-   * HS2-D3JJ49: when a queued or running run that no watch follows stops being shown; `null` when a watch follows
-   * it or it finished. Absent from an older server.
+   * HS2-D3JJ49: a legacy display deadline. The current server sends `null`; early servers omit the field.
    */
   verify_by_ms?: number | null;
 }

@@ -14,6 +14,7 @@ export const FAKE_GITHUB_TOKEN = 'synthetic-token-for-browser-tests';
 export interface FakeRun {
   id: number;
   sha: string;
+  workflow?: string;
   status: 'queued' | 'in_progress' | 'completed';
   conclusion?: 'success' | 'failure' | 'cancelled';
 }
@@ -50,7 +51,7 @@ export async function fakeGithubActions() {
       const branch = url.searchParams.get('branch') ?? 'main';
       const found = (runs.get(repo) ?? []).map((run) => ({
         id: run.id,
-        name: 'CI',
+        name: run.workflow ?? 'CI',
         head_branch: branch,
         head_sha: run.sha,
         event: 'push',

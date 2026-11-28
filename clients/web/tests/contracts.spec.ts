@@ -216,7 +216,7 @@ test('client contracts accept real ticket and replay responses', async () => {
     const reported = await server.request(`/checkouts/${server.checkoutId}/ci-status`, 'POST', ciReport);
     expect(ciResponse(reported), JSON.stringify(ciResponse.errors)).toBe(true);
     expect(reported).toMatchObject({ applied: true, ci: { status: 'success', checkout: server.checkoutId } });
-    // HS2-D3JJ49: a run in flight carries its verification and trust bound; the live state lists each run.
+    // HS2-D3JJ49: an active report with no watcher is stored but absent from the live list.
     const running = await server.request(`/checkouts/${server.checkoutId}/ci-status`, 'POST', {
       ...ciReport,
       status: 'in_progress',
@@ -224,10 +224,10 @@ test('client contracts accept real ticket and replay responses', async () => {
       finished_at_ms: null,
     });
     expect(ciResponse(running), JSON.stringify(ciResponse.errors)).toBe(true);
-    expect(running).toMatchObject({ ci: { verification: 'verified', workflow: 'Platforms' } });
+    expect(running).toMatchObject({ ci: { verification: 'unverifiable', verify_by_ms: null, workflow: 'Platforms' } });
     const live = await server.request<{ stores: { ci_runs: unknown[] }[] }>('/live-state');
     validateResponse('/live-state', live);
-    expect(live.stores[0]?.ci_runs).toHaveLength(2);
+    expect(live.stores[0]?.ci_runs).toHaveLength(1);
     const cleared = await server.request(
       `/checkouts/${server.checkoutId}/ci-status?reported_at_ms=${String((running as { ci: { reported_at_ms: number } }).ci.reported_at_ms)}&workflow=Platforms`,
       'DELETE',

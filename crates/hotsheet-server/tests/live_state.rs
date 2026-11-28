@@ -1325,12 +1325,16 @@ async fn hs2_m8hhea_reported_ci_runs_are_pushed_in_the_live_state() {
     assert_eq!(started["stores"], json!([h.store_id]));
     // HS2-CC7TCB: no GitHub Actions run page, so nothing follows the run.
     assert_eq!(started["follow"], "none");
-    let live = next_live(&mut events, &h.store_id, |live| {
-        live["ci"]["status"] == "in_progress"
-    })
+    assert_eq!(started["ci"]["verification"], "unverifiable");
+    let (_, live) = call(
+        &router,
+        "GET",
+        &format!("/stores/{}/live-state", h.store_id),
+        None,
+    )
     .await;
-    assert_eq!(live["ci"]["checkout"], main_id.as_str());
-    assert_eq!(live["ci"]["sha"], sha);
+    assert_eq!(live["ci"]["status"], "unavailable");
+    assert_eq!(live["ci_runs"], json!([]));
 
     // It finishes green.
     let url = "https://github.com/Small-Tale/hotsheet2/actions/runs/42";

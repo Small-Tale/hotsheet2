@@ -628,8 +628,8 @@ public URL is needed, and the source is independent of the ticket provider.
 - **Persistence.** Runs are kept in the machine-local `<machine home>/ci-status.json`
   (`version` 2: a list of runs per checkout, each with its verification) and read again after a
   restart. A `version` 1 file (one run per checkout, from before HS2-D3JJ49) is migrated on load:
-  each run becomes a one-run list, and a run in flight gets the trust window of its report, so one
-  reported long ago is not shown unless a re-check confirms it; the next write saves `version` 2.
+  each run becomes a one-run list and active runs are hidden until a watch confirms them. A `version` 2
+  active row with a legacy report-only deadline also stays hidden. The next write saves `version` 2.
   An unreadable file or one of another version is ignored, and the stores start as `unavailable`.
 - **Reporters (HS2-W4BC5Q).** `node scripts/ci-gate.mjs status`, which integrators run while
   a ticket waits in `final_testing`, reports the branch's newest `CI` push run (any status:
@@ -681,29 +681,19 @@ public URL is needed, and the source is independent of the ticket provider.
 - **Verification (HS2-D3JJ49).** The maintainer's rule: a run that really cannot be verified shows
   nothing, while a temporary network or service problem does not hide it. Each stored run carries
   `verification`, decided by one pure transition function (`CiRun::verify`):
-  - **verified**: the provider confirmed the state. A report counts, because the reporter just read
-    the provider. A finished run is verified for good. A run in flight that a watch follows
-    (`follow: started` or `following`) stays verified with no time limit, and so does one the
-    watch read at the provider again.
-  - **transient**: the watch's last provider read failed for a network error, a server error, or a
-    rate limit (the watch Job's `watch: retrying`), or its monitor was lost. The run keeps its last
-    known status and stays shown; the Job monitor retries with its bounded backoff, and the next
-    successful read makes it verified again. The server never polls; the follower wakes on the Job
-    store's file changes.
-  - **unverifiable**: nothing can confirm it. A run in flight that nothing follows (another CI, no
-    GitHub token, no Job monitor) is believed for **2 hours** after its report (`verify_by_ms`,
-    the trust window HS2-CC7TCB used for its stale display) and is unverifiable after that. The
-    watch ending without a finished run (a 404 for a run or repository the credentials cannot read,
-    a superseded commit, the follow window closing) makes a run unverifiable at once, as does a
-    restart's re-check that settles nothing. A restart hides a run reported longer ago than the
-    trust window until its watch reads it again.
-  - The live state never lists an unverifiable run, so no glance surface shows it: no chip, no row,
-    no Stats tile word. The stored record stays until a newer report replaces it or it is cleared.
-    The client applies the same `verify_by_ms` with its render-only display clock
-    (`clients/web/src/ci-runs.ts`), so the server pushes nothing when a trust window ends; for an
-    older server without `verify_by_ms` it uses the 2 hours from `reported_at_ms`.
-  - Each `LiveCi` carries `verification` (`verified` or `transient`; `null` while
-    `unavailable`) and `verify_by_ms` (`null` when a watch follows the run or it finished).
+  - **verified**: the watch observed the reported run id at its provider, or the run finished. Starting
+    a watch still leaves the report hidden until its first successful observation.
+  - **transient**: a previously verified run's watch hit a network error, a server error, or a rate
+    limit (the watch Job's `watch: retrying`), or its monitor was lost. The last known status stays
+    shown while the Job monitor retries with bounded backoff. A first failed observation leaves a
+    run hidden. The server follower wakes on Job-store changes.
+  - **unverifiable**: there is no observation for an active run, the server cannot follow it (another
+    CI, no GitHub token, no Job monitor), or its watch ended without a finished run (404, a superseded
+    commit, or the follow window closing). An active report without a usable watch stays hidden from
+    the moment it arrives. On restart, a run reported more than 2 hours ago needs a fresh check.
+  - Live state omits unverifiable runs from the sidebar and Stats. The record stays stored until a
+    newer report replaces it or it is cleared. The existing `verify_by_ms` response member is `null`
+    on the current server. Clients preserve their prior deadline behavior for older servers.
 - **Clearing runs (HS2-7PSBHQ, HS2-D3JJ49).** `DELETE /checkouts/{reference}/ci-status` forgets
   runs stored for a checkout: every run, or only those matching all of `reported_at_ms`, `branch`,
   and `workflow`, so a newer report is kept. The answer names the checkout, whether it `cleared`,
@@ -718,8 +708,8 @@ public URL is needed, and the source is independent of the ticket provider.
   `hotsheet-cli ci report --status success --branch main --sha <commit> --workflow <name>
 --run-url <link> --started-at-ms <ms> --finished-at-ms <ms>`. Report `in_progress` when a
   run starts and the outcome when it ends; the server keeps the newest run per checkout, branch, and
-  workflow. A run in flight from such a CI is shown for 2 hours after its last report unless a
-  newer report arrives.
+  workflow. When Hot Sheet has no watcher for that provider, finished outcomes appear and active
+  reports stay hidden.
 - **Limit.** Status is only as fresh as the last report or watch read. The Stats Right now tile
   (HS2-E16ZEK) renders the newest shown run; the project sidebar Live section (HS2-57BYEA) renders a
   chip per run in flight and a row per shown run (HS2-D3JJ49).

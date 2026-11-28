@@ -184,13 +184,17 @@ or row ever shows for it and `hotsheet-cli live-state` lists no `ci_runs`.
 
 With `gh auth status` signed in, push a commit that starts two workflows and
 report each run with `hotsheet-cli ci report --status in_progress` (its
-40-character `--sha`, `--run-url`, `--workflow`, `--branch main`). The sidebar
-shows one chip per run, named by workflow, each ticking. Turn the network off
+40-character `--sha`, `--run-url`, `--workflow`, `--branch main`). After the
+watch reads both runs, the sidebar shows one chip per run, named by workflow,
+each ticking. Turn the network off
 for a few minutes: both chips stay, their titles end `provider unreachable,
 retrying`; turn it back on and the titles return to normal, then each chip
 turns into its verdict. Right-click one chip, choose Clear CI Status, and
-confirm only that chip goes. Report a run of a repository the token cannot
-read and confirm no chip shows once the watch answers 404.
+confirm only that chip goes. Also report an active run from a provider Hot Sheet
+cannot query. Confirm there is no chip or row at the next live snapshot. Report
+its finished outcome and confirm the expanded section now shows the result.
+For a provider outage before the first successful read, confirm the run stays
+hidden until the first observation.
 
 ### Launched-agent sandbox recovery (HS2-DVZXSD)
 

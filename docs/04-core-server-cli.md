@@ -482,8 +482,8 @@ no server: it reads the selected store's recorded state transitions (`metrics/lo
 and tickets, and prints the segments and completions of the last `--hours` (1–168), as
 `GET /live-history` serves them ([34](34-glance-surfaces.md) §34.8, HS2-9AN4DN). `ci report` posts a CI
 run a local tool observed to `POST /checkouts/{reference}/ci-status` for `--checkout` or the checkout of
-the current directory, and prints whether it applied; the server keeps one run per checkout, branch, and workflow and pushes the shown ones as the live
-state's `ci_runs` and `ci` ([32](32-notifier-plugins.md) §32.8.5, HS2-M8HHEA, HS2-D3JJ49). `ci clear`
+the current directory, and prints whether it applied. The server stores one run per checkout, branch,
+and workflow and publishes finished runs and verified active runs through live state's `ci_runs` and `ci` ([32](32-notifier-plugins.md) §32.8.5, HS2-M8HHEA, HS2-D3JJ49). `ci clear`
 forgets runs stored for that checkout through `DELETE` on the same route: every run, or only those
 matching `--reported-at-ms`, `--branch`, and `--workflow` when given, and prints whether it cleared and
 the runs left (HS2-7PSBHQ, HS2-D3JJ49). Activity accepts `--session`;

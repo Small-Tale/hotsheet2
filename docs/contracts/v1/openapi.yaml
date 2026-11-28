@@ -34959,12 +34959,10 @@ components:
       type: string
       description: >-
         Whether the run's provider still confirms its state (HS2-D3JJ49, docs/32-notifier-plugins.md §32.8.5).
-        `verified`: a reporter just read it, the server's GitHub Actions watch read it, or the run finished.
-        `transient`: the watch's last provider read failed for a network error, a server error, or a rate limit; the
-        last known status stays shown while the Job monitor retries with bounded backoff. `unverifiable`: nothing can
-        confirm it (no token or provider access, a CI the server cannot query once the report's trust window ends, a run
-        the provider no longer knows, a re-check that settled nothing). The live state never lists an unverifiable run;
-        a clear response can.
+        `verified`: a watch observed the active run at its provider, or it finished. `transient`: the watch failed
+        temporarily after confirming this run; its last known status stays shown while the Job monitor retries with
+        bounded backoff. `unverifiable`: the active run has no provider observation or cannot be followed or confirmed
+        now. The live state omits it immediately; report and clear responses can return its stored record.
       enum:
         - verified
         - transient
@@ -35030,8 +35028,7 @@ components:
             - type: 'null'
         verify_by_ms:
           description: >-
-            HS2-D3JJ49: when a queued or running run that nothing follows stops being shown, the report time plus the 2
-            h trust window. Null for a finished run and for a run the server's GitHub Actions watch follows.
+            HS2-D3JJ49: a legacy display deadline from an older server. The current server emits null.
           type:
             - integer
             - 'null'

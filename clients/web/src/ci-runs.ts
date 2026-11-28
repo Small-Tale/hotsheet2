@@ -1,9 +1,8 @@
 import type { LiveCi, LiveStoreState } from './api';
 
 /**
- * How long an older server's report of a `queued` or `in_progress` run is believed (HS2-CC7TCB). A server
- * with run verification (HS2-D3JJ49, docs/32-notifier-plugins.md §32.8.5) sends the exact bound as
- * `verify_by_ms`, or `null` when a watch follows the run; this is the same 2 h trust window.
+ * The legacy display window for a server that predates `verify_by_ms`. The current server omits
+ * unverifiable active runs and uses `null` for the deadline of visible runs (HS2-D3JJ49).
  */
 export const CI_TRUST_MS = 2 * 60 * 60 * 1000;
 
