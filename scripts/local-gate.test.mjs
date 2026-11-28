@@ -756,6 +756,76 @@ test('HS2-P9A21R keeps shared edits after an indented test on full-file coverage
   assert.equal(provider[0].command.includes('--grep'), false);
 });
 
+test('HS2-3R7DK6 scopes renamed tests and nested body edits while guarding shared edits and removals', async (t) => {
+  const original = [
+    "test('old provider case', async () => {",
+    "  await page.route('**/path', async (route) => {",
+    '    await route.continue();',
+    '  });',
+    '  await page.reload();',
+    '});',
+    '',
+    'const fixture = { count: 1 };',
+    '',
+    "test('unrelated provider case', async () => {});",
+    '',
+  ].join('\n');
+  const renamed = original
+    .replace('old provider case', 'renamed provider case')
+    .replace('page.reload()', 'page.close()');
+  const cases = [
+    ['rename and nested body', renamed, 'renamed provider case'],
+    ['body after nested callback', original.replace('page.reload()', 'page.close()'), 'old provider case'],
+    ['body deletion', original.replace('  await page.reload();\n', ''), 'old provider case'],
+    ['shared edit beside a renamed test', renamed.replace('count: 1', 'count: 2'), null],
+    ['deleted test', original.slice(original.indexOf('const fixture')), null],
+    [
+      'deleted test with an unrelated replacement',
+      "test('another case', () => {});\n" + original.slice(original.indexOf('const fixture')),
+      null,
+    ],
+  ];
+  for (const [label, content, expected] of cases) {
+    await t.test(label, (caseTest) => {
+      const f = fixture(caseTest);
+      const path = 'clients/web/tests/providers.spec.ts';
+      f.put(path, original);
+      f.git('add', path);
+      f.git('commit', '--quiet', '-m', 'original provider cases');
+      f.git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+      f.put(path, content);
+      f.git('commit', '--quiet', '-am', 'changed provider cases');
+      const result = prepare(f.repo, undefined, false, f.options.versions);
+      const provider = result.checks.filter((stage) => stage.command.includes('providers.spec.ts'));
+      assert.equal(provider.length, 1);
+      if (expected) {
+        assert.match(provider[0].command, /--grep/);
+        assert.deepEqual(
+          provider[0].browser.alternatives.map(({ pattern }) => pattern),
+          [expected],
+        );
+      } else {
+        assert.doesNotMatch(provider[0].command, /--grep/);
+      }
+    });
+  }
+});
+
+test('HS2-3R7DK6 keeps a changed provider case even when the exercise index requests the whole file', () => {
+  const files = ['clients/web/tests/providers.spec.ts'];
+  const result = browserStages(files, false, ['changed case'], {}, { providerWhole: true }, true);
+  assert.ok(result.some((stage) => stage.browser?.files?.some(
+    (file) => file.file === 'tests/providers.spec.ts' && file.rank === BROWSER_RANK.exercised,
+  )));
+  const scoped = result.filter((stage) => stage.browser?.file === 'tests/providers.spec.ts');
+  assert.deepEqual(scoped.map((stage) => stage.browser.alternatives), [
+    [{ pattern: 'changed case', rank: BROWSER_RANK.changed }],
+  ]);
+  assert.ok(!browserStages(files, false, ['changed case'], {}, { providerWhole: true }).some(
+    (stage) => stage.browser?.file === 'tests/providers.spec.ts',
+  ));
+});
+
 test('HS2-5PTT2Y a sandboxed failure names the sandbox; a pass or an unsandboxed failure does not', (t) => {
   const run = (env, status) => {
     const f = fixture(t);

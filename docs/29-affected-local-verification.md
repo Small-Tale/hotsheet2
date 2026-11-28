@@ -379,8 +379,12 @@ floor with an unknown cost. A changed `providers.spec.ts` once selected 621 case
 planner splits each browser stage into units: one whole spec file, or one `--grep`
 alternative. Each unit gets a relevance rank:
 
-1. A changed spec's own tests: the changed titles, or the whole file when its edit has no
-   identified title.
+1. A changed spec's own tests. The planner matches edited lines to complete test statements
+   in the old and new source, so changes after a nested callback and renamed cases select
+   their runnable titles (HS2-3R7DK6). Shared fixture edits, deleted cases without a
+   corresponding rename, and changes that cannot be attributed select the whole file.
+   When source changes independently select the whole provider spec, changed cases still
+   run in the floor and the whole spec keeps its exercised-module rank.
 2. Named regressions: HS2-79GJYG demo-state checks, HS2-P9A21R and HS2-4S22C4 workspace
    chrome cases, the HS2-WWZS75 startup spec, and contracts after a router or OpenAPI change.
 3. Specs and titles that exercise a changed module (HS2-N7EY18, HS2-R1D0S5, HS2-1DF5PQ).

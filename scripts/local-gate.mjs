@@ -18,6 +18,7 @@ import {
   staticCheckStage,
 } from './gate-budget.mjs';
 import { BROWSER_RANK, countDeclaredTests } from './gate-browser-budget.mjs';
+import { changedBrowserTitles } from './gate-browser-scope.mjs';
 import { readTicketProfile } from './gate-ticket-profile.mjs';
 import {
   planIdentity,
@@ -199,7 +200,14 @@ export function inspectObservations(repo) {
  * `exercised` is the HS2-N7EY18/HS2-R1D0S5 source index (scripts/gate-browser-exercise.mjs): the
  * specs and provider test titles that render or exercise a changed client module through its hooks.
  */
-export function browserStages(changes, full, providerTitles = [], testTitles = {}, exercised = undefined) {
+export function browserStages(
+  changes,
+  full,
+  providerTitles = [],
+  testTitles = {},
+  exercised = undefined,
+  bestEffort = false,
+) {
   const webChanged = changes.some(
     (path) =>
       path !== 'crates/hotsheet-server/src/lib.rs' &&
@@ -386,13 +394,18 @@ export function browserStages(changes, full, providerTitles = [], testTitles = {
       browser: { files: sortedFiles.map((file) => ({ file, rank: fileRanks.get(file) })) },
     },
   ];
-  if (patterns.length && !files.has('tests/providers.spec.ts'))
+  // HS2-3R7DK6: an exercised-module whole-file unit can be deferred, so it cannot replace
+  // the changed-case floor. The whole file retains its exercised rank and CI coverage.
+  const providerPatterns = files.has('tests/providers.spec.ts')
+    ? patterns.filter((entry) => bestEffort && entry.rank === BROWSER_RANK.changed)
+    : patterns;
+  if (providerPatterns.length)
     result.push(
       grepStage(
         'tests/providers.spec.ts',
-        patterns,
+        providerPatterns,
         ['affected provider-backed parent flows'],
-        `npx playwright test tests/providers.spec.ts --grep ${quote(patterns.map((entry) => entry.pattern).join('|'))}`,
+        `npx playwright test tests/providers.spec.ts --grep ${quote(providerPatterns.map((entry) => entry.pattern).join('|'))}`,
       ),
     );
   return [
@@ -703,28 +716,13 @@ export function prepare(repo, baseRef, full = false, versions, options = {}) {
   const testTitles = {};
   for (const path of state.changes.filter((path) => /^clients\/web\/tests\/.*\.spec\.ts$/.test(path))) {
     if (!state.base) continue;
-    const titles = [];
-    const diff = git(repo, ['diff', '--unified=100000', state.base, '--', path]);
-    let current = null;
-    let shared = false;
-    for (const line of diff.split('\n')) {
-      if (/^(---|\+\+\+|@@|diff |index )/.test(line)) continue;
-      const match = /^[ +]\s*test\('((?:\\.|[^'\\])*)'/.exec(line);
-      const template = /^[ +]\s*test\(`((?:\\.|[^`\\$]|\$(?!\{))*)/.exec(line);
-      if (match) current = match[1].replace(/\\(.)/g, '$1');
-      // HS2-P9A21R: a stable template prefix covers every generated theme/size case.
-      else if (template && template[1].length >= 12) current = template[1].replace(/\\(.)/g, '$1');
-      else if (/^[ +]\s*test\(/.test(line)) current = null;
-      // HS2-P9A21R: after a closing scope, uncertain edits require the whole file.
-      else if (/^[ +]\s*}[);,\s]*$/.test(line)) current = null;
-      else if (/^[ +](?:export )?(?:async )?(?:function |class |const |let )/.test(line)) current = null;
-      if (/^[+-]/.test(line)) {
-        if (current) titles.push(current);
-        else shared = true;
-      }
-    }
-    if (shared) titles.length = 0;
-    testTitles[path] = [...new Set(titles)];
+    const workPath = join(repo, path);
+    testTitles[path] = changedBrowserTitles(
+      path,
+      gitText(repo, ['show', `${state.base}:${path}`]),
+      existsSync(workPath) ? readFileSync(workPath, 'utf8') : null,
+      gitText(repo, ['diff', '--no-ext-diff', '--no-textconv', '--unified=0', state.base, '--', path]),
+    );
   }
   const highImpactBrowser = highImpactBrowserChange(state.changes);
   let affected = [
@@ -743,6 +741,7 @@ export function prepare(repo, baseRef, full = false, versions, options = {}) {
           ? readFileSync(join(repo, 'clients/web/tests/ux-demo.spec.ts'), 'utf8')
           : null,
       }),
+      bestEffort && !highImpactBrowser && !profile?.browser,
     ).map((stage) =>
       highImpactBrowser
         ? {
