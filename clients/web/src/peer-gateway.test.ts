@@ -45,7 +45,16 @@ describe('HS2-H4REBS peer gateway', () => {
   });
 
   it('recognizes only machine routes, never the application or the bridge', () => {
-    for (const path of ['/remote-identity', '/remote-auth/pair', '/checkouts/a/tickets', '/ws/sync', '/tickets'])
+    for (const path of [
+      '/remote-identity',
+      '/remote-auth/pair',
+      '/checkouts/a/tickets',
+      '/ws/sync',
+      '/tickets',
+      // HS2-9A60CG: forwarded like every machine route; the server checks the paired session.
+      '/ai-hooks/subagent-progress',
+      '/announcer/settings',
+    ])
       expect(isPeerGatewayPath(path), path).toBe(true);
     for (const path of ['/', '/index.html', '/assets/app.js', '/__hotsheet/remotes', '/ux-demo', '/remote-identityx'])
       expect(isPeerGatewayPath(path), path).toBe(false);
