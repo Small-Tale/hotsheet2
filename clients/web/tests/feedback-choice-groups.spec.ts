@@ -611,3 +611,127 @@ test('keeps sidebar choice groups inside the inspector from wide to phone and ba
     await expect(grids.nth(1).locator('[aria-selected="true"]')).toHaveCount(0);
   }
 });
+
+// HS2-0MET3B: a ticket description marked FEEDBACK NEEDED shows its CHOICE groups in the sidebar as
+// the same selectable lists. The prose keeps its click-to-edit entry (HS2-RE1PS6), an option never
+// opens the editor, and Respond to Feedback carries the selection into the reader's Details card.
+test('answers description choice groups from the sidebar inspector through Respond to Feedback (HS2-0MET3B)', async ({
+  page,
+  browserName,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const writes = await mock(page, 'details', SIDEBAR_PROMPT);
+  const details = page.locator('#app-right-rail .ticket-info-panel__details-surface');
+  const surface = details.locator('[data-action="edit-markdown"]');
+  const source = details.locator('[name="markdown-source"]');
+  await expect(surface).toHaveAttribute('role', 'group');
+  await expect(surface).toHaveAccessibleName('Edit Ticket details');
+  const options = await chooseSidebarAnswers(details);
+  // Choosing never opens the details editor, and a double-click on an option toggles it twice.
+  await expect(source).toHaveCount(0);
+  await options(0).nth(1).dblclick();
+  await expect(options(0).nth(1)).toHaveAttribute('aria-selected', 'false');
+  await expect(source).toHaveCount(0);
+  await options(0).nth(0).click();
+  await expect(options(0).nth(0)).toHaveAttribute('aria-selected', 'true');
+  // A click on the prose still opens the editor in place; leaving it restores the choices as chosen.
+  await details.getByText('Anything else I should know?').click();
+  await expect(source).toBeFocused();
+  await expect(source).toHaveValue(`FEEDBACK NEEDED: ${SIDEBAR_PROMPT}`);
+  await page.locator('#app-right-rail').getByRole('button', { name: 'Respond to Feedback' }).focus();
+  await expect(source).toHaveCount(0);
+  await expect(options(0).nth(0)).toHaveAttribute('aria-selected', 'true');
+  await expect(options(1).nth(1)).toHaveAttribute('aria-selected', 'true');
+  await expect(options(1).nth(2)).toHaveAttribute('aria-selected', 'true');
+  // A habitual double-click on the prose opens the editor and keeps it open.
+  await details.getByText('Two decisions before I build the milestone roll-up.').dblclick();
+  await expect(source).toBeFocused();
+  await page.locator('#app-right-rail').getByRole('button', { name: 'Respond to Feedback' }).focus();
+  await expect(source).toHaveCount(0);
+  // Keyboard: Enter on the surface edits; Space on a focused option toggles it instead.
+  await surface.focus();
+  await page.keyboard.press('Enter');
+  await expect(source).toBeFocused();
+  await page.locator('#app-right-rail').getByRole('button', { name: 'Respond to Feedback' }).focus();
+  await expect(source).toHaveCount(0);
+  await options(1).nth(0).focus();
+  await page.keyboard.press('Space');
+  await expect(options(1).nth(0)).toHaveAttribute('aria-selected', 'true');
+  await expect(source).toHaveCount(0);
+  await options(1).nth(1).click();
+  await options(1)
+    .nth(2)
+    .click({ modifiers: [additive] });
+  await expect(options(1).nth(0)).toHaveAttribute('aria-selected', 'false');
+  // Nothing was edited, so opening and leaving the editor wrote nothing.
+  expect(writes).toHaveLength(0);
+  const capture = (name: string) => `target/visual-captures/hs2-0met3b-${name}-${browserName}.png`;
+  await restingCard(page);
+  await details.screenshot({ path: capture('details-1440-light') });
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await details.screenshot({ path: capture('details-1440-dark') });
+  await page.emulateMedia({ colorScheme: 'light' });
+  await details.getByRole('button', { name: 'Respond to Feedback' }).click();
+  const reader = page.getByRole('dialog').locator('[data-details-feedback="true"]');
+  const readerOptions = (index: number) =>
+    reader
+      .getByRole('grid', { name: /^Feedback Choices \d/ })
+      .nth(index)
+      .locator('[data-component="content-item"]');
+  // The reader's Details card shows the sidebar's selection: the same state, not a second copy.
+  await expect(readerOptions(0).nth(0)).toHaveAttribute('aria-selected', 'true');
+  await expect(readerOptions(1).nth(1)).toHaveAttribute('aria-selected', 'true');
+  await expect(readerOptions(1).nth(2)).toHaveAttribute('aria-selected', 'true');
+  await reader.getByRole('button', { name: 'Respond' }).click();
+  await expect.poll(() => writes.find((write) => write.note_kind === 'regular')?.note).toBe(SIDEBAR_EXPECTED);
+});
+
+test('keeps sidebar description choice groups inside the inspector from wide to phone and back (HS2-0MET3B)', async ({
+  page,
+  browserName,
+}) => {
+  const inspector = page.locator('#app-right-rail'),
+    details = inspector.locator('.ticket-info-panel__details-surface'),
+    grids = details.getByRole('grid', { name: /^Feedback Choices \d/ });
+  const fits = async () => {
+    await expect(grids).toHaveCount(2);
+    expect(
+      await details.evaluate((card) => {
+        const edge = Math.min(card.getBoundingClientRect().right, innerWidth);
+        return [...card.querySelectorAll('[data-choice-id]')].every(
+          (option) => option.getBoundingClientRect().right <= edge + 0.5,
+        );
+      }),
+    ).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  };
+  for (const scheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    if (scheme === 'light') await mock(page, 'details', SIDEBAR_PROMPT);
+    await grids.nth(1).locator('[data-component="content-item"]').nth(1).click();
+    await restingCard(page);
+    await fits();
+    await page.screenshot({ path: `target/visual-captures/hs2-0met3b-page-1440-${scheme}-${browserName}.png` });
+    await page.setViewportSize({ width: 1024, height: 900 });
+    await fits();
+    await page.screenshot({ path: `target/visual-captures/hs2-0met3b-page-1024-${scheme}-${browserName}.png` });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(inspector).toHaveAttribute('data-collapsed', 'true');
+    await page.getByRole('button', { name: 'Show Ticket Inspector' }).click();
+    await expect(inspector).toHaveAttribute('data-collapsed', 'false');
+    await grids.nth(0).scrollIntoViewIfNeeded();
+    await expect(grids.nth(1).locator('[data-component="content-item"]').nth(1)).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    await fits();
+    await page.screenshot({ path: `target/visual-captures/hs2-0met3b-page-390-${scheme}-${browserName}.png` });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await expect(inspector).toHaveAttribute('data-collapsed', 'false');
+    await fits();
+    await page.screenshot({ path: `target/visual-captures/hs2-0met3b-page-1440-back-${scheme}-${browserName}.png` });
+    await grids.nth(1).locator('[data-component="content-item"]').nth(1).click();
+    await expect(grids.nth(1).locator('[aria-selected="true"]')).toHaveCount(0);
+  }
+});

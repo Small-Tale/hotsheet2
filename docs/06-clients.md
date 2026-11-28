@@ -5969,7 +5969,12 @@ reader (the production `FeedbackPrompt`, HS2-08EAH1), stacked full width so they
 narrow rail. Its prose stays plain Markdown there (inline replies are written in the reader, and a
 double-click on the prose still opens Edit Note, while a double-click on an option only toggles
 it). Sidebar and reader share one selection state, so Respond to Feedback opens the reader with the
-sidebar's choices already selected and the reader's Respond posts the same response. Reader descriptions
+sidebar's choices already selected and the reader's Respond posts the same response. A marked
+description whose prompt holds `CHOICE` groups shows them in the sidebar the same way, under the
+same shared selection (HS2-0MET3B). Its Details surface keeps click-to-edit: a click, double-click,
+or Enter on the prose opens the description editor, while a click or Space on an option only
+toggles it. Because the surface then holds the option lists, it is a labelled group rather than a
+button. Reader descriptions
 reuse the same Markdown choice selection, inline reply, optional general response, and
 No response needed controls as feedback notes; submitting adds a regular response note.
 Large reader text applies to active feedback prompts and choices as well as ordinary,

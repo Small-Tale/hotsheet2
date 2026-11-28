@@ -36,7 +36,7 @@ import { TicketStatusMenu } from '../components/ticket-status-menu';
 import { TicketTimeline } from '../components/ticket-timeline';
 import { ticketDraftKey } from '../ticket-draft-store';
 import { selectedId } from './components/demo-state';
-import { readerAttachments } from './content-components-demo';
+import { readerAttachments, readerFeedbackChoiceSelections, SIDEBAR_FEEDBACK_DETAILS } from './content-components-demo';
 import { DEMO_ACTIONS, DEMO_MARKERS } from './demo-actions';
 import type { DemoModule } from './demo-module';
 import { listen } from './demo-module';
@@ -103,6 +103,23 @@ export function TicketInfoPanelDemo() {
           ]}
           providerName="Hot Sheet Git"
           updatedLabel="Updated 2 minutes ago"
+        />
+      </CatalogExample>
+      <CatalogExample
+        label="Sidebar Description Feedback Choices (HS2-0MET3B)"
+        note="A description marked FEEDBACK NEEDED: selectable groups inside the click-to-edit Details surface."
+        viewport={{ width: 'compact', frame: 'solid', surface: 'default', overflow: 'hidden', shadow: true }}
+      >
+        <TicketInfoPanel
+          status="started"
+          priority="default"
+          category="task"
+          tags={[]}
+          details={SIDEBAR_FEEDBACK_DETAILS}
+          feedbackNeeded
+          feedbackChoiceSelections={readerFeedbackChoiceSelections.value}
+          providerName="Hot Sheet Git"
+          updatedLabel="Updated 5 minutes ago"
         />
       </CatalogExample>
       <CatalogExample

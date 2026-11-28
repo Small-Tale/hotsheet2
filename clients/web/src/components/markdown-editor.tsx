@@ -4,6 +4,7 @@ import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
+import type { SafeHtml } from 'kerfjs';
 import { Maximize2, Minimize2 } from 'lucide';
 
 import type { AttachmentReferenceContext } from '../attachment-references';
@@ -26,6 +27,13 @@ export interface MarkdownEditorProps {
   expandAction?: string;
   editable?: boolean;
   attachmentContext?: AttachmentReferenceContext;
+  /**
+   * Replaces the rendered Markdown inside the preview surface while keeping its click-to-edit entry.
+   * The sidebar's FEEDBACK NEEDED description shows its CHOICE groups as selectable lists here
+   * (HS2-0MET3B). The slot holds its own controls, so the surface is a labelled group, not a button;
+   * a click or Enter on the prose still begins editing and a control keeps its own action.
+   */
+  preview?: SafeHtml;
 }
 
 export function MarkdownEditor({
@@ -39,6 +47,7 @@ export function MarkdownEditor({
   expandAction = 'toggle-markdown-expanded',
   editable = true,
   attachmentContext,
+  preview,
 }: MarkdownEditorProps) {
   const empty = !value.trim(),
     embedded = appearance === 'embedded';
@@ -89,18 +98,20 @@ export function MarkdownEditor({
         ) : (
           <div
             class="markdown-editor__preview"
-            role={editable ? 'button' : undefined}
+            role={editable ? (preview === undefined ? 'button' : 'group') : undefined}
             tabIndex={editable ? 0 : undefined}
             data-action={editable ? 'edit-markdown' : undefined}
             data-empty={String(empty)}
             aria-label={editable ? `Edit ${label}` : label}
             title={editable ? (empty ? 'Click to add Markdown' : 'Click to edit') : undefined}
           >
-            <MarkdownPreview
-              source={value}
-              emptyLabel={editable ? 'Click to add Markdown.' : 'No details.'}
-              attachmentContext={attachmentContext}
-            />
+            {preview ?? (
+              <MarkdownPreview
+                source={value}
+                emptyLabel={editable ? 'Click to add Markdown.' : 'No details.'}
+                attachmentContext={attachmentContext}
+              />
+            )}
           </div>
         )}
       </div>
