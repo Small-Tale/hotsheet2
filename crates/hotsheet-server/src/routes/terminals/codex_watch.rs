@@ -146,6 +146,7 @@ fn start_watch(state: &AppState, record: WatchRecord) -> bool {
             // also sees the turn's usage (HS2-8G979N).
             let flush = |batches: &mut Vec<(FsStore, Vec<(String, metrics::UsageEvent)>)>| {
                 for (store, responses) in batches.drain(..) {
+                    let store_id = crate::multistore::store_url_id(&store);
                     match metrics::codex_work::record_session_responses_written(
                         &store,
                         &signal_session,
@@ -153,17 +154,25 @@ fn start_watch(state: &AppState, record: WatchRecord) -> bool {
                     ) {
                         // HS2-XFMKHQ: each written response is a usage signal for the
                         // account this terminal's session was started for.
-                        Ok(written) => crate::tool_capacity_signals::usage_appended(
-                            &signal_state,
-                            Some(&signal_id),
-                            &written,
-                        ),
+                        Ok(written) => {
+                            if !written.is_empty() {
+                                // A new response is progress (HS2-PPZQX9).
+                                crate::notification_router::note_usage_progress(
+                                    &signal_state,
+                                    &store_id,
+                                );
+                            }
+                            crate::tool_capacity_signals::usage_appended(
+                                &signal_state,
+                                Some(&signal_id),
+                                &written,
+                            );
+                        }
                         Err(error) => {
                             tracing::warn!(%error, "recording Codex terminal usage failed");
                         }
                     }
                     // Tokens per minute moved in the project store (HS2-JTTQMY, HS2-B4EQ87).
-                    let store_id = crate::multistore::store_url_id(&store);
                     crate::live_state::touch(&signal_state, &store_id);
                 }
             };

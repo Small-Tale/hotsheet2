@@ -133,6 +133,28 @@ describe('liveChips (HS2-F788GW, docs/34-glance-surfaces.md §34.4)', () => {
     expect(liveChips(summary(demoLiveState('stalled')))[0]?.tone).toBe('danger');
     expect(liveChips(summary(demoLiveState('halted')))[0]?.title).toBe('Halted · last progress 2m ago');
   });
+
+  it('pairs the state word with the progress of the stores that show it (HS2-PPZQX9)', () => {
+    const stalled = demoLiveState('stalled'),
+      busy = { ...demoLiveState('quiet'), store: 'busy' };
+    const stalledStore = {
+      ...stalled,
+      activity: { ...stalled.activity, last_progress_ms: NOW - 34 * MINUTE },
+    };
+    const combined = summary(stalledStore, { ...busy, activity: { ...busy.activity, last_progress_ms: NOW - 30_000 } });
+    expect(combined.activity).toBe('stalled');
+    // The project's freshest progress still names the Workers choice; the chip reads the stalled store's.
+    expect(combined.progressAgeMs).toBe(30_000);
+    expect(combined.activityProgressAgeMs).toBe(34 * MINUTE);
+    expect(liveChips(combined)[0]?.title).toBe('Stalled · last progress 34m ago');
+    expect(lastProgressDescription(combined)).toBe('last progress 34m ago');
+    // A stalled store that never progressed says so, whatever the other stores did.
+    const never = summary(
+      { ...stalled, activity: { ...stalled.activity, last_progress_ms: null } },
+      { ...busy, activity: { ...busy.activity, last_progress_ms: NOW - 30_000 } },
+    );
+    expect(liveChips(never)[0]?.title).toBe('Stalled · no progress yet');
+  });
 });
 
 describe('hostCallouts (HS2-F788GW, HS2-DTAVQA)', () => {

@@ -4,6 +4,8 @@ import { Select, type SelectChoice } from '@kerfjs/ui/select';
 import { delegate, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
+import { LiveCiContextMenu, type LiveCiMenuState } from '../components/live-ci-context-menu';
+import { wireLiveCiMenu } from '../components/live-ci-menu-interactions';
 import { ProjectLiveSection } from '../components/project-live-section';
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
 import { hostCallouts, projectLiveSummary } from '../project-live-summary';
@@ -64,11 +66,15 @@ export const projectLiveSectionSettings = {
   mode: signal<string>(DEFAULTS.mode),
 };
 
+/** HS2-7PSBHQ: the open Live CI context menu of the interactive example. */
+export const projectLiveSectionCiMenu = signal<LiveCiMenuState | undefined>(undefined);
+
 export function resetProjectLiveSectionDemo(root?: ParentNode): void {
   projectLiveSectionSettings.scenario.value = DEFAULTS.scenario;
   projectLiveSectionSettings.host.value = DEFAULTS.host;
   projectLiveSectionSettings.ci.value = DEFAULTS.ci;
   projectLiveSectionSettings.mode.value = DEFAULTS.mode;
+  projectLiveSectionCiMenu.value = undefined;
   if (root) syncSettingsControls(root, 'project-live-section', { values: { ...DEFAULTS } });
 }
 
@@ -95,10 +101,12 @@ export function ProjectLiveSectionDemo() {
     <CatalogExampleStack>
       <CatalogExample
         label="Interactive"
-        note="The header action switches between the compact line and the detail rows. Hover a gauge or chip for its explanation, which is also its accessible name."
+        note="The header action switches between the compact line and the detail rows. Hover a gauge or chip for its explanation, which is also its accessible name. With Main CI set to Running, Reported Hours Ago, right-click the section (or press the context-menu key on it) for Clear CI Status, which forgets the run whose end nobody reported (HS2-7PSBHQ)."
       >
         <div class="demo-sidebar-width">{section(scenario.value, host.value, ci.value, mode.value === 'expanded')}</div>
+        {projectLiveSectionCiMenu.value && <LiveCiContextMenu {...projectLiveSectionCiMenu.value} />}
       </CatalogExample>
+
       <CatalogExample
         label="Main CI Chip"
         note="The compact CI chip names itself (HS2-505PHC): its elapsed time while it runs, which the app re-renders each second while the section shows, then Running before a start is reported, Queued, and Failed. A run reported running over 2 h ago reads Unknown, with no clock (HS2-CC7TCB). A passing run shows no chip."
@@ -155,6 +163,23 @@ function wireProjectLiveSectionDemo(root: HTMLElement): () => void {
           mode: next,
         },
       });
+    }),
+  );
+  // HS2-7PSBHQ: the same menu wiring as the app; clearing here clears the interactive example's run.
+  demoListeners.add(
+    wireLiveCiMenu(root, {
+      menu: projectLiveSectionCiMenu,
+      clear: () => {
+        projectLiveSectionSettings.ci.value = 'none';
+        syncSettingsControls(root, 'project-live-section', {
+          values: {
+            scenario: projectLiveSectionSettings.scenario.value,
+            host: projectLiveSectionSettings.host.value,
+            ci: 'none',
+            mode: projectLiveSectionSettings.mode.value,
+          },
+        });
+      },
     }),
   );
   return () => {

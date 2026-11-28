@@ -198,4 +198,25 @@ describe('ProjectLiveSection main CI (HS2-57BYEA)', () => {
     expect(expanded).toContain('data-lucide="circle-check"');
     expect(String(ProjectLiveSection({ summary: quiet, expanded: true }))).not.toContain('data-live-row="ci"');
   });
+
+  it('names the run Clear CI Status forgets only while it shows as unknown, in both modes (HS2-7PSBHQ)', () => {
+    const reportedAt = DEMO_LIVE_NOW_MS - 3 * 60 * 60_000;
+    const stale = projectLiveSummary(
+      [
+        {
+          ...demoLiveState('quiet'),
+          ci: { ...ci, status: 'in_progress', finished_at_ms: null, reported_at_ms: reportedAt },
+        },
+      ],
+      DEMO_LIVE_NOW_MS,
+    );
+    for (const expanded of [false, true]) {
+      const markup = String(ProjectLiveSection({ summary: stale, expanded }));
+      expect(markup).toContain('data-ci-clear-checkout="demo-ab12"');
+      expect(markup).toContain(`data-ci-clear-reported-at-ms="${reportedAt}"`);
+    }
+    expect(String(ProjectLiveSection({ summary: stale }))).toContain('CI · unknown');
+    for (const summary of [failing, passing, quiet])
+      expect(String(ProjectLiveSection({ summary }))).not.toContain('data-ci-clear-checkout');
+  });
 });

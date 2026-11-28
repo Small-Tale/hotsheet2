@@ -103,3 +103,31 @@ export function ciRow(ci: RightNowCi): { label: string; trailing: string } {
     trailing: ciAge(ci) ?? '',
   };
 }
+
+/** The stored run Clear CI Status forgets (HS2-7PSBHQ): the reporting checkout and when it reported. */
+export interface CiClearTarget {
+  checkout: string;
+  reportedAtMs: number;
+}
+
+/**
+ * What Clear CI Status would clear (HS2-7PSBHQ, docs/34-glance-surfaces.md): only a run shown as unknown, a
+ * report of a run still in flight that nothing ended (HS2-CC7TCB), and only when it names its checkout and
+ * report time, so the server never clears a newer report than the one the user saw.
+ */
+export function ciClearTarget(ci: RightNowCi): CiClearTarget | undefined {
+  if (ci.status !== 'unknown' || ci.checkout === undefined || ci.reportedAtMs === undefined) return undefined;
+  return { checkout: ci.checkout, reportedAtMs: ci.reportedAtMs };
+}
+
+/**
+ * The clear target a Live section or its menu item carries in its data attributes (HS2-7PSBHQ), or
+ * `undefined` when either is missing or the time is not a whole non-negative number.
+ */
+export function ciClearTargetOf(
+  checkout: string | undefined,
+  reportedAtMs: string | undefined,
+): CiClearTarget | undefined {
+  if (!checkout || reportedAtMs === undefined || !/^\d+$/u.test(reportedAtMs)) return undefined;
+  return { checkout, reportedAtMs: Number(reportedAtMs) };
+}

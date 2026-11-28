@@ -469,6 +469,7 @@ hotsheet ticket-flow
 hotsheet live-state [--all]
 hotsheet live-history [--hours 12]
 hotsheet ci report --status success --branch main --sha <sha> --run-url <url> [--checkout <ref>]
+hotsheet ci clear [--checkout <ref>] [--reported-at-ms <ms>]
 hotsheet activity --ticket HS-7f3k9q --min-importance high --limit 20
 hotsheet notifications list --checkout web --recipient reviewer@example.com
 hotsheet notifications ack <notification-id>
@@ -482,7 +483,9 @@ and tickets, and prints the segments and completions of the last `--hours` (1–
 `GET /live-history` serves them ([34](34-glance-surfaces.md) §34.8, HS2-9AN4DN). `ci report` posts a CI
 run a local tool observed to `POST /checkouts/{reference}/ci-status` for `--checkout` or the checkout of
 the current directory, and prints whether it applied; the server pushes it as the live state's `ci`
-([32](32-notifier-plugins.md) §32.8.5, HS2-M8HHEA). Activity accepts `--session`;
+([32](32-notifier-plugins.md) §32.8.5, HS2-M8HHEA). `ci clear` forgets the run stored for that checkout
+through `DELETE` on the same route, only the one reported at `--reported-at-ms` when given, and prints
+whether it cleared (HS2-7PSBHQ). Activity accepts `--session`;
 notifications can filter by `--checkout`, `--store`, `--ticket`, and `--recipient`.
 An absent server fails with a start-server instruction. The ticket-flow summary covers
 the selected `-C` store and activity uses that store's persisted rolling window: both read
@@ -778,7 +781,7 @@ local server resolves its host through one helper, `external_launch::discover_lo
 - Host-wide commands (`remote sessions status|approve|reject|update|revoke|revoke-all`,
   `lifecycle status|restart`) use the machine host first, then a host started on the
   selected store with `hotsheet-cli serve`.
-- Project commands (`live-state`, `commands`, `terminal message`, `terminal feedback-primary`, `ci report`,
+- Project commands (`live-state`, `commands`, `terminal message`, `terminal feedback-primary`, `ci report`, `ci clear`,
   `notifications`, `ticket-flow`, `activity`, and the sync kick after a write) use a host anchored on the selected store
   first, then the machine host. `ticket-flow` and `activity` name the selected store in a
   store-scoped route, so the machine host reads the project rather than its bootstrap store
@@ -2019,7 +2022,7 @@ authoritative flag reference. Full-text search is `ls --text`; there is no separ
 | Permission hook route | `permission-hook`, `hook-diagnose` | [05](05-ai-tool-plugins.md) §5.7 |
 | AI feedback | `feedback-synthesis` | [23](23-ai-feedback-synthesis.md) |
 | Metrics and confidence | `metrics`, `confidence-report`, `phase-report` | [14](14-metrics-interface.md), §4.4 above |
-| Server-backed feeds | `commands`, `ticket-flow`, `live-state`, `live-history` (reads files), `ci report`, `activity`, `notifications` | §4.3 Headless platform APIs, [15](15-activity-narration-interface.md) |
+| Server-backed feeds | `commands`, `ticket-flow`, `live-state`, `live-history` (reads files), `ci report`, `ci clear`, `activity`, `notifications` | §4.3 Headless platform APIs, [15](15-activity-narration-interface.md) |
 | Settings and keys | `settings`, `key`, `host-disks` (HS2-KBVZV1, [host-health](host-health.md#managing-disks)) | §4.7, §4.7.1 |
 | Checkouts and accounts | `checkout`, `account` | §4.3 Checkout identity, [16](16-external-sync-interface.md) (HS2-SM9PM8) |
 | Migration | `import` | [07](07-migration.md) |

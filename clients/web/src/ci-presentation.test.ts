@@ -1,7 +1,17 @@
 import { describe, expect, it } from 'vitest';
 
 import type { LiveCiStatus } from './api';
-import { CI_PRESENTATION, ciAge, ciChipText, ciChipTicks, ciDetail, ciRow, formatCiElapsed } from './ci-presentation';
+import {
+  CI_PRESENTATION,
+  ciAge,
+  ciChipText,
+  ciChipTicks,
+  ciClearTarget,
+  ciClearTargetOf,
+  ciDetail,
+  ciRow,
+  formatCiElapsed,
+} from './ci-presentation';
 import type { RightNowCi } from './stats-right-now';
 
 const SECOND = 1_000,
@@ -116,5 +126,36 @@ describe('CI detail words (HS2-E16ZEK)', () => {
     expect(ciAge(ci('success'))).toBeUndefined();
     expect(ciDetail(ci('success', 12 * MINUTE))).toBe('main CI · 9f8e7d6 · 12m ago');
     expect(ciDetail({ status: 'success', branch: 'main' })).toBe('main CI');
+  });
+});
+
+describe('Clear CI Status target (HS2-7PSBHQ)', () => {
+  const run = (status: RightNowCi['status'], named = true): RightNowCi => ({
+    status,
+    branch: 'main',
+    ...(named ? { checkout: 'hotsheet2-56cb', reportedAtMs: 1_795_693_115_028 } : {}),
+  });
+
+  it('offers to clear only a run shown as unknown that names its checkout and report time', () => {
+    expect(ciClearTarget(run('unknown'))).toEqual({ checkout: 'hotsheet2-56cb', reportedAtMs: 1_795_693_115_028 });
+    for (const status of ['in_progress', 'queued', 'failure', 'success', 'cancelled', 'unavailable'] as const)
+      expect(ciClearTarget(run(status)), status).toBeUndefined();
+    expect(ciClearTarget(run('unknown', false))).toBeUndefined();
+    expect(ciClearTarget({ ...run('unknown'), reportedAtMs: undefined })).toBeUndefined();
+  });
+
+  it('reads the target back from data attributes, refusing a missing or malformed time', () => {
+    expect(ciClearTargetOf('c-1', '1795693115028')).toEqual({ checkout: 'c-1', reportedAtMs: 1_795_693_115_028 });
+    expect(ciClearTargetOf('c-1', '0')).toEqual({ checkout: 'c-1', reportedAtMs: 0 });
+    for (const [checkout, at] of [
+      [undefined, '1'],
+      ['', '1'],
+      ['c-1', undefined],
+      ['c-1', ''],
+      ['c-1', '-1'],
+      ['c-1', '1.5'],
+      ['c-1', '12abc'],
+    ] as const)
+      expect(ciClearTargetOf(checkout, at), `${checkout} ${at}`).toBeUndefined();
   });
 });

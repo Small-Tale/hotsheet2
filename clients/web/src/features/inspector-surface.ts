@@ -79,6 +79,8 @@ export interface InspectorSurfaceDependencies {
   expandedCodeReviewCommits: Signal<string[]>;
   fieldConflict: Signal<TicketFieldConflict | undefined>;
   fieldConflictResolution: Signal<string>;
+  /** The workspace reader's choice selections, shared with the sidebar's feedback notes (HS2-08EAH1). */
+  feedbackChoiceSelections?: Signal<Record<string, string[]>>;
   inspectorTab: Signal<InspectorTab>;
   liveClaimNotice: (ticket: WireTicketRow) => LiveClaimNoticeProps | undefined;
   advisoryClaimNotice: (ticket: WireTicketRow) => AdvisoryClaimNoticeProps | undefined;
@@ -159,6 +161,7 @@ export function createInspectorSurface(dependencies: InspectorSurfaceDependencie
     expandedCodeReviewCommits,
     fieldConflict,
     fieldConflictResolution,
+    feedbackChoiceSelections,
     inspectorTab,
     liveClaimNotice,
     advisoryClaimNotice,
@@ -266,6 +269,7 @@ export function createInspectorSurface(dependencies: InspectorSurfaceDependencie
       notes: notes(ticket),
       editingNoteId: editingNoteId.value,
       noteDraft: noteDraft.value,
+      feedbackChoiceSelections: feedbackChoiceSelections?.value,
       blockedReason: ticket.blocked_reason,
       blockedReasonEditing: blockedReasonEditing.value,
       blockedReasonDraft: blockedReasonDraft.value,

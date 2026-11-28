@@ -36,10 +36,10 @@ Stats, and phone notifications therefore always agree.
 
 | State          | Meaning                                                                                                                                                                                      | Source                 |
 | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
-| Active         | At least one ticket in the store holds a live claim.                                                                                                                                         | §32.8.1 (shipped)      |
+| Active         | At least one ticket in the store holds a live claim, or an AI session worked without a claim within the grace (HS2-PPZQX9).                                                                  | §32.8.1 (shipped)      |
 | Stopped        | The last claim was released and no new claim appeared within the grace. Stopped-as-expected rows render dimmed.                                                                              | §32.8.1 (shipped)      |
 | May be stuck   | Claims are held but nothing progressed for the idle window.                                                                                                                                  | §32.8.1 (shipped)      |
-| Stalled        | A claim's lease expired without renewal.                                                                                                                                                     | §32.8.1 (shipped)      |
+| Stalled        | A claim's lease expired without renewal and nothing progressed since (HS2-PPZQX9).                                                                                                           | §32.8.1 (shipped)      |
 | Halted         | A terminal whose worker holds a claim reported a halt.                                                                                                                                       | §32.8.1 (shipped)      |
 | Waiting on you | A Started ticket waits on an unanswered feedback request. Review flags, review requests, and tickets outside the Started column never count (HS2-JGW031). Needs you counts the same tickets. | HS2-JTTQMY, HS2-JGW031 |
 
@@ -202,7 +202,9 @@ the default) and `m1-project-sidebar-live-{light,dark}` (expanded).
   live state of the project's linked stores and the host health snapshot, both pushed and resynced on the
   change stream. Ages and decaying rates re-render from a local 30-second render clock that runs only while
   live state exists and never issues a request. The compact problem-state chip (May be stuck, Stalled,
-  Halted) is a glyph whose title gives the state and the last-progress age. `main` CI (HS2-57BYEA) comes
+  Halted) is a glyph whose title gives the state and the last-progress age of the stores that show that
+  state, as do the expanded state row and the section's accessible name; a busier linked store never lends
+  its age to a stalled one (HS2-PPZQX9). The grid sidebar's group titles pair their word the same way. `main` CI (HS2-57BYEA) comes
   from the newest run the project's stores reported in their live `ci` (HS2-M8HHEA,
   [32](32-notifier-plugins.md) §32.8.5): the compact chip shows only while that run failed (danger), runs,
   or waits to run (neutral), titled with the branch, word, and short sha; the expanded row names any
@@ -224,6 +226,14 @@ the default) and `m1-project-sidebar-live-{light,dark}` (expanded).
   `main CI unknown` with `seen 2h 05m ago`, without the sha so it fits the sidebar; the Stats tile word is a
   quiet `Unknown`, like `No CI reported`. The display clock stops at the bound. A GitHub Actions run is
   normally followed to its end by the server first ([32](32-notifier-plugins.md) §32.8.5).
+- **Clear CI Status (HS2-7PSBHQ, shipped).** While the run shows as unknown, right-clicking the Live section
+  (or pressing the context-menu key on its focused toggle) opens a Kerf `PopupMenu` context menu, as for the
+  other sidebar entries, with one item, **Clear CI Status** (Lucide `eraser`). It asks the project's server to
+  forget that stored run (`DELETE /checkouts/{reference}/ci-status` with the run's `reported_at_ms`, so a
+  newer report is never cleared unseen); the pushed live state then removes the chip and row. Outside presses
+  and Escape close the menu. The Live section is one toggle button, so there is no nested overflow button;
+  other CI states offer no menu and keep the browser's own. A restarted server also re-checks such a run once
+  ([32](32-notifier-plugins.md) §32.8.5).
 - **Remote project tabs (HS2-4R99XY).** A cross-server tab shows the same gauges and chips, from the remote
   server's own live state. The browser's `remote:<binding>:<checkout>` id never equals the remote server's
   checkout id, and the remote server may host a store whose id the local server also uses, so each remote

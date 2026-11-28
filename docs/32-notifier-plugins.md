@@ -369,9 +369,11 @@ ticket's own claim history and still opens (and ends) an active period (HS2-04NW
 Two stuck signals cover sessions that still hold claims (HS2-P57XHV):
 
 - **May be stuck (idle).** Claims are held but nothing progressed for the idle window
-  (default 30 minutes). Progress is an `activity` or `turn_event` for the store, or a ticket
-  write that changes its notes, status, phase, title, or details; creating a ticket is
-  such a write (HS2-JTTQMY). A claim renewal is not
+  (default 30 minutes). Progress is an `activity` or `turn_event` for the store, a ticket
+  write that changes its notes, status, phase, title, or details (creating a ticket is
+  such a write, HS2-JTTQMY), or a newly recorded model response in the store: a Claude
+  terminal session's own or one of its background subagents', a Codex terminal's, or a
+  driven turn's (HS2-PPZQX9). A claim renewal is not
   progress, so a session that keeps renewing while doing nothing is still reported. The
   message reads "Hot Sheet project _name_ may be stuck", has severity `warning`, and names
   the held claims. Each idle episode is reported once, and progress re-arms it.
@@ -382,9 +384,11 @@ Two stuck signals cover sessions that still hold claims (HS2-P57XHV):
 
 Set the windows with `hotsheet-cli notify project-timing [--grace-seconds S]
 [--idle-minutes M]` or `PUT /notification-project-timing`. `--idle-minutes 0` disables idle
-detection. They are stored as `project_activity` in `notifications.json`. Raw token counts
-are not used: per-turn usage records arrive after a turn ends, so they add nothing to
-activity and turn events as a liveness signal.
+detection. They are stored as `project_activity` in `notifications.json`. Recorded
+responses count as progress because terminal usage is now recorded as each response
+finishes, not when the turn ends (HS2-W2GNTT), and background subagents' transcripts are
+followed too (HS2-JW6N67). A session that mostly waits on background agents therefore keeps
+progressing (HS2-PPZQX9). Token counts themselves never decide anything.
 
 These state words (Active, Stopped, May be stuck, Stalled, Halted) are also the vocabulary of the
 glance surfaces (standby, sidebars, and Stats), which add **Waiting on you**; see
@@ -424,16 +428,27 @@ notification always agree. The tracker therefore runs whether or not a rule name
 
 **State word** (`state`), most urgent first:
 
-| Word             | When                                                                                                                                 |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `halted`         | A worker that holds a live claim reported a halt. It clears when that session resumes, progresses on its claim, or loses its claims. |
-| `stalled`        | No live claim remains and a lease expired unrenewed. It stays until a new claim starts the next active period.                       |
-| `may_be_stuck`   | Claims are held and nothing progressed for the idle window.                                                                          |
-| `waiting_on_you` | A Started ticket waits on an unanswered feedback request; review state and tickets in other columns never count (HS2-JGW031).        |
-| `active`         | An active period is open, including the release grace.                                                                               |
-| `stopped`        | Nothing else applies.                                                                                                                |
+| Word             | When                                                                                                                                                             |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `halted`         | A worker that holds a live claim reported a halt. It clears when that session resumes, progresses on its claim, or loses its claims.                             |
+| `stalled`        | No live claim remains and a lease expired unrenewed. It stays until a new claim starts the next active period or progress arrives after the expiry (HS2-PPZQX9). |
+| `may_be_stuck`   | Claims are held and nothing progressed for the idle window.                                                                                                      |
+| `waiting_on_you` | A Started ticket waits on an unanswered feedback request; review state and tickets in other columns never count (HS2-JGW031).                                    |
+| `active`         | An active period is open, including the release grace, or an AI session worked here without a claim since the last period ended, within the grace (HS2-PPZQX9).  |
+| `stopped`        | Nothing else applies.                                                                                                                                            |
 
 `activity.word` carries the tracker's word alone, without Waiting on you.
+
+The word and the last progress shown beside it never disagree (HS2-PPZQX9). Progress after a
+stalled lease expired means work goes on, so the store stops reading Stalled. An AI
+session working while no period is open (an `activity` or `turn_event`, or a recorded response,
+a background agent's included) reads Active until the release grace after it passes, then
+Stopped; a ticket write alone moves last progress but never reads Active, so a person's edit
+does not. That work does not open a period, so it raises no `project.stopped` report; the one-shot reports above are
+unchanged, so a stall already reported stays reported. One event-driven timer re-reads the word
+when that grace ends. Glance surfaces that combine several stores pair the word with the last
+progress of the stores that show it, never with a busier store's
+([34-glance-surfaces.md](34-glance-surfaces.md) §34.6, §34.7).
 
 **Values.** Times are Unix milliseconds, `null` when unknown.
 
@@ -636,6 +651,13 @@ public URL is needed, and the source is independent of the ticket provider.
   - **Bounds.** A run is followed for 6 hours after its report, GitHub Actions' default job timeout;
     then the follower asks the watch to stop watching. A restarted server follows again the stored
     runs still in flight that were reported within that time.
+  - **Re-check after a restart (HS2-7PSBHQ).** A stored run still in flight that was reported
+    before that window (its follower never started: an older server, no token then, or a server
+    stopped for the whole run) is re-checked once when the server starts. A retained watch of the
+    same target with a verdict records that verdict at once; otherwise the watch is ensured again and
+    followed for at most 15 minutes, enough for the monitor's first observations of a run that ended
+    long ago. The server still never polls. With no token, no monitor, or another CI's run, nothing
+    is re-checked, and the run stays unknown until it is cleared or a newer run is reported.
   - **Not followed.** Another CI's URL, a run without the fields above, a run this server already
     follows (`follow: following`; `ensure_ci_watch` also keeps one Job per target across processes),
     no GitHub token (`GH_TOKEN`, `GITHUB_TOKEN`, or a successful `gh auth token`, checked at most
@@ -653,6 +675,15 @@ public URL is needed, and the source is independent of the ticket provider.
   project's main CI (about 35 minutes), and a followed GitHub run gets its verdict well before then.
   The client computes it (`clients/web/src/ci-staleness.ts`) from the pushed timestamps and its
   render-only display clock, so the server pushes nothing for it.
+- **Clearing a run (HS2-7PSBHQ).** `DELETE /checkouts/{reference}/ci-status` forgets the run
+  stored for a checkout; with `reported_at_ms`, only while the stored run is still the one reported
+  then, so a newer report is kept. The answer names the checkout, whether it `cleared`, the run
+  still stored (or `unavailable`), and the linked stores, whose live state is pushed again and then
+  shows the newest run another linked checkout reported, or none. It is idempotent, and the next
+  report stores a run again; the provider keeps the run itself. The headless form is
+  `hotsheet-cli ci clear [--checkout <ref>] [--reported-at-ms <ms>]`, and the project sidebar's Live
+  section offers it as **Clear CI Status** while the run shows as unknown
+  ([34](34-glance-surfaces.md)). Unknown runs are not cleared on their own.
 - **Other CI systems.** Any CI that can run a command on the developer's machine, or a local
   watcher that learns of a run, reports it the same way, for example:
   `hotsheet-cli ci report --status success --branch main --sha <commit> --workflow <name>

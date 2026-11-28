@@ -34,6 +34,23 @@ describe('parked composer intent (HS2-40JX5Q)', () => {
     }
   });
 
+  it('refuses a restore after the user opened or cancelled during an activation with no parked session (HS2-9FF3C2)', () => {
+    const intent = createComposerRestoreIntent();
+    intent.capture('one', 1, 4, undefined);
+    expect(intent.canRestore('one', 1, 4)).toBe(true);
+    expect(intent.persistedOpen('one', 1, 4, false)).toBe(false);
+    for (const epoch of [5, 6]) {
+      expect(intent.canRestore('one', 1, epoch)).toBe(false);
+      expect(intent.persistedOpen('one', 1, epoch, false)).toBe(false);
+      expect(intent.persistedOpen('one', 1, epoch, true)).toBe(true);
+    }
+    intent.finish('one', 1);
+    expect(intent.canRestore('one', 1, 6)).toBe(true);
+    intent.capture('one', 2, 6, undefined);
+    expect(intent.canRestore('one', 2, 6)).toBe(true);
+    expect(intent.canRestore('one', 1, 6)).toBe(false);
+  });
+
   it('ignores interrupted project/generation completions and retains intent across failed refresh', () => {
     const intent = createComposerRestoreIntent();
     intent.capture('one', 1, 4, true);

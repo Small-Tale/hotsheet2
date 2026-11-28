@@ -75,6 +75,25 @@ export function progressAgeMs(state: LiveStoreState, nowMs: number): number | un
   return at === null ? undefined : Math.max(0, nowMs - at);
 }
 
+/**
+ * Milliseconds since the freshest progress among the stores that show `word` (HS2-PPZQX9), so a state
+ * word is always paired with its own stores' last progress: a project whose one store stalled while
+ * another progressed a minute ago reads `Stalled · last progress 34m ago`, never `1m ago`. `wordOf`
+ * picks the word compared (the glance word by default). `undefined` when none of them saw progress.
+ */
+export function progressAgeForWord(
+  states: readonly LiveStoreState[],
+  word: LiveWord,
+  nowMs: number,
+  wordOf: (state: LiveStoreState) => LiveWord = (state) => state.state,
+): number | undefined {
+  const ages = states
+    .filter((state) => wordOf(state) === word)
+    .map((state) => progressAgeMs(state, nowMs))
+    .filter((age): age is number => age !== undefined);
+  return ages.length ? Math.min(...ages) : undefined;
+}
+
 /** How far a live claim is past its ETA, or `undefined` while it is on time or has none. */
 export function etaOverrunMs(claim: LiveClaim, nowMs: number): number | undefined {
   if (claim.eta_at_ms === null || nowMs <= claim.eta_at_ms) return undefined;

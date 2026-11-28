@@ -4,7 +4,7 @@ import { expect, type Page, test } from '@playwright/test';
 
 import { withoutGitRepositoryEnv } from '../scripts/repository-env.mjs';
 import { remoteProjectId } from '../src/remote-projects/identity';
-import { demoHostHealth } from '../src/ux-demo/live-section-fixtures';
+import { demoHostHealth, demoLiveState } from '../src/ux-demo/live-section-fixtures';
 import { openMockedProject, projectTab } from './open-mocked-project';
 import { proxyFetch, realTicketServer } from './real-ticket-server';
 
@@ -435,6 +435,97 @@ test('HS2-CC7TCB shows a stale running CI report as unknown, without a clock', a
       expect(fits).toBe(true);
       await capture(`unknown-row-${width}`);
     }
+  } finally {
+    await server.stop(page);
+  }
+});
+
+// HS2-7PSBHQ: a run reported running and never ended stayed `CI · unknown` with no way to clear it. While it
+// shows as unknown, the shipped sidebar's Live section opens a context menu (right-click, or the context-menu
+// key on its focused toggle) with Clear CI Status; choosing it makes the real server forget the stored run, and
+// the pushed live state removes the chip. A run that is not unknown offers no menu. Captured wide, medium,
+// narrow and wide again, light and dark, with the menu open.
+test('HS2-7PSBHQ clears a stale CI report from the Live section context menu', async ({ page, browserName }) => {
+  test.setTimeout(150_000);
+  const server = await realTicketServer();
+  try {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await openProject(page, server);
+    const sidebar = page.locator('section[aria-label="Project sidebar"]').first();
+    const live = sidebar.locator('[data-component="project-live-section"]');
+    await expect(live).toHaveAttribute('data-mode', 'compact', { timeout: 30_000 });
+    const chip = live.locator('[data-live-chip="ci"]'),
+      menu = page.locator('[data-context-menu="live-ci"]'),
+      item = menu.getByRole('menuitem', { name: 'Clear CI Status' });
+
+    // A fresh running report offers no menu: right-click leaves the browser's own.
+    await server.request(`/checkouts/${server.checkoutId}/ci-status`, 'POST', {
+      status: 'in_progress',
+      branch: 'main',
+      sha: '8f6c8d81f0a1',
+      workflow: 'CI',
+      started_at_ms: Date.now() - 5 * 60_000,
+    });
+    await expect(chip).toHaveText(/^CI · \d+:\d\d$/u, { timeout: 30_000 });
+    await expect(live).not.toHaveAttribute('data-ci-clear-checkout', /./u);
+    await chip.click({ button: 'right' });
+    await expect(menu).toHaveCount(0);
+
+    // Two hours and ten minutes later the run shows as unknown and names the run Clear CI Status forgets.
+    await page.clock.setFixedTime(Date.now() + (2 * 60 + 10) * 60_000);
+    await expect(chip).toHaveText('CI · unknown', { timeout: 30_000 });
+    await expect(live).toHaveAttribute('data-ci-clear-checkout', server.checkoutId);
+
+    // Right-click opens the menu at the pointer; Escape closes it; the context-menu key on the focused
+    // toggle opens it again below the toggle.
+    await chip.click({ button: 'right' });
+    await expect(item).toBeVisible();
+    await expect(item.locator('[data-lucide="eraser"]')).toBeAttached();
+    await page.keyboard.press('Escape');
+    await expect(menu).toHaveCount(0);
+    const toggle = live.getByRole('button', { name: /^Show live details\. / });
+    await toggle.focus();
+    await toggle.dispatchEvent('contextmenu', { clientX: 0, clientY: 0, bubbles: true, cancelable: true });
+    await expect(item).toBeVisible();
+    // Opening the menu does not switch the section's mode.
+    await expect(live).toHaveAttribute('data-mode', 'compact');
+
+    const capture = async (name: string) => {
+      // The menu fades in; capture it settled.
+      if (await menu.count())
+        await menu.evaluate((node) =>
+          Promise.all(node.getAnimations({ subtree: true }).map((animation) => animation.finished)),
+        );
+      await page.screenshot({ path: `target/visual-captures/hs2-7psbhq-${browserName}-${name}.png` });
+    };
+    for (const width of [1280, 1024, 390, 1280]) {
+      await page.keyboard.press('Escape');
+      await expect(menu).toHaveCount(0);
+      await page.setViewportSize({ width, height: 900 });
+      const showSidebar = page.getByRole('button', { name: 'Show Project Sidebar' });
+      if (await showSidebar.isVisible()) await showSidebar.click();
+      await chip.click({ button: 'right' });
+      await expect(item).toBeVisible();
+      const box = await item.boundingBox();
+      expect((box?.x ?? -1) >= 0 && (box?.x ?? 0) + (box?.width ?? 0) <= width).toBe(true);
+      await capture(`menu-${width}`);
+    }
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await capture('menu-dark-1280');
+    await page.emulateMedia({ colorScheme: 'light' });
+
+    await item.click();
+    await expect(menu).toHaveCount(0);
+    await expect(chip).toHaveCount(0, { timeout: 30_000 });
+    await expect(live).not.toHaveAttribute('data-ci-clear-checkout', /./u);
+    // The server forgot the run: its live state reports none, and the expanded section has no CI row.
+    const state = await server.request<{ stores: { ci: { status: string } }[] }>('/live-state');
+    expect(state.stores.map((store) => store.ci.status)).toEqual(['unavailable']);
+    await toggle.click();
+    await expect(live).toHaveAttribute('data-mode', 'expanded');
+    await expect(live.locator('[data-live-row="ci"]')).toHaveCount(0);
+    await page.mouse.move(640, 880);
+    await capture('cleared-expanded-1280');
   } finally {
     await server.stop(page);
   }
@@ -892,5 +983,74 @@ test('HS2-HWMW0D shows a genuine zero-worker state in the real app', async ({ pa
     await page.goto('about:blank').catch(() => undefined);
     await page.unrouteAll({ behavior: 'ignoreErrors' });
     await server.stop();
+  }
+});
+
+// HS2-PPZQX9: a project whose one store stalled while another linked store progressed seconds ago used to
+// read `Stalled · last progress <1m ago`. The state word now pairs with the progress of the stores that
+// show it, in the chip title, the toggle's accessible name, and the expanded state row, while the Workers
+// choice still names the project's freshest progress.
+test('HS2-PPZQX9 pairs Stalled with the stalled store last progress, not a busier store', async ({ page }) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer();
+  try {
+    await page.routeWebSocket(/.*/, (route) => {
+      void route.close();
+    });
+    await page.setViewportSize({ width: 1280, height: 900 });
+    const now = Date.now(),
+      MINUTE = 60_000;
+    const stalledDemo = demoLiveState('stalled'),
+      busyDemo = demoLiveState('quiet');
+    const stalled = {
+      ...stalledDemo,
+      store: 'ppzqx9-stalled',
+      checkouts: [server.checkoutId],
+      claims: [],
+      workers: { live: 0, expected: 1 },
+      activity: { ...stalledDemo.activity, active_since_ms: null, last_progress_ms: now - 34 * MINUTE },
+    };
+    const busy = {
+      ...busyDemo,
+      store: 'ppzqx9-busy',
+      checkouts: [server.checkoutId],
+      activity: { ...busyDemo.activity, active_since_ms: now - 10 * MINUTE, last_progress_ms: now - 20_000 },
+      claims: busyDemo.claims.map((claim) => ({
+        ...claim,
+        claimed_at_ms: now - 10 * MINUTE,
+        lease_expires_at_ms: now + 20 * MINUTE,
+        eta_at_ms: null,
+      })),
+    };
+    await openProject(page, server, () =>
+      page.route('**/live-state', (route) => route.fulfill({ json: { epoch_ms: 1, stores: [stalled, busy] } })),
+    );
+    const sidebar = page.locator('section[aria-label="Project sidebar"]').first();
+    const live = sidebar.locator('[data-component="project-live-section"]');
+    await expect(live).toHaveAttribute('data-mode', 'compact', { timeout: 30_000 });
+    const chip = live.locator('[data-live-chip="state"]');
+    await expect(chip).toHaveAttribute('title', 'Stalled · last progress 34m ago', { timeout: 30_000 });
+    await expect(chip).toHaveAttribute('data-tone', 'danger');
+    const toggle = live.getByRole('button', { name: /^Show live details\. / });
+    await expect(toggle).toHaveAccessibleName('Show live details. Stalled · 2 workers live, last progress 34m ago');
+    // The Workers choice names the project's freshest progress, from the busy store.
+    const workers = page.locator('[data-segment-value="workers"]').first();
+    await expect(workers).toHaveAttribute('title', '2 workers live · last progress <1m ago');
+    await page.mouse.move(640, 880);
+    for (const width of [1280, 1024, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect(chip).toBeVisible();
+      await live.screenshot({ path: `target/visual-captures/hs2-ppzqx9-stalled-chip-${width}.png` });
+    }
+
+    await toggle.click();
+    await expect(live).toHaveAttribute('data-mode', 'expanded');
+    const row = live.locator('[data-live-row="state"]');
+    await expect(row).toContainText('Stalled · 2 workers live');
+    await expect(row).toContainText('34m ago');
+    await page.mouse.move(640, 880);
+    await live.screenshot({ path: 'target/visual-captures/hs2-ppzqx9-stalled-row-expanded-1280.png' });
+  } finally {
+    await server.stop(page);
   }
 });

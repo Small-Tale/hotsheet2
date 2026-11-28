@@ -1860,8 +1860,21 @@ impl hotsheet_extsync::GitHubTransport for ProviderIssue {
 /// primary; a plain note after the answer reaches nobody; with the asker's session gone
 /// nothing is sent; and on a Started issue the asker is preferred over the primary.
 /// Synthetic issue, notes and fake tools only.
-#[tokio::test]
-async fn hs2_z3sbrq_a_provider_answer_reaches_the_ai_that_asked() {
+/// A server whose checkout's default source is the GitHub `connection` at `locator`, served
+/// by `provider`, with the push-capable `fake-push` tool installed. The temporary
+/// directories live as long as the value.
+struct ProviderCheckout {
+    router: axum::Router,
+    root: std::path::PathBuf,
+    checkout: String,
+    _dirs: [tempfile::TempDir; 4],
+}
+
+fn provider_checkout(
+    connection: &str,
+    locator: &str,
+    provider: Arc<dyn hotsheet_ticketing::TicketProvider>,
+) -> ProviderCheckout {
     let store_dir = tempfile::tempdir().unwrap();
     FsStore::init_git(store_dir.path(), &StoreMetadata::new("HS")).unwrap();
     let plugins = tempfile::tempdir().unwrap();
@@ -1891,24 +1904,40 @@ password_env = "OPENCODE_SERVER_PASSWORD"
         .find(|entry| entry["id"] == registered.id)
         .unwrap();
     entry["sources"] = serde_json::json!([
-        {"connection_id": "github-main", "provider": "github", "locator": "acme/repo"}
+        {"connection_id": connection, "provider": "github", "locator": locator}
     ]);
-    entry["default_source"] = serde_json::json!("github-main");
+    entry["default_source"] = serde_json::json!(connection);
     std::fs::write(&registry, serde_json::to_vec(&saved).unwrap()).unwrap();
-    let issue = Arc::new(ProviderIssue::default());
-    let provider = hotsheet_extsync::GitHubProvider::new(
-        hotsheet_extsync::GitHubConfig::new("github-main", "acme/repo", "fixture-token"),
-        issue.clone(),
-    );
     let router = app(
         AppState::new(FsStore::open(store_dir.path()).unwrap(), SECRET.into())
             .unwrap()
             .with_machine_home(home.path())
             .with_plugin_dirs(vec![plugins.path().to_path_buf()])
             .with_checkout_registry(&registry)
-            .with_ticket_provider(Arc::new(provider)),
+            .with_ticket_provider(provider),
     );
-    let path = format!("/checkouts/{}/tickets/github-main:42", registered.id);
+    ProviderCheckout {
+        router,
+        root,
+        checkout: registered.id,
+        _dirs: [store_dir, plugins, home, project],
+    }
+}
+
+#[tokio::test]
+async fn hs2_z3sbrq_a_provider_answer_reaches_the_ai_that_asked() {
+    let issue = Arc::new(ProviderIssue::default());
+    let provider = hotsheet_extsync::GitHubProvider::new(
+        hotsheet_extsync::GitHubConfig::new("github-main", "acme/repo", "fixture-token"),
+        issue.clone(),
+    );
+    let ProviderCheckout {
+        router,
+        root,
+        checkout,
+        _dirs,
+    } = provider_checkout("github-main", "acme/repo", Arc::new(provider));
+    let path = format!("/checkouts/{checkout}/tickets/github-main:42");
     let prompts = |seen: &Arc<Mutex<Vec<Seen>>>| -> Vec<String> {
         seen.lock()
             .unwrap()
@@ -2014,6 +2043,191 @@ password_env = "OPENCODE_SERVER_PASSWORD"
     assert_eq!(prompts(&second).len(), 1);
     assert!(prompts(&primary).is_empty());
     for id in ["primary-1", "asker-2"] {
+        let _ = send(&router, "DELETE", &format!("/terminals/{id}"), None).await;
+    }
+}
+
+/// Closes the live issue when the test ends, passed or not.
+struct CloseLiveIssue(Arc<hotsheet_extsync::GitHubProvider>, String);
+
+impl Drop for CloseLiveIssue {
+    fn drop(&mut self) {
+        use hotsheet_ticketing::TicketProvider as _;
+        if let Err(error) = self.0.close(
+            &self.1,
+            live_now(),
+            hotsheet_model::CloseReason::Completed,
+            None,
+        ) {
+            eprintln!("left live issue {} open: {error:?}", self.1);
+        }
+    }
+}
+
+fn live_now() -> hotsheet_model::Timestamp {
+    hotsheet_model::Timestamp::new(
+        time::OffsetDateTime::now_utc()
+            .format(&time::format_description::well_known::Rfc3339)
+            .unwrap(),
+    )
+}
+
+/// HS2-533PP8: the HS2-Z3SBRQ route above on a live GitHub repository. The AI's question
+/// is written as a real issue comment carrying its author, and the person's answer
+/// through the checkout route is read back from GitHub and reaches only the asking AI's
+/// session: on a Not Started issue never the older primary, a plain note afterwards
+/// reaches nobody, and on a Started issue the asker is preferred over the primary.
+/// Synthetic issue and notes; the issue is closed afterwards.
+#[tokio::test]
+#[ignore = "writes the live GitHub test repository; set HOTSHEET_GITHUB_LIVE_REPO, HOTSHEET_GITHUB_LIVE_TOKEN and HOTSHEET_GITHUB_LIVE_WRITE=1"]
+async fn hs2_533pp8_a_live_github_answer_reaches_the_ai_that_asked() {
+    use hotsheet_ticketing::TicketProvider as _;
+    assert_eq!(
+        std::env::var("HOTSHEET_GITHUB_LIVE_WRITE").as_deref(),
+        Ok("1"),
+        "write access to the live test repository must be opted into"
+    );
+    let repo = std::env::var("HOTSHEET_GITHUB_LIVE_REPO").expect("HOTSHEET_GITHUB_LIVE_REPO");
+    let token = std::env::var("HOTSHEET_GITHUB_LIVE_TOKEN").expect("HOTSHEET_GITHUB_LIVE_TOKEN");
+    let config = hotsheet_extsync::GitHubConfig::new("github-live", repo.clone(), token);
+    let live = Arc::new(hotsheet_extsync::GitHubProvider::live(config.clone()));
+    let created = live
+        .create(
+            hotsheet_ticketing::MutationContext {
+                now: live_now(),
+                generated_id: hotsheet_model::Ulid::new(),
+            },
+            hotsheet_ticketing::ProviderDraft {
+                group: None,
+                title: format!("Hot Sheet answer routing live test {}", hotsheet_model::Ulid::new()),
+                category: "test".into(),
+                priority: hotsheet_model::Priority::Default,
+                status: hotsheet_model::Status::NotStarted,
+                details: "Created by an opt-in Hot Sheet live validation (HS2-533PP8); synthetic content; closed automatically.".into(),
+                tags: vec![],
+                up_next: false,
+                blocked_by: vec![],
+                transfer: None,
+                created_by: None,
+            },
+        )
+        .unwrap();
+    let _close = CloseLiveIssue(live.clone(), created.native_id.clone());
+    eprintln!("github: issue {}", created.native_id);
+    let ProviderCheckout {
+        router,
+        root,
+        checkout,
+        _dirs,
+    } = provider_checkout(
+        "github-live",
+        &repo,
+        Arc::new(hotsheet_extsync::GitHubProvider::live(config)),
+    );
+    let path = format!(
+        "/checkouts/{checkout}/tickets/github-live:{}",
+        created.native_id
+    );
+    let prompts = |seen: &Arc<Mutex<Vec<Seen>>>| -> Vec<String> {
+        seen.lock()
+            .unwrap()
+            .iter()
+            .filter(|seen| seen.route.ends_with("/prompt_async"))
+            .filter_map(|seen| {
+                seen.body.as_ref()?["parts"][0]["text"]
+                    .as_str()
+                    .map(str::to_owned)
+            })
+            .collect()
+    };
+    let note = |body: serde_json::Value| {
+        let router = router.clone();
+        let path = path.clone();
+        async move {
+            // GitHub orders comments by second-granularity timestamps.
+            tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
+            let (status, ticket) = send(&router, "PATCH", &path, Some(&body.to_string())).await;
+            assert_eq!(status, StatusCode::OK, "{ticket}");
+            ticket
+        }
+    };
+    let ask = |worker: &'static str| {
+        note(serde_json::json!({
+            "note": "Synthetic question: reuse the found ticket or open a new one?",
+            "note_kind": "feedback_needed",
+            "actor": {"role": "ai", "id": worker}
+        }))
+    };
+
+    let (_, port, _) = launch_in(&router, "fake-push", "primary-1", Some(&root)).await;
+    let primary = fake_opencode(port.parse().unwrap());
+    let (_, port, _) = launch_in(&router, "fake-push", "asker-1", Some(&root)).await;
+    let asker = fake_opencode(port.parse().unwrap());
+
+    let asked = ask("fake-push-asker-1").await;
+    assert_eq!(asked["status"], "not_started", "{asked}");
+    let request = asked["notes"].as_array().unwrap().last().unwrap().clone();
+    assert_eq!(
+        request["actor"],
+        serde_json::json!({"role": "ai", "id": "fake-push-asker-1"}),
+        "{request}"
+    );
+    // A fresh read from GitHub, outside the server, sees the same author.
+    let fresh = live.get(&created.native_id).unwrap();
+    let stored = fresh
+        .notes
+        .iter()
+        .find(|note| request["id"] == note.id.as_str())
+        .unwrap();
+    assert_eq!(
+        stored.actor.as_ref().and_then(|actor| actor.id.as_deref()),
+        Some("fake-push-asker-1")
+    );
+
+    let answered = note(serde_json::json!({
+        "note": "Reuse it.", "actor": {"role": "human"}, "response_to": request["id"]
+    }))
+    .await;
+    assert_eq!(
+        answered["feedback_delivery"]["status"], "sent",
+        "{answered}"
+    );
+    assert_eq!(
+        answered["feedback_delivery"]["connection_id"], "asker-1",
+        "{answered}"
+    );
+    let told = prompts(&asker);
+    assert_eq!(told.len(), 1, "{told:?}");
+    assert!(
+        told[0].starts_with("Hot Sheet notice: a person answered FEEDBACK NEEDED on"),
+        "{told:?}"
+    );
+    assert!(prompts(&primary).is_empty(), "the primary is not told");
+    let answer = answered["notes"].as_array().unwrap().last().unwrap();
+    assert_ne!(answer["actor"]["role"], "ai", "{answer}");
+
+    let plain = note(serde_json::json!({"note": "Thanks.", "actor": {"role": "human"}})).await;
+    assert!(plain.get("feedback_delivery").is_none(), "{plain}");
+    assert_eq!(prompts(&asker).len(), 1);
+
+    // Started: the AI that asked is preferred over the older primary.
+    let started = note(serde_json::json!({"status": "started"})).await;
+    assert_eq!(started["status"], "started", "{started}");
+    let (_, port, _) = launch_in(&router, "fake-push", "asker-2", Some(&root)).await;
+    let second = fake_opencode(port.parse().unwrap());
+    let asked = ask("fake-push-asker-2").await;
+    let request = asked["notes"].as_array().unwrap().last().unwrap().clone();
+    let answered = note(serde_json::json!({
+        "note": "Open a new one.", "actor": {"role": "human"}, "response_to": request["id"]
+    }))
+    .await;
+    assert_eq!(
+        answered["feedback_delivery"]["connection_id"], "asker-2",
+        "{answered}"
+    );
+    assert_eq!(prompts(&second).len(), 1);
+    assert!(prompts(&primary).is_empty());
+    for id in ["primary-1", "asker-1", "asker-2"] {
         let _ = send(&router, "DELETE", &format!("/terminals/{id}"), None).await;
     }
 }

@@ -163,6 +163,18 @@ export function NoteCardDemo() {
             ))}
         </List>
       </CatalogExample>
+      <CatalogExample
+        label="Sidebar Feedback Choices (HS2-08EAH1)"
+        note="The inspector's compact prompt: selectable groups, plain prose, and Respond to Feedback."
+        viewport={{ layout: 'flex-column', width: 'compact' }}
+      >
+        <NoteCard
+          {...SIDEBAR_FEEDBACK_NOTE}
+          density="compact"
+          respondToFeedback
+          selectedChoices={readerFeedbackChoiceSelections.value[SIDEBAR_FEEDBACK_NOTE.id]}
+        />
+      </CatalogExample>
       <CatalogExample label="Unsent Response After Request Changes (HS2-VBFSZJ)" viewport={{ layout: 'flex-column' }}>
         <List gap="xs">
           <NoteCard
@@ -328,6 +340,27 @@ export const READER_NOTES: NoteCardProps[] = [
   },
 ];
 export const readerNotes = signal(READER_NOTES);
+/** A pending prompt as the sidebar inspector shows it (HS2-08EAH1); it shares the reader's selection state. */
+const SIDEBAR_FEEDBACK_NOTE = {
+  id: 'sidebar-feedback-groups',
+  kind: 'feedback_needed' as const,
+  author: 'Codex',
+  time: '5 minutes ago',
+  body: [
+    'Two decisions before I build the roll-up.',
+    '',
+    'CHOICE: How does a Git store hold a milestone?',
+    '- **A milestone ticket (recommended).** Reuses the ticket format and sync.',
+    '- **A milestones file per store.** A new file kind to merge.',
+    '',
+    'CHOICE: Which due-date roll-up should the board show?',
+    '- Latest open ticket due date',
+    '- The milestone date only',
+    '- Both, with a warning when a ticket is later',
+    '',
+    'Anything else I should know?',
+  ].join('\n'),
+};
 export const readerFeedbackChoiceSelections = signal<Record<string, string[]>>({ 'reader-feedback': ['choice-1'] });
 export const readerTab = signal<InspectorTab>('info');
 export const readerLargeText = signal(false);
@@ -838,7 +871,7 @@ function wireContentComponentsDemo(root: HTMLElement): () => void {
   demoListeners.add(
     wireFeedbackChoices(root, {
       toggle: (noteId, choiceId, modifiers) => {
-        const note = readerNotes.value.find((item) => item.id === noteId),
+        const note = [...readerNotes.value, SIDEBAR_FEEDBACK_NOTE].find((item) => item.id === noteId),
           choices = note && parseFeedbackChoices(note.body);
         if (!choices) return;
         const next = updateFeedbackChoiceDocumentSelection(

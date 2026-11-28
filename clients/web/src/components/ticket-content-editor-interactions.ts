@@ -147,8 +147,9 @@ export function wireNoteEditor(root: HTMLElement, bindings: NoteEditorBindings):
   );
   lifetime.add(
     delegate(root, 'dblclick', INSPECTOR_AND_EDITOR_TARGETS.feedbackPromptBody.selector, (event, target) => {
-      // A link or control inside the rendered prompt keeps its own action.
-      if ((event.target as Element).closest('a, button, input, textarea, [role="button"]')) return;
+      // A link or control inside the rendered prompt keeps its own action, and a sidebar choice option
+      // toggles on each click rather than opening the editor on a double toggle (HS2-08EAH1).
+      if ((event.target as Element).closest('a, button, input, textarea, [role="button"], [data-choice-id]')) return;
       beginPrompt(target);
     }),
   );

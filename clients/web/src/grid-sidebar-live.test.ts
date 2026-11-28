@@ -77,7 +77,7 @@ describe('gridSidebarLive (HS2-E1AQE8)', () => {
     expect(gridSidebarLive([], NOW)).toBeUndefined();
   });
 
-  it('combines rates, peaks, and counts, and keeps the latest progress and claim', () => {
+  it('combines rates, peaks, and counts, and keeps the shown word progress and the latest claim (HS2-PPZQX9)', () => {
     const second = store({
       store: 's2',
       state: 'may_be_stuck',
@@ -95,11 +95,13 @@ describe('gridSidebarLive (HS2-E1AQE8)', () => {
       waiting: 1,
       workersLive: 2,
       workersExpected: 4,
-      progressAgeMs: 2 * MINUTE,
+      // May be stuck pairs with the stuck store's 40 minutes, not the active store's 2 (HS2-PPZQX9).
+      progressAgeMs: 40 * MINUTE,
       claim: { slug: 'HS2-B', phase: 'working' },
       waitingSlug: 'HS2-W',
     });
     expect(live.stoppedAgeMs).toBeUndefined();
+    expect(liveStateTitle('Web', live)).toContain('no progress for 40 minutes');
   });
 
   it('records the stop age, stalled ticket, and halt message only when present', () => {

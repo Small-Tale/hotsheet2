@@ -85,6 +85,8 @@ import {
   policyFromDevelopmentDraft,
   selectDevelopmentStrategy,
 } from '../components/development-strategy-settings-interactions';
+import { LiveCiContextMenu, type LiveCiMenuState } from '../components/live-ci-context-menu';
+import { wireLiveCiMenu } from '../components/live-ci-menu-interactions';
 import type { MarkdownEditorMode } from '../components/markdown-editor';
 import { NoteDeliveryPopup } from '../components/note-delivery-popup';
 import {
@@ -6651,6 +6653,7 @@ export async function startHotSheetWebClient() {
       expandedCodeReviewCommits,
       fieldConflict,
       fieldConflictResolution,
+      feedbackChoiceSelections: readerFeedbackChoiceSelections,
       inspectorTab,
       liveClaimNotice,
       advisoryClaimNotice,
@@ -7309,6 +7312,22 @@ export async function startHotSheetWebClient() {
   const savedViewMenuRoot = document.createElement('div');
   document.body.append(savedViewMenuRoot);
   mount(savedViewMenuRoot, () => (savedViewMenu.value ? <SavedViewContextMenu {...savedViewMenu.value} /> : <></>));
+  // HS2-7PSBHQ: the Live section's context menu clears a `main` CI run shown as unknown, through the selected
+  // project's server; its live-state push then removes the chip.
+  const liveCiMenu = signal<LiveCiMenuState | undefined>(undefined);
+  const liveCiMenuRoot = document.createElement('div');
+  document.body.append(liveCiMenuRoot);
+  mount(liveCiMenuRoot, () => (liveCiMenu.value ? <LiveCiContextMenu {...liveCiMenu.value} /> : <></>));
+  wireLiveCiMenu(document.body, {
+    menu: liveCiMenu,
+    clear: async ({ checkout, reportedAtMs }) => {
+      try {
+        await api().clearCiStatus(checkout, reportedAtMs);
+      } catch {
+        showToast('Could not clear the CI status');
+      }
+    },
+  });
 
   // Decorative top-of-app "server busy" bars (HS2-MW1V3M). Bar count fills the viewport width and
   // is only recomputed on an actual (debounced) window resize; the strip itself is a fixed overlay.

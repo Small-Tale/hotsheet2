@@ -18460,6 +18460,47 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+    delete:
+      operationId: clearCheckoutCiStatus
+      description:
+        Forget the CI run stored for a registered checkout (HS2-7PSBHQ, docs/32-notifier-plugins.md §32.8.5), such as a
+        run last reported running long ago whose end nobody reported. With `reported_at_ms`, only while the stored run
+        is still the one reported then, so a newer report is kept. Idempotent; a cleared run's linked stores push their
+        live state again. The headless form is `hotsheet-cli ci clear`; the project sidebar's Live section offers it as
+        Clear CI Status while the run shows as unknown.
+      parameters:
+        - name: reported_at_ms
+          in: query
+          required: false
+          description: The cleared run's `reported_at_ms`; a stored run reported at another time is kept.
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Whether a run was cleared, the run still stored, and the linked stores.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CiClearResponse'
+        '400':
+          description: The query is invalid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: No registered checkout matches the reference.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: The checkout reference is ambiguous.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /checkouts/{reference}/worker-plan:
     parameters:
       - name: reference
@@ -34368,6 +34409,28 @@ components:
             - none
             - no_token
             - 'off'
+      additionalProperties: false
+    CiClearResponse:
+      type: object
+      required:
+        - checkout
+        - cleared
+        - ci
+        - stores
+      properties:
+        checkout:
+          description: The resolved checkout id.
+          type: string
+        cleared:
+          description: False when nothing was stored, or the stored run was reported at another time than the one named.
+          type: boolean
+        ci:
+          $ref: '#/components/schemas/LiveCi'
+        stores:
+          description: Hosted stores linked to the checkout.
+          type: array
+          items:
+            type: string
       additionalProperties: false
     LiveCause:
       type: object

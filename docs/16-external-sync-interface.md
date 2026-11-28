@@ -929,7 +929,11 @@ written or read: a person's authorship still comes from the write request, so co
 can never make a note count as a person's. A hand-written AI marker can at most make a
 comment count as an AI's and point an answer's wake-up at that worker's live session in
 the same checkout. Older versions ignore the extra line; comments written before it have
-no actor.
+no actor. Opt-in live tests (HS2-533PP8) confirm on GitHub that the author line survives
+and reads back, that a person's note (including one whose text imitates the line) and a
+comment carrying the line without a valid note marker never read as AI, and that a
+person's answer through the checkout route reaches only the asking AI's session. The same
+round trip is written for GitLab and Jira but has not yet run against them.
 Reads also expose the generated note marker as `hotsheet_note_id` alongside the
 provider-native `id`, allowing ticket copy to remap a request and its response
 correctly after reload or an idempotent retry. An opt-in live test confirms the request

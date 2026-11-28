@@ -1,7 +1,7 @@
 import { type CssForegroundColor, uiColor } from '@kerfjs/ui/css-values';
 
 import type { LiveStoreState, LiveWord } from './api';
-import { aggregateLiveStates, progressAgeMs } from './live-state';
+import { aggregateLiveStates, progressAgeForWord } from './live-state';
 
 /**
  * What the workspace grid sidebar's gauge and triage pages show for one group (HS2-E1AQE8,
@@ -18,7 +18,7 @@ export interface GridSidebarLive {
   waiting: number;
   workersLive: number;
   workersExpected: number;
-  /** Milliseconds since the most recent progress in any of the stores; absent before any. */
+  /** Milliseconds since the most recent progress in the stores showing `state` (HS2-PPZQX9); absent before any. */
   progressAgeMs?: number;
   /** Milliseconds since the stores stopped; set only for Stopped. */
   stoppedAgeMs?: number;
@@ -81,7 +81,8 @@ export function liveWordColor(word: LiveWord): CssForegroundColor {
 export function gridSidebarLive(states: readonly LiveStoreState[], nowMs: number): GridSidebarLive | undefined {
   if (states.length === 0) return undefined;
   const aggregate = aggregateLiveStates(states, nowMs);
-  const ages = states.map((state) => progressAgeMs(state, nowMs)).filter((age): age is number => age !== undefined);
+  // The age the state word is shown with comes from the stores showing it (HS2-PPZQX9).
+  const progressAge = progressAgeForWord(states, aggregate.state, nowMs);
   const stoppedAt = states
     .map((state) => state.activity.stopped_at_ms)
     .filter((at): at is number => at !== null)
@@ -105,7 +106,7 @@ export function gridSidebarLive(states: readonly LiveStoreState[], nowMs: number
     waiting: aggregate.waiting,
     workersLive: aggregate.workersLive,
     workersExpected: aggregate.workersExpected,
-    ...(ages.length ? { progressAgeMs: Math.min(...ages) } : {}),
+    ...(progressAge === undefined ? {} : { progressAgeMs: progressAge }),
     ...(aggregate.state === 'stopped' && stoppedAt !== undefined
       ? { stoppedAgeMs: Math.max(0, nowMs - stoppedAt) }
       : {}),

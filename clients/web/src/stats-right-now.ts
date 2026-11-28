@@ -77,6 +77,9 @@ export interface RightNowCi {
    */
   ageMs?: number;
   runUrl?: string;
+  /** The checkout that reported the run, and when (HS2-7PSBHQ: Clear CI Status names the run it clears). */
+  checkout?: string;
+  reportedAtMs?: number;
 }
 
 /**
@@ -100,6 +103,8 @@ export function newestCi(states: readonly LiveStoreState[], nowMs: number): Righ
     ...(ci.sha ? { shortSha: ci.sha.slice(0, 7) } : {}),
     ...(since === undefined ? {} : { ageMs: Math.max(0, nowMs - since) }),
     ...(ci.run_url ? { runUrl: ci.run_url } : {}),
+    ...(ci.checkout ? { checkout: ci.checkout } : {}),
+    ...(ci.reported_at_ms === null ? {} : { reportedAtMs: ci.reported_at_ms }),
   };
 }
 

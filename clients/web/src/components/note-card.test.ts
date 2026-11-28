@@ -27,6 +27,31 @@ describe('NoteCard', () => {
       'AI Fix This Note',
     );
   });
+  it('HS2-D6RRST keeps the header label on one truncating line beside a non-shrinking trailing group', () => {
+    const markup = String(
+      NoteCard({
+        id: 'synthetic-note',
+        kind: 'feedback_needed',
+        author: 'Codex',
+        time: '45d ago',
+        body: 'Which store?',
+        repairable: true,
+        editable: true,
+        deletable: true,
+      }),
+    );
+    // The label is Kerf Text truncation that keeps the full label as its title.
+    expect(markup).toMatch(/class="note-card__kind"><span title="Feedback needed"[^>]*data-wrap="truncate"/u);
+    // Edit Note and Delete Note render in the collapsible actions span before the time.
+    expect(markup).toMatch(
+      /note-card__actions"[\s\S]*Edit Note[\s\S]*Delete Note[\s\S]*<time class="note-card__time">/u,
+    );
+    // The collapsed actions take no width at rest and reveal on hover, focus, or a hover-less pointer.
+    const css = readFileSync(resolve(import.meta.dirname, 'note-card.css'), 'utf8');
+    expect(css).toMatch(/\.note-card__actions \{[^}]*max-width: 0;[^}]*overflow: hidden;/u);
+    expect(css).toMatch(/\.note-card:focus-within \.note-card__actions \{[^}]*max-width: none;/u);
+    expect(css).toMatch(/@media \(hover: none\) \{\s*\.note-card__actions \{[^}]*max-width: none;/u);
+  });
   it('HS2-Q0GWXT keeps manual metadata actions visible with provider and response reasons', () => {
     const base = {
       id: 'synthetic-note',
@@ -351,6 +376,38 @@ describe('NoteCard', () => {
     expect(markup).not.toContain('note-card__choice');
     expect(markup).toContain('src="/checkouts/project/tickets/HS2-CHOICE/attachments/by-name/proof.png"');
     expect(markup).toContain('placeholder="Additional response (optional)"');
+  });
+
+  it('HS2-08EAH1 offers selectable choice groups on a sidebar prompt without inline reply targets', () => {
+    const props = {
+      id: 'sidebar-choices',
+      kind: 'feedback_needed' as const,
+      author: 'Codex',
+      time: 'Now',
+      body: 'Two decisions.\n\nCHOICE: Which store?\n- Ticket store\n- Document store\n\nCHOICE: When?\n- On launch\n- On command\n- Never\n\nAnything else?',
+      respondToFeedback: true,
+      selectedChoices: ['choice-2'],
+    };
+    const markup = String(NoteCard(props));
+    expect(markup.match(/role="grid"/g)).toHaveLength(2);
+    expect(markup).toContain('aria-label="Feedback Choices 1: Which store?"');
+    expect(markup).toContain('aria-label="Feedback Choices 2: When?"');
+    expect(markup.match(/data-action="toggle-feedback-choice"/g)).toHaveLength(5);
+    expect(markup.match(/aria-selected="true"/g)).toHaveLength(1);
+    expect(markup).not.toContain('CHOICE:');
+    // The prose stays plain: inline replies belong to the reader, and no response editor opens here.
+    expect(markup).not.toContain('add-inline-feedback-reply');
+    expect(markup).not.toContain('name="note-body"');
+    expect(markup).toContain('data-replyable="false"');
+    expect(markup).toContain('data-feedback-prompt-body="true"');
+    expect(markup).toContain('data-action="respond-to-feedback"');
+    // The reader keeps its own replyable prompt; answered (regular) and choice-less prompts stay prose.
+    const reader = String(NoteCard({ ...props, readerMode: true }));
+    expect(reader).toContain('add-inline-feedback-reply');
+    expect(reader).not.toContain('data-replyable');
+    expect(String(NoteCard({ ...props, kind: 'regular' }))).not.toContain('toggle-feedback-choice');
+    expect(String(NoteCard({ ...props, body: 'Please answer' }))).not.toContain('toggle-feedback-choice');
+    expect(String(NoteCard({ ...props, editing: true, editingPrompt: true }))).not.toContain('toggle-feedback-choice');
   });
 
   it('renders multi-line and lettered choice details under each label (HS2-EWF0FT)', () => {

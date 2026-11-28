@@ -878,6 +878,260 @@
         }
       ],
       "regions": ["### Which one?", ""]
+    },
+    {
+      "name": "numbered CHOICE headers each followed by a list (HS2-8T71YW)",
+      "source": "FEEDBACK NEEDED: milestones design (docs/38-milestones.md; captures in batch `Design v1`). Please answer each CHOICE; my recommendation is first and marked.\n\nCHOICE 1: How does a Git store hold a milestone?\n- A (recommended): a ticket of a built-in `milestone` category — notes, attachments, history and sync for free\n- B: a registry file per milestone beside the group registry — merges cleanly but has no notes\n\nCHOICE 2: What is a milestone in Jira?\n- A (recommended): a fixVersion (release with releaseDate)\n- B: the parent epic\n- C: a per-connection setting choosing fixVersion or epic, off by default\n\nCHOICE 3: Nested milestones?\n- A (recommended): not in the first version\n- B: allow nesting, roll-ups over direct members only, cycle-checked\n\nCHOICE 4: When does a milestone orchestration prerequisite hold?\n- A (recommended): every linked ticket confirmed finished with the required gates green\n- B: when the milestone itself is closed\n- C: either, chosen per step\n\nCHOICE 5: Where do milestones live in the client?\n- A (recommended): a built-in Milestones sidebar view and milestone inspector\n- B: only \"group by milestone\" in the existing list and column views\n- C: a global dashboard across projects\n\nCHOICE 6: What instant is a date-only due date for scheduling?\n- A (recommended): end of that day in UTC, identical on every machine\n- B: end of that day in a project time-zone setting",
+      "groups": [
+        {
+          "raw": "CHOICE 1: How does a Git store hold a milestone?\n- A (recommended): a ticket of a built-in `milestone` category — notes, attachments, history and sync for free\n- B: a registry file per milestone beside the group registry — merges cleanly but has no notes\n",
+          "question": "How does a Git store hold a milestone?",
+          "inlineQuestion": true,
+          "choices": [
+            {
+              "label": "A (recommended): a ticket of a built-in `milestone` category — notes, attachments, history and sync for free",
+              "details": null
+            },
+            {
+              "label": "B: a registry file per milestone beside the group registry — merges cleanly but has no notes",
+              "details": null
+            }
+          ]
+        },
+        {
+          "raw": "CHOICE 2: What is a milestone in Jira?\n- A (recommended): a fixVersion (release with releaseDate)\n- B: the parent epic\n- C: a per-connection setting choosing fixVersion or epic, off by default\n",
+          "question": "What is a milestone in Jira?",
+          "inlineQuestion": true,
+          "choices": [
+            {
+              "label": "A (recommended): a fixVersion (release with releaseDate)",
+              "details": null
+            },
+            {
+              "label": "B: the parent epic",
+              "details": null
+            },
+            {
+              "label": "C: a per-connection setting choosing fixVersion or epic, off by default",
+              "details": null
+            }
+          ]
+        },
+        {
+          "raw": "CHOICE 3: Nested milestones?\n- A (recommended): not in the first version\n- B: allow nesting, roll-ups over direct members only, cycle-checked\n",
+          "question": "Nested milestones?",
+          "inlineQuestion": true,
+          "choices": [
+            {
+              "label": "A (recommended): not in the first version",
+              "details": null
+            },
+            {
+              "label": "B: allow nesting, roll-ups over direct members only, cycle-checked",
+              "details": null
+            }
+          ]
+        },
+        {
+          "raw": "CHOICE 4: When does a milestone orchestration prerequisite hold?\n- A (recommended): every linked ticket confirmed finished with the required gates green\n- B: when the milestone itself is closed\n- C: either, chosen per step\n",
+          "question": "When does a milestone orchestration prerequisite hold?",
+          "inlineQuestion": true,
+          "choices": [
+            {
+              "label": "A (recommended): every linked ticket confirmed finished with the required gates green",
+              "details": null
+            },
+            {
+              "label": "B: when the milestone itself is closed",
+              "details": null
+            },
+            {
+              "label": "C: either, chosen per step",
+              "details": null
+            }
+          ]
+        },
+        {
+          "raw": "CHOICE 5: Where do milestones live in the client?\n- A (recommended): a built-in Milestones sidebar view and milestone inspector\n- B: only \"group by milestone\" in the existing list and column views\n- C: a global dashboard across projects\n",
+          "question": "Where do milestones live in the client?",
+          "inlineQuestion": true,
+          "choices": [
+            {
+              "label": "A (recommended): a built-in Milestones sidebar view and milestone inspector",
+              "details": null
+            },
+            {
+              "label": "B: only \"group by milestone\" in the existing list and column views",
+              "details": null
+            },
+            {
+              "label": "C: a global dashboard across projects",
+              "details": null
+            }
+          ]
+        },
+        {
+          "raw": "CHOICE 6: What instant is a date-only due date for scheduling?\n- A (recommended): end of that day in UTC, identical on every machine\n- B: end of that day in a project time-zone setting",
+          "question": "What instant is a date-only due date for scheduling?",
+          "inlineQuestion": true,
+          "choices": [
+            {
+              "label": "A (recommended): end of that day in UTC, identical on every machine",
+              "details": null
+            },
+            {
+              "label": "B: end of that day in a project time-zone setting",
+              "details": null
+            }
+          ]
+        }
+      ],
+      "regions": [
+        "FEEDBACK NEEDED: milestones design (docs/38-milestones.md; captures in batch `Design v1`). Please answer each CHOICE; my recommendation is first and marked.",
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ]
+    },
+    {
+      "name": "bold numbered headers followed by lettered blocks and a list",
+      "source": "**CHOICE 1: Which cache?**\n\nA) Memory.\nB) Disk.\n\n**CHOICE 2:** Which store?\n- Git\n- Jira\n\nThanks.",
+      "groups": [
+        {
+          "raw": "**CHOICE 1: Which cache?**\n\nA) Memory.\nB) Disk.\n",
+          "question": "Which cache?",
+          "inlineQuestion": true,
+          "choices": [
+            {
+              "label": "A) Memory.",
+              "details": null
+            },
+            {
+              "label": "B) Disk.",
+              "details": null
+            }
+          ]
+        },
+        {
+          "raw": "**CHOICE 2:** Which store?\n- Git\n- Jira\n",
+          "question": "Which store?",
+          "inlineQuestion": true,
+          "choices": [
+            {
+              "label": "Git",
+              "details": null
+            },
+            {
+              "label": "Jira",
+              "details": null
+            }
+          ]
+        }
+      ],
+      "regions": [
+        "",
+        "",
+        "Thanks."
+      ]
+    },
+    {
+      "name": "a numbered header right after a list item ends the list",
+      "source": "CHOICE 1: First?\n- a\n- b\nCHOICE 2: Second?\n- c\n- d",
+      "groups": [
+        {
+          "raw": "CHOICE 1: First?\n- a\n- b\n",
+          "question": "First?",
+          "inlineQuestion": true,
+          "choices": [
+            {
+              "label": "a",
+              "details": null
+            },
+            {
+              "label": "b",
+              "details": null
+            }
+          ]
+        },
+        {
+          "raw": "CHOICE 2: Second?\n- c\n- d",
+          "question": "Second?",
+          "inlineQuestion": true,
+          "choices": [
+            {
+              "label": "c",
+              "details": null
+            },
+            {
+              "label": "d",
+              "details": null
+            }
+          ]
+        }
+      ],
+      "regions": [
+        "",
+        "",
+        ""
+      ]
+    },
+    {
+      "name": "numbered CHOICE blocks without a list stay one lettered run",
+      "source": "Pick one.\n\nCHOICE 1: Memory.\nCHOICE 2: Disk.\n\nRecommendation: 2.",
+      "groups": [
+        {
+          "raw": "CHOICE 1: Memory.\nCHOICE 2: Disk.\n",
+          "question": "Pick one.",
+          "inlineQuestion": false,
+          "choices": [
+            {
+              "label": "CHOICE 1: Memory.",
+              "details": null
+            },
+            {
+              "label": "CHOICE 2: Disk.",
+              "details": null
+            }
+          ]
+        }
+      ],
+      "regions": [
+        "Pick one.",
+        "Recommendation: 2."
+      ]
+    },
+    {
+      "name": "a numbered header with an empty question takes the preceding prose",
+      "source": "Which store?\n\nCHOICE 1:\n- Git\n- Jira",
+      "groups": [
+        {
+          "raw": "CHOICE 1:\n- Git\n- Jira",
+          "question": "Which store?",
+          "inlineQuestion": false,
+          "choices": [
+            {
+              "label": "Git",
+              "details": null
+            },
+            {
+              "label": "Jira",
+              "details": null
+            }
+          ]
+        }
+      ],
+      "regions": [
+        "Which store?",
+        ""
+      ]
+    },
+    {
+      "name": "a numbered CHOICE line with nothing after it is prose",
+      "source": "Recap.\n\nCHOICE 1: Nothing follows",
+      "groups": null
     }
   ]
 }

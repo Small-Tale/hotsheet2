@@ -129,14 +129,24 @@ function FeedbackBlocks({
   noteId,
   replies,
   attachmentContext,
+  replyable,
 }: {
   source: string;
   sourceStart: number;
   noteId: string;
   replies: readonly InlineFeedbackReply[];
   attachmentContext?: AttachmentReferenceContext;
+  replyable: boolean;
 }) {
   if (!source) return null;
+  // The sidebar inspector shows the prose as plain Markdown; inline replies are written in the reader
+  // (HS2-08EAH1), so its blocks are neither response targets nor focus stops.
+  if (!replyable)
+    return (
+      <div class="note-card__feedback-question">
+        <MarkdownPreview source={source} attachmentContext={attachmentContext} size="inherit" />
+      </div>
+    );
   const localReplies = replies
     .filter((reply) => reply.offset >= sourceStart && reply.offset <= sourceStart + source.length)
     .map((reply) => ({ ...reply, offset: reply.offset - sourceStart }));
@@ -201,12 +211,18 @@ export function FeedbackPrompt({
   inlineReplies = [],
   selectedChoices = [],
   attachmentContext,
+  replyable = true,
 }: {
   source: string;
   id: string;
   inlineReplies?: readonly InlineFeedbackReply[];
   selectedChoices?: readonly string[];
   attachmentContext?: AttachmentReferenceContext;
+  /**
+   * Whether prose blocks accept inline replies (the reader). The sidebar inspector passes `false`: its
+   * choice groups stay selectable and Respond to Feedback carries them into the reader (HS2-08EAH1).
+   */
+  replyable?: boolean;
 }) {
   const choices = parseFeedbackChoices(source),
     selected = new Set(selectedChoices);
@@ -220,13 +236,14 @@ export function FeedbackPrompt({
             noteId={id}
             replies={inlineReplies}
             attachmentContext={attachmentContext}
+            replyable={replyable}
           />
         </List>
       </div>
     );
   const trailing = choices.regions[choices.groups.length];
   return (
-    <div class="note-card__feedback-prompt">
+    <div class="note-card__feedback-prompt" data-replyable={replyable ? undefined : 'false'}>
       <List gap="2xs">
         {choices.groups.map((group, index) => (
           <>
@@ -236,11 +253,16 @@ export function FeedbackPrompt({
               noteId={id}
               replies={inlineReplies}
               attachmentContext={attachmentContext}
+              replyable={replyable}
             />
             {group.inlineQuestion && group.question && (
               // A `CHOICE: question` header carries its question on the header line (HS2-3MHSBS).
               <div class="note-card__feedback-question">
-                <MarkdownPreview source={group.question} attachmentContext={attachmentContext} />
+                <MarkdownPreview
+                  source={group.question}
+                  attachmentContext={attachmentContext}
+                  size={replyable ? 'default' : 'inherit'}
+                />
               </div>
             )}
             <List
@@ -298,6 +320,7 @@ export function FeedbackPrompt({
           noteId={id}
           replies={inlineReplies}
           attachmentContext={attachmentContext}
+          replyable={replyable}
         />
       </List>
     </div>
@@ -431,6 +454,10 @@ export function NoteCard({
   const editPrompt = editable && feedbackPrompt && !editing && !responseRemoved;
   const source = draft ?? (feedbackResponse ? '' : body);
   const choiceGroup = feedbackResponse ? parseFeedbackChoices(body) : undefined;
+  // An unanswered prompt outside the reader (the sidebar inspector) still offers its CHOICE groups as
+  // the same selectable lists; Respond to Feedback carries the selection into the reader (HS2-08EAH1).
+  const sidebarChoices =
+    !readerMode && kind === 'feedback_needed' && !responseRemoved && parseFeedbackChoices(body) !== undefined;
   const editAttributes =
     editInPlace && !editorOpen
       ? {
@@ -464,9 +491,13 @@ export function NoteCard({
     >
       <Row className="note-card__header" hAlign="space-between" vAlign="middle" gap="m">
         <strong class="note-card__kind">
+          {/* HS2-D6RRST: one line; when revealed note actions leave too little room, Kerf truncation
+              ellipsizes the label (keeping it as the title) rather than wrapping or pushing the time out. */}
           <Text
             variant="span"
             size="compact"
+            wrap="truncate"
+            title={title ?? presentation.label}
             color={
               kind === 'feedback_needed' || kind === 'feedback_draft'
                 ? uiColor('warning-on-quiet')
@@ -481,7 +512,8 @@ export function NoteCard({
             {title ?? presentation.label}
           </Text>
         </strong>
-        <Row className="note-card__header-end" vAlign="middle" gap="2xs">
+        {/* The trailing group never shrinks (HS2-D6RRST); the kind label absorbs a tight width. */}
+        <Row className="note-card__header-end" vAlign="middle" gap="2xs" flex="none">
           {repairable && !responseRemoved && (
             <PopupMenu
               label="Note Actions"
@@ -608,7 +640,21 @@ export function NoteCard({
           data-feedback-prompt-body={editPrompt ? 'true' : undefined}
           title={editPrompt ? 'Double-click to edit' : editAttributes.title}
         >
-          <MarkdownPreview source={visibleNoteBody(kind, body)} attachmentContext={attachmentContext} size="inherit" />
+          {sidebarChoices ? (
+            <FeedbackPrompt
+              source={body}
+              id={id}
+              selectedChoices={selectedChoices}
+              attachmentContext={attachmentContext}
+              replyable={false}
+            />
+          ) : (
+            <MarkdownPreview
+              source={visibleNoteBody(kind, body)}
+              attachmentContext={attachmentContext}
+              size="inherit"
+            />
+          )}
         </div>
       )}
       {respondToFeedback && !readerMode && !promptEdit && <RespondToFeedbackButton id={id} />}

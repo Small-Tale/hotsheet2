@@ -2757,6 +2757,16 @@ export class Api {
   /** Completion-confidence calibration across the checkout's git stores (HS2-Q1WCCY). */
   checkoutConfidenceReport = (checkout: string) =>
     this.parsed(parseCalibrationReport, `/checkouts/${encodeURIComponent(checkout)}/confidence-report`);
+  /**
+   * HS2-7PSBHQ: forget the CI run stored for `checkout`, only while it is still the run reported at
+   * `reportedAtMs`; the server then pushes the linked stores' live state again.
+   */
+  clearCiStatus = (checkout: string, reportedAtMs: number) =>
+    this.parsed(
+      ignoreBody,
+      `/checkouts/${encodeURIComponent(checkout)}/ci-status?reported_at_ms=${String(Math.floor(reportedAtMs))}`,
+      { method: 'DELETE' },
+    );
   /** Every hosted store's live snapshot (HS2-JTTQMY); read on stream resync only, never on a timer. */
   liveStates = () => this.parsed(parseLiveStateList, '/live-state');
   /** Recorded per-store state segments and completion ticks since `sinceMs` (HS2-9AN4DN). Read on demand only. */

@@ -235,7 +235,10 @@ pub type UsageSink = std::sync::Arc<
 pub fn live_state_usage_sink(state: &crate::AppState) -> UsageSink {
     let state = state.clone();
     std::sync::Arc::new(move |store, event| {
-        crate::live_state::touch(&state, &crate::multistore::store_url_id(store));
+        // A driven turn's recorded usage is progress (HS2-PPZQX9).
+        let store = crate::multistore::store_url_id(store);
+        crate::notification_router::note_usage_progress(&state, &store);
+        crate::live_state::touch(&state, &store);
         crate::tool_capacity_signals::usage_appended(&state, None, [event]);
     })
 }

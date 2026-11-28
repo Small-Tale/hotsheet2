@@ -14,7 +14,12 @@
 //! Nothing is followed for another CI's URL, for a run without a full commit, branch,
 //! and workflow, for a run this server already follows, or when no GitHub token is
 //! available. The client's stale-report display (`clients/web/src/ci-staleness.ts`)
-//! covers those cases.
+//! covers those cases, and the user can clear such a run (HS2-7PSBHQ).
+//!
+//! HS2-7PSBHQ: a restarted server re-checks once a stored run still in flight that was
+//! reported before the follow window ([`recheck_stale`]), so a run whose follower never
+//! started (an older server, no token then, a server stopped for the whole run) settles
+//! instead of staying unknown for good.
 
 use std::collections::BTreeSet;
 use std::path::Path;
@@ -36,6 +41,10 @@ use crate::ci_status::{CiReport, CiRun};
 /// by default (`timeout-minutes: 360`), so a run still unfinished then is not worth
 /// polling for: the follower asks the watch to stop.
 pub const FOLLOW_LIMIT_MS: i64 = 6 * 60 * 60 * 1000;
+/// HS2-7PSBHQ: how long a restarted server re-checks a run reported before the follow
+/// window, which nothing ended. The watch's first observations settle a run that finished
+/// long ago, so this bounds one round of provider queries, not a new follow.
+pub const RECHECK_LIMIT_MS: i64 = 15 * 60 * 1000;
 /// The longest single wait, so a stopping server's followers end within it.
 const WAIT_SLICE: Duration = Duration::from_secs(60);
 /// How long a token check is remembered. Each `gh` check is a child launch.
@@ -247,25 +256,84 @@ fn follow_key(checkout: &str, target: &CiTarget) -> String {
     )
 }
 
+/// The watch Job for `target`, or the verdict a retained one already reached.
+enum Watch {
+    /// Wait on this Job.
+    Follow(Job),
+    /// HS2-7PSBHQ: a re-check found a retained watch with a final verdict.
+    Final(Job),
+}
+
 /// The watch Job to follow for `target`: the retained one while it still waits, a new
 /// one after an earlier verdict that is not green (a re-run of the commit), or none when
-/// the commit already passed.
-fn watch_job(store: &JobStore, checkout: &str, target: &CiTarget) -> Option<Job> {
+/// the commit already passed. A re-check (`recheck`, HS2-7PSBHQ) of a run reported long
+/// ago instead takes any final verdict the retained watch reached: that run is over, and
+/// a re-watch would wait for a re-run that never comes.
+fn watch_job(store: &JobStore, checkout: &str, target: &CiTarget, recheck: bool) -> Option<Watch> {
     let options = CiWatchOptions::default();
     let job = match find_ci_watch(store, checkout, target).ok()? {
+        Some(job) if recheck && gate_of(&job).is_final() => return Some(Watch::Final(job)),
         Some(job) if job.status.is_finished() && job.status != Status::Lost => {
             rewatch_ci(store, checkout, target, &options).ok()?
         }
         Some(job) => job,
         None => ensure_ci_watch(store, checkout, target, &options).ok()?,
     };
-    (!gate_of(&job).is_final()).then_some(job)
+    if !gate_of(&job).is_final() {
+        Some(Watch::Follow(job))
+    } else if recheck {
+        Some(Watch::Final(job))
+    } else {
+        None
+    }
+}
+
+/// Record the verdict of a finished watch `job` as the end of `followed`. Returns whether
+/// the watch named a finished run.
+fn record_verdict(state: &AppState, checkout: &str, job: &Job, followed: &CiRun) -> bool {
+    let Some(report) = verdict_report(job).map(|report| aligned_start(report, followed)) else {
+        return false;
+    };
+    let Ok(run) = report.into_run(now_ms()) else {
+        return false;
+    };
+    crate::ci_status::apply_run(state, checkout, run);
+    true
 }
 
 /// HS2-CC7TCB: after an applied report of `run` for `checkout`, follow it when it is a
 /// GitHub Actions run still in flight. Blocking: it may start the Job monitor and run
 /// `gh`. Returns what it did; a started follower runs on its own thread.
 pub(crate) fn follow_reported(state: &AppState, checkout: &str, run: &CiRun) -> FollowState {
+    follow(
+        state,
+        checkout,
+        run,
+        run.reported_at_ms.saturating_add(FOLLOW_LIMIT_MS),
+        false,
+    )
+}
+
+/// HS2-7PSBHQ: re-check once a stored run still in flight that was reported before the
+/// follow window: record the verdict a retained watch already reached, or watch the run
+/// again for [`RECHECK_LIMIT_MS`] so the monitor's first observations settle it.
+pub(crate) fn recheck_stale(state: &AppState, checkout: &str, run: &CiRun) -> FollowState {
+    follow(
+        state,
+        checkout,
+        run,
+        now_ms().saturating_add(RECHECK_LIMIT_MS),
+        true,
+    )
+}
+
+fn follow(
+    state: &AppState,
+    checkout: &str,
+    run: &CiRun,
+    deadline: i64,
+    recheck: bool,
+) -> FollowState {
     let api_root = std::env::var(API_URL_ENV).ok();
     let Some(target) = follow_target(run, api_root.as_deref()) else {
         return FollowState::None;
@@ -283,8 +351,14 @@ pub(crate) fn follow_reported(state: &AppState, checkout: &str, run: &CiRun) -> 
         return FollowState::NoToken;
     }
     let store = JobStore::at(&home);
-    let Some(job) = watch_job(&store, checkout, &target) else {
-        return FollowState::None;
+    let job = match watch_job(&store, checkout, &target, recheck) {
+        None => return FollowState::None,
+        // Only a re-check takes a final verdict; nothing is left to follow either way.
+        Some(Watch::Final(job)) => {
+            record_verdict(state, checkout, &job, run);
+            return FollowState::None;
+        }
+        Some(Watch::Follow(job)) => job,
     };
     if !follow.following.lock_or_recover().insert(key.clone()) {
         return FollowState::Following;
@@ -295,7 +369,6 @@ pub(crate) fn follow_reported(state: &AppState, checkout: &str, run: &CiRun) -> 
             "could not start the Job monitor to follow a CI run"
         );
     }
-    let deadline = run.reported_at_ms.saturating_add(FOLLOW_LIMIT_MS);
     let (state, checkout, followed) = (state.clone(), checkout.to_owned(), run.clone());
     let spawned = std::thread::Builder::new().name("ci-follow".into()).spawn({
         let key = key.clone();
@@ -329,15 +402,8 @@ fn follow_until_verdict(
     };
     loop {
         if reading.state.is_final() {
-            let verdict = find_ci_watch(store, checkout, target)
-                .ok()
-                .flatten()
-                .and_then(|job| verdict_report(&job))
-                .map(|report| aligned_start(report, followed));
-            if let Some(report) = verdict
-                && let Ok(run) = report.into_run(now_ms())
-            {
-                crate::ci_status::apply_run(state, checkout, run);
+            if let Some(job) = find_ci_watch(store, checkout, target).ok().flatten() {
+                record_verdict(state, checkout, &job, followed);
             }
             return;
         }
@@ -359,12 +425,19 @@ fn follow_until_verdict(
 }
 
 /// HS2-CC7TCB: a restarted server follows the stored runs that are still in flight and
-/// were reported within [`FOLLOW_LIMIT_MS`]. Idle when there are none.
+/// were reported within [`FOLLOW_LIMIT_MS`]. HS2-7PSBHQ: one reported before that, which
+/// nothing ended, is re-checked once ([`recheck_stale`]) instead of staying unknown.
+/// Idle when there are none.
 pub(crate) fn resume(state: &AppState) {
     let now = now_ms();
     for (checkout, run) in state.ci_reports_snapshot() {
-        if !run.status.is_terminal() && now - run.reported_at_ms < FOLLOW_LIMIT_MS {
+        if run.status.is_terminal() {
+            continue;
+        }
+        if now - run.reported_at_ms < FOLLOW_LIMIT_MS {
             follow_reported(state, &checkout, &run);
+        } else {
+            recheck_stale(state, &checkout, &run);
         }
     }
 }

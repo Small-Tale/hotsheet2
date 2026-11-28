@@ -5625,7 +5625,10 @@ unsupported, so they cannot create this state through Hot Sheet.
   labeled by the prose line preceding its header, or by the question written after the colon
   on the header line itself (`CHOICE: Which approach?`, optionally bold), which then renders as
   a visible paragraph above the options (HS2-3MHSBS); text after a colon-less `CHOICE` stays
-  prose. **Multi-line choices and lettered blocks (HS2-EWF0FT).** A list item's first line is
+  prose. A numbered `CHOICE 1: <question>` line (optionally bold) is also a group header with
+  that inline question when a Markdown list or a lettered run in another marker style follows
+  it, so `CHOICE 1:` … `CHOICE 6:` headers each with their own list form six groups; followed
+  by anything else it stays a numbered lettered block (HS2-WX8BE6). **Multi-line choices and lettered blocks (HS2-EWF0FT).** A list item's first line is
   its label; its lazy continuation lines and lines indented to its content (indented
   paragraphs and nested lists, blank lines allowed) are its details, rendered under the label
   in a smaller Markdown size inside the same option. A run of paragraphs led by lettered choice
@@ -5956,7 +5959,13 @@ can present either state without loading full ticket notes.
 In the sidebar inspector, each pending feedback note or marked description has a full-width
 **Respond to Feedback** action directly below its body. It is omitted from answered asks
 and from reader mode itself. Activating it opens reader mode on Info,
-scrolls the active source into view, and focuses its response editor. Reader descriptions
+scrolls the active source into view, and focuses its response editor. A pending feedback note
+whose prompt holds `CHOICE` groups shows them in the sidebar as the same selectable lists as the
+reader (the production `FeedbackPrompt`, HS2-08EAH1), stacked full width so they wrap in the
+narrow rail. Its prose stays plain Markdown there (inline replies are written in the reader, and a
+double-click on the prose still opens Edit Note, while a double-click on an option only toggles
+it). Sidebar and reader share one selection state, so Respond to Feedback opens the reader with the
+sidebar's choices already selected and the reader's Respond posts the same response. Reader descriptions
 reuse the same Markdown choice selection, inline reply, optional general response, and
 No response needed controls as feedback notes; submitting adds a regular response note.
 Large reader text applies to active feedback prompts and choices as well as ordinary,

@@ -341,7 +341,11 @@ describe('application shell components', () => {
     // Both page headers sit on the header's default surface, not the sunken main pane (HS2-YKB7HS).
     expect(markup).toContain('app-shell__page-header');
     expect(without).toContain('app-shell__page-header');
-    expect(render({})).not.toContain('app-shell__page-header');
+    // HS2-FMKC4Q: with no header the slot stays in place, hidden, so the work area below it keeps its
+    // node (and any open popover inside it) when the header comes and goes across a resize.
+    expect(render({})).toContain('<div class="app-shell__page-header" hidden></div>');
+    expect(render({})).toContain('<div class="app-shell__banner" hidden></div>');
+    expect(markup).toContain('<div class="app-shell__page-header"><');
     const css = readFileSync(new URL('./app-shell.css', import.meta.url), 'utf8');
     expect(css).toMatch(/\.app-shell__page-header \{\s*background: var\(--wa-color-surface-default\);/);
   });

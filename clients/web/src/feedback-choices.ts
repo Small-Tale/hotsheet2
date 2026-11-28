@@ -8,12 +8,13 @@ import {
   isBlank,
   letteredHeader,
   listItem,
+  numberedChoiceHeader,
   type SourceLine,
   sourceLines,
 } from './feedback-choice-lines';
 
 /**
- * The FEEDBACK NEEDED choice grammar (HS2-83YCDP, HS2-3MHSBS, HS2-EWF0FT). The Rust port in
+ * The FEEDBACK NEEDED choice grammar (HS2-83YCDP, HS2-3MHSBS, HS2-EWF0FT, HS2-WX8BE6). The Rust port in
  * `crates/hotsheet-model/src/feedback_choices.rs` implements the same grammar; both read the shared
  * corpus `crates/hotsheet-model/tests/fixtures/feedback-choices.json`, so change them together.
  */
@@ -108,6 +109,24 @@ interface ScannedGroup {
 }
 
 /**
+ * A numbered group header (HS2-WX8BE6): `CHOICE <n>: <question>` whose next non-blank line is a
+ * top-level list item or the first block of a lettered run in another marker style. Followed by
+ * anything else, the line stays a numbered lettered block (`CHOICE 1: label`).
+ */
+function numberedGroupHeader(lines: readonly SourceLine[], index: number): { question?: string } | undefined {
+  const header = numberedChoiceHeader(lines[index].text);
+  if (!header) return undefined;
+  let next = index + 1;
+  while (next < lines.length && isBlank(lines[next].text)) next += 1;
+  if (next >= lines.length) return undefined;
+  const text = lines[next].text,
+    item = listItem(text);
+  if (item) return item.indent <= 3 ? header : undefined;
+  const lettered = letteredHeader(text);
+  return lettered?.ordinal === 1 && lettered.style !== 'choice-number' ? header : undefined;
+}
+
+/**
  * A Markdown list: each item's first line is its label; lazy continuation lines and lines
  * indented to the item's content (nested lists included, blank lines allowed) are its details.
  * A switch between bullet and numbered markers, or an unindented non-item line after a blank
@@ -140,7 +159,7 @@ function scanList(lines: readonly SourceLine[], first: number): ScannedGroup {
       blankBefore = false;
       continue;
     }
-    if (current && !blankBefore && !interruptsParagraph(text)) {
+    if (current && !blankBefore && !interruptsParagraph(text) && !numberedGroupHeader(lines, index)) {
       current.lastLine = index;
       lastLine = index;
       continue;
@@ -251,8 +270,8 @@ function scanGroup(lines: readonly SourceLine[], first: number, explicitHeader: 
 }
 
 /**
- * Parse every choice group: an uppercase `CHOICE` (or `CHOICE:`, optionally `CHOICE: <question>`)
- * header followed by a Markdown list or lettered blocks, or a headerless run of at least two
+ * Parse every choice group: an uppercase `CHOICE` (or `CHOICE:`, optionally `CHOICE: <question>`,
+ * or a numbered `CHOICE 1: <question>` when a list follows) header followed by a Markdown list or lettered blocks, or a headerless run of at least two
  * lettered blocks. Blank lines may separate the header from its choices; headers inside fenced
  * code are ignored. Returns undefined when the note has no choice group.
  */
@@ -273,7 +292,7 @@ export function parseFeedbackChoices(source: string): FeedbackChoiceDocument | u
       fence = fenceMatch[1];
       continue;
     }
-    const header = choiceHeader(text);
+    const header = choiceHeader(text) ?? numberedGroupHeader(lines, lineIndex);
     let scanned: ScannedGroup | undefined;
     if (header) {
       let first = lineIndex + 1;

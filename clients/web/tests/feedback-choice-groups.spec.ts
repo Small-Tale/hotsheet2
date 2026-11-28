@@ -307,6 +307,65 @@ test('renders multi-line and lettered choices with details under their labels (H
     );
 });
 
+// HS2-WX8BE6: the HS2-8T71YW note shape. Numbered `CHOICE N: <question>` headers, each followed by
+// a lettered bullet list, are six separate groups, not one group whose options are the questions.
+const NUMBERED_QUESTIONS = [
+  'How does a Git store hold a milestone?',
+  'What is a milestone in Jira?',
+  'Nested milestones?',
+  'When does a milestone orchestration prerequisite hold?',
+  'Where do milestones live in the client?',
+  'What instant is a date-only due date for scheduling?',
+];
+const NUMBERED_OPTIONS = [
+  ['A (recommended): a ticket of a built-in milestone category', 'B: a registry file per milestone'],
+  ['A (recommended): a fixVersion', 'B: the parent epic', 'C: a per-connection setting'],
+  ['A (recommended): not in the first version', 'B: allow nesting, cycle-checked'],
+  ['A (recommended): every linked ticket confirmed finished', 'B: when the milestone is closed', 'C: either'],
+  ['A (recommended): a Milestones sidebar view', 'B: only group by milestone', 'C: a global dashboard'],
+  ['A (recommended): end of that day in UTC', 'B: end of that day in a project time zone'],
+];
+const NUMBERED_PROMPT = [
+  'FEEDBACK NEEDED: milestones design. Please answer each CHOICE; my recommendation is first and marked.',
+  ...NUMBERED_QUESTIONS.flatMap((question, index) => [
+    '',
+    `CHOICE ${index + 1}: ${question}`,
+    ...NUMBERED_OPTIONS[index].map((option) => `- ${option}`),
+  ]),
+].join('\n');
+
+test('answers numbered CHOICE N: question headers as separate groups (HS2-WX8BE6)', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const writes = await mock(page, 'note', NUMBERED_PROMPT);
+  await page.getByRole('button', { name: 'Open Ticket Reader' }).click();
+  const note = page.getByRole('dialog').locator('article[data-note-id="N4"]');
+  const grids = note.getByRole('grid', { name: /^Feedback Choices \d/ });
+  await expect(grids).toHaveCount(6);
+  const options = (index: number) => grids.nth(index).locator('[data-component="content-item"]');
+  for (const [index, question] of NUMBERED_QUESTIONS.entries()) {
+    await expect(grids.nth(index)).toHaveAccessibleName(`Feedback Choices ${index + 1}: ${question}`);
+    await expect(options(index)).toHaveCount(NUMBERED_OPTIONS[index].length);
+    await expect(options(index).nth(0)).toContainText('A (recommended):');
+  }
+  // No numbered header survives as an option or as a literal CHOICE paragraph.
+  await expect(note.getByText(/CHOICE \d/)).toHaveCount(0);
+  // One option per group: the recommendation in odd groups, the last option in even groups.
+  const picks = NUMBERED_OPTIONS.map((group, index) => (index % 2 ? group.length - 1 : 0));
+  for (const [index, pick] of picks.entries()) await options(index).nth(pick).click();
+  for (const [index, pick] of picks.entries())
+    for (let option = 0; option < NUMBERED_OPTIONS[index].length; option += 1)
+      await expect(options(index).nth(option)).toHaveAttribute('aria-selected', String(option === pick));
+  await note.screenshot({ path: 'target/visual-captures/hs2-wx8be6-numbered-choices-1280.png' });
+  await note.getByRole('button', { name: 'Respond' }).click();
+  await expect
+    .poll(() => writes.find((write) => write.note_kind === 'regular')?.note)
+    .toBe(
+      NUMBERED_QUESTIONS.map((question, index) => `**${question}**\n- ${NUMBERED_OPTIONS[index][picks[index]]}`).join(
+        '\n\n',
+      ),
+    );
+});
+
 // HS2-ZXGEFE: a FEEDBACK NEEDED prompt can be edited, but only on purpose. A double-click on the
 // prompt body (sidebar) or its Edit Note action (sidebar and reader) opens the ordinary note editor;
 // the save says it is an explicit prompt edit. A single click still never opens it (HS2-MB2Q10).
@@ -371,4 +430,184 @@ test('edits a feedback prompt from the reader Edit Note action without posting a
     .poll(() => writes.find((write) => write.note_id === 'N4'))
     .toMatchObject({ note_id: 'N4', note: 'Which PAT should I use?', edit_feedback_prompt: true });
   expect(writes.some((write) => write.note_kind === 'regular')).toBe(false);
+});
+
+// HS2-08EAH1: the sidebar inspector shows a FEEDBACK NEEDED note's CHOICE groups as the same
+// selectable lists as the reader. Its Respond to Feedback opens the reader with the selection carried
+// over, and the reader's Respond posts exactly the response the reader-only path posts.
+const SIDEBAR_PROMPT = [
+  'Two decisions before I build the milestone roll-up.',
+  '',
+  'CHOICE: How does a Git store hold a milestone?',
+  '- **A ticket of category milestone (recommended).** Reuses the existing ticket file format and sync.',
+  '- **A separate milestones file per store.** Smaller tickets, but a new file kind to merge.',
+  '',
+  'CHOICE: Which due-date roll-up should the board show?',
+  '- Latest due date of the open tickets',
+  '- The milestone date only',
+  '- Both, the milestone date with a warning when a ticket is later',
+  '',
+  'Anything else I should know?',
+].join('\n');
+
+const SIDEBAR_EXPECTED =
+  '**How does a Git store hold a milestone?**\n- **A ticket of category milestone (recommended).** Reuses the existing ticket file format and sync.\n\n' +
+  '**Which due-date roll-up should the board show?**\n- The milestone date only\n- Both, the milestone date with a warning when a ticket is later';
+
+/** Captures show the resting card: hover or focus inside it reveals the header's note actions. */
+async function restingCard(page: Page) {
+  await page.mouse.move(1, 1);
+  await page.evaluate(() => {
+    (document.activeElement as HTMLElement | null)?.blur();
+  });
+}
+
+async function chooseSidebarAnswers(scope: ReturnType<Page['locator']>) {
+  const grids = scope.getByRole('grid', { name: /^Feedback Choices \d/ });
+  await expect(grids).toHaveCount(2);
+  await expect(grids.nth(0)).toHaveAccessibleName('Feedback Choices 1: How does a Git store hold a milestone?');
+  const options = (index: number) => grids.nth(index).locator('[data-component="content-item"]');
+  await expect(options(0)).toHaveCount(2);
+  await expect(options(1)).toHaveCount(3);
+  await expect(scope.getByText(/CHOICE/)).toHaveCount(0);
+  await options(0).nth(0).click();
+  await options(1).nth(1).click();
+  await options(1)
+    .nth(2)
+    .click({ modifiers: [additive] });
+  await expect(options(0).nth(0)).toHaveAttribute('aria-selected', 'true');
+  await expect(options(0).nth(1)).toHaveAttribute('aria-selected', 'false');
+  await expect(options(1).nth(0)).toHaveAttribute('aria-selected', 'false');
+  await expect(options(1).nth(1)).toHaveAttribute('aria-selected', 'true');
+  await expect(options(1).nth(2)).toHaveAttribute('aria-selected', 'true');
+  return options;
+}
+
+test('answers choice groups from the sidebar inspector note through Respond to Feedback (HS2-08EAH1)', async ({
+  page,
+  browserName,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const writes = await mock(page, 'note', SIDEBAR_PROMPT);
+  const note = page.locator('#app-right-rail article[data-note-id="N4"]');
+  const options = await chooseSidebarAnswers(note);
+  // Choosing in the sidebar never opens a response editor or inline reply there.
+  await expect(note.locator('textarea')).toHaveCount(0);
+  // A double-click on an option toggles it twice; it never opens Edit Note on the prompt.
+  await options(0).nth(1).dblclick();
+  await expect(options(0).nth(1)).toHaveAttribute('aria-selected', 'false');
+  await expect(note.locator('[name="note-body"]')).toHaveCount(0);
+  // Restore the first group's answer after the double toggle.
+  await options(0).nth(0).click();
+  await expect(options(0).nth(0)).toHaveAttribute('aria-selected', 'true');
+  // Keyboard: Space on a focused option acts as a click.
+  await options(1).nth(0).focus();
+  await page.keyboard.press('Space');
+  await expect(options(1).nth(0)).toHaveAttribute('aria-selected', 'true');
+  await options(1).nth(1).click();
+  await options(1)
+    .nth(2)
+    .click({ modifiers: [additive] });
+  await expect(options(1).nth(0)).toHaveAttribute('aria-selected', 'false');
+  // The choice groups wrap inside the narrow rail: nothing in the prompt overflows the note.
+  const prompt = note.locator('.note-card__feedback-prompt');
+  const promptFits = () =>
+    prompt.evaluate((element) => {
+      const card = element.closest('article')?.getBoundingClientRect();
+      if (!card) return false;
+      return (
+        element.scrollWidth <= element.clientWidth &&
+        [...element.querySelectorAll('*')].every((child) => child.getBoundingClientRect().right <= card.right + 0.5)
+      );
+    });
+  expect(await promptFits()).toBe(true);
+  const capture = (name: string) => `target/visual-captures/hs2-08eah1-${name}-${browserName}.png`;
+  await restingCard(page);
+  await note.screenshot({ path: capture('sidebar-1440-light') });
+  await page.setViewportSize({ width: 1024, height: 900 });
+  await expect(options(1).nth(2)).toBeVisible();
+  expect(await promptFits()).toBe(true);
+  await note.screenshot({ path: capture('sidebar-1024-light') });
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await note.screenshot({ path: capture('sidebar-1024-dark') });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect(options(1).nth(1)).toHaveAttribute('aria-selected', 'true');
+  await note.screenshot({ path: capture('sidebar-1440-dark') });
+  await page.emulateMedia({ colorScheme: 'light' });
+  await note.getByRole('button', { name: 'Respond to Feedback' }).click();
+  const reader = page.getByRole('dialog').locator('article[data-note-id="N4"]');
+  const readerOptions = (index: number) =>
+    reader
+      .getByRole('grid', { name: /^Feedback Choices \d/ })
+      .nth(index)
+      .locator('[data-component="content-item"]');
+  // The reader shows the sidebar's selection: the same state, not a second copy.
+  await expect(readerOptions(0).nth(0)).toHaveAttribute('aria-selected', 'true');
+  await expect(readerOptions(1).nth(1)).toHaveAttribute('aria-selected', 'true');
+  await expect(readerOptions(1).nth(2)).toHaveAttribute('aria-selected', 'true');
+  await reader.getByRole('button', { name: 'Respond' }).click();
+  await expect.poll(() => writes.find((write) => write.note_kind === 'regular')?.note).toBe(SIDEBAR_EXPECTED);
+});
+
+test('the reader-only path posts the same response for the sidebar prompt (HS2-08EAH1)', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const writes = await mock(page, 'note', SIDEBAR_PROMPT);
+  await page.getByRole('button', { name: 'Open Ticket Reader' }).click();
+  const reader = page.getByRole('dialog').locator('article[data-note-id="N4"]');
+  await chooseSidebarAnswers(reader);
+  await reader.getByRole('button', { name: 'Respond' }).click();
+  await expect.poll(() => writes.find((write) => write.note_kind === 'regular')?.note).toBe(SIDEBAR_EXPECTED);
+});
+
+test('keeps sidebar choice groups inside the inspector from wide to phone and back (HS2-08EAH1)', async ({
+  page,
+  browserName,
+}) => {
+  const inspector = page.locator('#app-right-rail'),
+    note = inspector.locator('article[data-note-id="N4"]'),
+    grids = note.getByRole('grid', { name: /^Feedback Choices \d/ });
+  // Every option sits inside the rail's content edge at every width, with no page-level scroll.
+  const fits = async () => {
+    await expect(grids).toHaveCount(2);
+    expect(
+      await inspector.evaluate((rail) => {
+        const edge = rail.getBoundingClientRect().right;
+        return [...rail.querySelectorAll('[data-choice-id]')].every(
+          (option) => option.getBoundingClientRect().right <= Math.min(edge, innerWidth) + 0.5,
+        );
+      }),
+    ).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  };
+  for (const scheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    if (scheme === 'light') await mock(page, 'note', SIDEBAR_PROMPT);
+    await grids.nth(1).locator('[data-component="content-item"]').nth(1).click();
+    await restingCard(page);
+    await fits();
+    await page.screenshot({ path: `target/visual-captures/hs2-08eah1-page-1440-${scheme}-${browserName}.png` });
+    await page.setViewportSize({ width: 1024, height: 900 });
+    await fits();
+    await page.screenshot({ path: `target/visual-captures/hs2-08eah1-page-1024-${scheme}-${browserName}.png` });
+    // The phone layout closes the inspector (HS2-ZK51WP); reopen it as the sheet.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(inspector).toHaveAttribute('data-collapsed', 'true');
+    await page.getByRole('button', { name: 'Show Ticket Inspector' }).click();
+    await expect(inspector).toHaveAttribute('data-collapsed', 'false');
+    await grids.nth(0).scrollIntoViewIfNeeded();
+    await expect(grids.nth(1).locator('[data-component="content-item"]').nth(1)).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    await fits();
+    await page.screenshot({ path: `target/visual-captures/hs2-08eah1-page-390-${scheme}-${browserName}.png` });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await expect(inspector).toHaveAttribute('data-collapsed', 'false');
+    await fits();
+    await page.screenshot({ path: `target/visual-captures/hs2-08eah1-page-1440-back-${scheme}-${browserName}.png` });
+    // Clear the selection so the next scheme's pass starts from the same state.
+    await grids.nth(1).locator('[data-component="content-item"]').nth(1).click();
+    await expect(grids.nth(1).locator('[aria-selected="true"]')).toHaveCount(0);
+  }
 });

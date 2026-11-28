@@ -93,6 +93,9 @@ struct Outcome {
     reason: StopReason,
     at: OffsetDateTime,
     stalled: Vec<(String, String)>,
+    /// When the latest of `stalled`'s leases expired (HS2-PPZQX9); `None` from an older
+    /// record, which then counts from `at`.
+    stalled_at: Option<OffsetDateTime>,
 }
 
 /// A halt a terminal reported for a worker that held claims here.
@@ -155,6 +158,9 @@ pub struct ActivityRecord {
     /// `(slug, worker)` of leases that expired during the open period.
     #[serde(default)]
     pub stalled: Vec<(String, String)>,
+    /// When the latest of `stalled`'s leases expired (HS2-PPZQX9).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stalled_at_ms: Option<i64>,
     #[serde(default)]
     pub last_progress_ms: Option<i64>,
     #[serde(default)]
@@ -184,6 +190,9 @@ pub struct OutcomeRecord {
     pub at_ms: i64,
     #[serde(default)]
     pub stalled: Vec<(String, String)>,
+    /// When the latest stalled lease expired (HS2-PPZQX9).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stalled_at_ms: Option<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -237,12 +246,14 @@ impl StoreActivity {
             idle_since_ms: self.idle_since.map(to_ms),
             completed: self.completed.clone(),
             stalled: self.stalled.clone(),
+            stalled_at_ms: self.stalled_at.map(to_ms),
             last_progress_ms: self.last_progress.map(to_ms),
             idle_reported: self.idle_reported,
             outcome: self.outcome.as_ref().map(|o| OutcomeRecord {
                 reason: o.reason,
                 at_ms: to_ms(o.at),
                 stalled: o.stalled.clone(),
+                stalled_at_ms: o.stalled_at.map(to_ms),
             }),
             halts: self
                 .halts
@@ -290,12 +301,15 @@ impl StoreActivity {
             idle_since: record.idle_since_ms.map(from_ms),
             completed: record.completed,
             stalled: record.stalled,
+            stalled_at: record.stalled_at_ms.map(from_ms),
             last_progress: record.last_progress_ms.map(from_ms),
+            working_at: None,
             idle_reported: record.idle_reported,
             outcome: record.outcome.map(|o| Outcome {
                 reason: o.reason,
                 at: from_ms(o.at_ms),
                 stalled: o.stalled,
+                stalled_at: o.stalled_at_ms.map(from_ms),
             }),
             halts: record
                 .halts
@@ -374,7 +388,14 @@ struct StoreActivity {
     idle_since: Option<OffsetDateTime>,
     completed: Vec<String>,
     stalled: Vec<(String, String)>,
+    /// When the latest of `stalled`'s leases expired (HS2-PPZQX9).
+    stalled_at: Option<OffsetDateTime>,
     last_progress: Option<OffsetDateTime>,
+    /// When an AI session last showed it works here (HS2-PPZQX9): an `activity` or
+    /// `turn_event`, or a recorded model response, a background agent's included. Ticket
+    /// writes are progress but not this signal: a person's edit never reads as Active.
+    /// Not persisted; it only matters for the release grace after it.
+    working_at: Option<OffsetDateTime>,
     idle_reported: bool,
     outcome: Option<Outcome>,
     halts: BTreeMap<String, HaltNote>,
@@ -437,8 +458,9 @@ impl ProjectActivity {
         let (grace, idle) = (self.grace, self.idle);
         let activity = self.stores.entry(store.to_string()).or_default();
         activity.last_progress = Some(now);
+        activity.working_at = Some(now);
         activity.idle_reported = false;
-        next_check(activity, grace, idle)
+        next_check(activity, grace, idle, now)
     }
 
     /// Reports for every store where `worker` holds a live claim. The router dedupes by
@@ -632,7 +654,7 @@ impl ProjectActivity {
                 }
             }
         }
-        next_check(activity, grace, idle)
+        next_check(activity, grace, idle, now)
     }
 
     /// Expire overdue leases and report a store that has stopped. Returns the report (at
@@ -656,6 +678,7 @@ impl ProjectActivity {
         for ticket in expired {
             if let Some(claim) = activity.claims.remove(&ticket) {
                 stalled_now = true;
+                activity.stalled_at = activity.stalled_at.max(Some(claim.expires));
                 activity.stalled.push((claim.slug, claim.worker));
             }
         }
@@ -671,6 +694,7 @@ impl ProjectActivity {
         let report = match (due, activity.active_since) {
             (true, Some(active_since)) => {
                 let stalled = std::mem::take(&mut activity.stalled);
+                let stalled_at = activity.stalled_at.take();
                 let report = StopReport {
                     reason: if stalled.is_empty() {
                         StopReason::Finished
@@ -690,6 +714,7 @@ impl ProjectActivity {
                     reason: report.reason,
                     at: now,
                     stalled: report.stalled.clone(),
+                    stalled_at: stalled_at.filter(|_| report.reason == StopReason::Stalled),
                 });
                 if report.reason == StopReason::Finished {
                     activity.period_workers.clear();
@@ -698,7 +723,7 @@ impl ProjectActivity {
             }
             _ => idle_report(activity, idle, now),
         };
-        (report, next_check(activity, grace, idle))
+        (report, next_check(activity, grace, idle, now))
     }
 
     /// The store's tracker state for the live-state record (HS2-MHW3SX), `None` when the
@@ -716,6 +741,7 @@ impl ProjectActivity {
         if let Some(at) = seen.last_progress {
             entry.note_progress_at(at);
         }
+        entry.working_at = seen.working_at;
         for (ticket, at) in seen.updated {
             let slot = entry.updated.entry(ticket).or_insert(at);
             *slot = (*slot).max(at);
@@ -799,7 +825,7 @@ impl ProjectActivity {
         {
             activity.idle_since = Some(now);
         }
-        next_check(activity, grace, idle)
+        next_check(activity, grace, idle, now)
     }
 
     /// Live claims the tracker holds for a store.
@@ -817,9 +843,10 @@ impl ProjectActivity {
     ///
     /// Precedence: **Halted** (a worker with a live claim reported a halt) over
     /// **Stalled** (no live claim remains and a lease expired unrenewed, until a new claim
-    /// starts a period) over **May be stuck** (claims held, no progress for the idle
-    /// window) over **Active** (a period is open, including the release grace) over
-    /// **Stopped**.
+    /// starts a period or progress arrives after the expiry, HS2-PPZQX9) over **May be
+    /// stuck** (claims held, no progress for the idle window) over **Active** (a period is
+    /// open, including the release grace, or an AI session worked here without a claim
+    /// since the last period ended, within the grace) over **Stopped**.
     pub fn live(&self, store: &str, now: OffsetDateTime) -> LiveActivity {
         let Some(activity) = self.stores.get(store) else {
             return LiveActivity {
@@ -842,13 +869,11 @@ impl ProjectActivity {
             .collect();
         // Leases that expired but were not checked yet count as stalled already.
         let mut stalled: Vec<(String, String)> = activity.stalled.clone();
-        stalled.extend(
-            activity
-                .claims
-                .values()
-                .filter(|c| c.expires <= now)
-                .map(|c| (c.slug.clone(), c.worker.clone())),
-        );
+        let mut stall_at = activity.stalled_at.filter(|_| !stalled.is_empty());
+        for claim in activity.claims.values().filter(|c| c.expires <= now) {
+            stalled.push((claim.slug.clone(), claim.worker.clone()));
+            stall_at = stall_at.max(Some(claim.expires));
+        }
         if stalled.is_empty() && activity.active_since.is_none() {
             if let Some(outcome) = activity
                 .outcome
@@ -856,7 +881,13 @@ impl ProjectActivity {
                 .filter(|o| o.reason == StopReason::Stalled)
             {
                 stalled = outcome.stalled.clone();
+                stall_at = Some(outcome.stalled_at.unwrap_or(outcome.at));
             }
+        }
+        // HS2-PPZQX9: progress after the stall shows work goes on, so the store no longer
+        // reads Stalled; the word and the last progress it is shown with always agree.
+        if stall_at.is_some_and(|at| activity.last_progress.is_some_and(|last| last > at)) {
+            stalled.clear();
         }
         let halted: Vec<HaltNote> = activity
             .halts
@@ -888,7 +919,9 @@ impl ProjectActivity {
             ActivityWord::Stalled
         } else if idle_deadline.is_some_and(|deadline| deadline <= now) {
             ActivityWord::MayBeStuck
-        } else if activity.active_since.is_some() {
+        } else if activity.active_since.is_some()
+            || progress_ends(activity, self.grace).is_some_and(|end| end > now)
+        {
             ActivityWord::Active
         } else {
             ActivityWord::Stopped
@@ -964,17 +997,36 @@ fn idle_deadline(activity: &StoreActivity, idle: Option<Duration>) -> Option<Off
         .map(|at| at + idle)
 }
 
+/// When AI work seen while no period is open stops reading Active (HS2-PPZQX9): the
+/// release grace after the last working signal, which must come after the last period
+/// ended. Work without a claim, such as a background agent's, keeps the live word Active as
+/// it keeps last progress current. It never opens a period, so it raises no
+/// `project.stopped` report.
+fn progress_ends(activity: &StoreActivity, grace: Duration) -> Option<OffsetDateTime> {
+    if activity.active_since.is_some() {
+        return None;
+    }
+    let last = activity.working_at?;
+    activity
+        .outcome
+        .as_ref()
+        .is_none_or(|outcome| last > outcome.at)
+        .then_some(last + grace)
+}
+
 fn next_check(
     activity: &StoreActivity,
     grace: Duration,
     idle: Option<Duration>,
+    now: OffsetDateTime,
 ) -> Option<OffsetDateTime> {
     let lease = activity.claims.values().map(|c| c.expires).min();
+    let progress = progress_ends(activity, grace).filter(|end| *end > now);
     let grace = activity
         .idle_since
         .filter(|_| activity.claims.is_empty() && activity.active_since.is_some())
         .map(|idle| idle + grace);
-    [lease, grace, idle_deadline(activity, idle)]
+    [lease, grace, idle_deadline(activity, idle), progress]
         .into_iter()
         .flatten()
         .min()
@@ -1155,7 +1207,8 @@ mod tests {
         );
         assert_eq!(p.check("s", t(50_000)).0, None);
         let mut q = ProjectActivity::default();
-        assert_eq!(q.progress("s", t(0)), None, "no claims, nothing to watch");
+        // No claims, so no idle watch; only the Active word's grace end re-checks (HS2-PPZQX9).
+        assert_eq!(q.progress("s", t(0)), Some(t(120)), "no idle deadline");
         assert_eq!(q.check("s", t(99_999)).0, None);
     }
 
@@ -1629,5 +1682,122 @@ mod tests {
             r.check("s", t(1950 + 1800)).0.unwrap().reason,
             StopReason::Idle
         );
+    }
+
+    #[test]
+    fn hs2_ppzqx9_progress_after_a_reported_stall_reads_active_then_stopped() {
+        let mut p = ProjectActivity::default();
+        p.observe("s", claim("A", "w1", 300), t(0));
+        // Progress before the lease expires does not excuse the stall.
+        assert_eq!(p.progress("s", t(100)), Some(t(300)));
+        assert_eq!(p.check("s", t(300)).0.unwrap().reason, StopReason::Stalled);
+        assert_eq!(word(&p, "s", 301), ActivityWord::Stalled);
+        assert_eq!(p.live("s", t(301)).stalled.len(), 1);
+        // A background agent's response arrives: the stall is over, and the live word
+        // agrees with the last progress it is shown with.
+        assert_eq!(
+            p.progress("s", t(400)),
+            Some(t(520)),
+            "the end of the grace re-checks"
+        );
+        let live = p.live("s", t(401));
+        assert_eq!(live.word, ActivityWord::Active);
+        assert!(live.stalled.is_empty());
+        assert_eq!(live.last_progress, Some(t(400)));
+        assert_eq!(live.stopped_at, Some(t(300)));
+        assert_eq!(word(&p, "s", 519), ActivityWord::Active);
+        // The grace passes without more progress: stopped, never stalled again.
+        assert_eq!(p.check("s", t(520)), (None, None), "no report, no re-arm");
+        assert_eq!(word(&p, "s", 520), ActivityWord::Stopped);
+        assert!(p.live("s", t(9000)).stalled.is_empty());
+        // A ticket write is progress but not a working session: it never reads Active.
+        p.observe("s", progressed(release("B", false)), t(9000));
+        assert_eq!(word(&p, "s", 9001), ActivityWord::Stopped);
+        assert_eq!(p.live("s", t(9001)).last_progress, Some(t(9000)));
+        p.progress("s", t(9005));
+        assert_eq!(word(&p, "s", 9006), ActivityWord::Active);
+        // A new claim opens the next period as before.
+        p.observe("s", claim("C", "w2", 99_999), t(9010));
+        assert_eq!(p.live("s", t(9011)).active_since, Some(t(9010)));
+    }
+
+    #[test]
+    fn hs2_ppzqx9_progress_after_an_unchecked_expiry_clears_the_stall() {
+        let mut p = ProjectActivity::default();
+        p.observe("s", claim("A", "w1", 300), t(0));
+        p.observe("s", claim("B", "w2", 600), t(0));
+        assert_eq!(word(&p, "s", 600), ActivityWord::Stalled, "both lapsed");
+        p.progress("s", t(650));
+        let live = p.live("s", t(651));
+        assert_eq!(live.word, ActivityWord::Active);
+        assert!(live.stalled.is_empty());
+        // A lease checked while another still ran keeps its own expiry: progress after
+        // it, but before the last release, still clears the stall.
+        let mut q = ProjectActivity::default();
+        q.observe("s", claim("A", "w1", 300), t(0));
+        q.observe("s", claim("B", "w2", 99_999), t(0));
+        q.check("s", t(300));
+        q.observe("s", progressed(claim("B", "w2", 99_999)), t(400));
+        q.observe("s", release("B", true), t(500));
+        assert_eq!(word(&q, "s", 501), ActivityWord::Active);
+        assert_eq!(q.check("s", t(620)).0.unwrap().reason, StopReason::Stalled);
+        assert_eq!(word(&q, "s", 621), ActivityWord::Stopped);
+        // Without that progress the store reads Stalled as before.
+        let mut r = ProjectActivity::default();
+        r.observe("s", claim("A", "w1", 300), t(0));
+        r.observe("s", claim("B", "w2", 99_999), t(0));
+        r.check("s", t(300));
+        r.observe("s", release("B", true), t(500));
+        assert_eq!(word(&r, "s", 501), ActivityWord::Stalled);
+        // A note written after a reported stall clears it too; with no working session the
+        // store reads Stopped.
+        r.check("s", t(620));
+        assert_eq!(word(&r, "s", 621), ActivityWord::Stalled);
+        r.observe("s", progressed(release("Z", false)), t(700));
+        let live = r.live("s", t(701));
+        assert_eq!(live.word, ActivityWord::Stopped);
+        assert!(live.stalled.is_empty());
+    }
+
+    #[test]
+    fn hs2_ppzqx9_the_stall_time_survives_a_restart() {
+        let mut p = ProjectActivity::default();
+        p.observe("s", claim("A", "w1", 300), t(0));
+        p.check("s", t(300));
+        let record = p.export("s", t(310)).unwrap();
+        let json = serde_json::to_string(&record).unwrap();
+        assert!(json.contains("stalled_at_ms"));
+        let mut q = ProjectActivity::default();
+        q.restore("s", serde_json::from_str(&json).unwrap());
+        assert_eq!(word(&q, "s", 311), ActivityWord::Stalled);
+        q.progress("s", t(320));
+        assert_eq!(word(&q, "s", 321), ActivityWord::Active);
+        // An older record without the stall time counts from the report.
+        let mut old = record.clone();
+        if let Some(outcome) = old.outcome.as_mut() {
+            outcome.stalled_at_ms = None;
+        }
+        let mut r = ProjectActivity::default();
+        r.restore("s", old);
+        r.progress("s", t(305));
+        assert_eq!(word(&r, "s", 306), ActivityWord::Active);
+    }
+
+    #[test]
+    fn hs2_ppzqx9_progress_after_a_finished_period_reads_active_for_the_grace() {
+        let mut p = ProjectActivity::default();
+        p.observe("s", progressed(claim("A", "w1", 99_999)), t(0));
+        p.observe("s", release("A", true), t(10));
+        assert_eq!(p.check("s", t(130)).0.unwrap().reason, StopReason::Finished);
+        assert_eq!(word(&p, "s", 131), ActivityWord::Stopped);
+        assert_eq!(p.progress("s", t(200)), Some(t(320)));
+        assert_eq!(word(&p, "s", 201), ActivityWord::Active);
+        assert_eq!(p.live("s", t(201)).expected_workers, 0);
+        assert_eq!(word(&p, "s", 320), ActivityWord::Stopped);
+        // Progress never seen before any period also reads Active for the grace.
+        let mut q = ProjectActivity::default();
+        assert_eq!(q.progress("s", t(0)), Some(t(120)));
+        assert_eq!(word(&q, "s", 1), ActivityWord::Active);
+        assert_eq!(word(&q, "s", 120), ActivityWord::Stopped);
     }
 }
