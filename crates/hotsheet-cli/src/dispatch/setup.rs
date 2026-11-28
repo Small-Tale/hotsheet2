@@ -1488,6 +1488,14 @@ pub(crate) fn cmd_ai_settings(store: &Path, cwd: &Path, cmd: AiSettingsCmd) -> R
     Ok(())
 }
 
+/// The CLI refusal for `time_zone` outside the shared scope, with its stable code.
+fn shared_only_time_zone() -> String {
+    format!(
+        "The project time zone is shared by every clone; set it without --scope or with --scope shared ({}).",
+        hotsheet_ticketing::project_time_zone::TIME_ZONE_SHARED_ONLY
+    )
+}
+
 pub(crate) fn cmd_settings(store: &Path, cwd: &Path, cmd: SettingsCmd) -> Result<()> {
     use hotsheet_ticketing::Scope;
     let parse_scope = |s: &Option<String>| -> Result<Option<Scope>> {
@@ -1517,6 +1525,19 @@ pub(crate) fn cmd_settings(store: &Path, cwd: &Path, cmd: SettingsCmd) -> Result
                 let stored = settings.get(&key, Scope::Global)?;
                 let on = hotsheet_ticketing::features::is_on(id, stored.as_ref());
                 println!("{}", if on { "on" } else { "off" });
+                return Ok(());
+            }
+            // The project time zone is shared-only (HS2-SZF152): print the zone in effect,
+            // `UTC` when unset, and name a hand-edited value that is not a zone.
+            if key == hotsheet_ticketing::project_time_zone::TIME_ZONE_SETTING {
+                if !matches!(requested_scope, None | Some(Scope::Shared)) {
+                    bail!(shared_only_time_zone());
+                }
+                let zone = hotsheet_ticketing::project_time_zone::project_time_zone(&settings)?;
+                if let Some(diagnostic) = zone.diagnostic() {
+                    eprintln!("warning: {diagnostic}");
+                }
+                println!("{}", zone.name);
                 return Ok(());
             }
             if key == hotsheet_ticketing::permission_automation::SETTING
@@ -1594,7 +1615,13 @@ pub(crate) fn cmd_settings(store: &Path, cwd: &Path, cmd: SettingsCmd) -> Result
             if permission_automation {
                 hotsheet_ticketing::permission_automation::parse(parsed.clone())?;
             }
-            settings.set(&key, parsed, scope)?;
+            // A coded refusal (HS2-SZF152) names its stable code for scripts.
+            settings
+                .set(&key, parsed, scope)
+                .map_err(|error| match error.code() {
+                    Some(code) => anyhow::anyhow!("{error} ({code})"),
+                    None => error.into(),
+                })?;
             if matches!(
                 key.as_str(),
                 hotsheet_ticketing::terminal_limits::HISTORY_LINES_SETTING
@@ -1623,10 +1650,18 @@ pub(crate) fn cmd_settings(store: &Path, cwd: &Path, cmd: SettingsCmd) -> Result
             println!("Set {key} in {where_}");
         }
         SettingsCmd::List { scope } => {
-            let map = match parse_scope(&scope)? {
+            let mut map = match parse_scope(&scope)? {
                 Some(s) => settings.map(s)?,
                 None => settings.effective()?,
             };
+            // Only the shared scope sets the project time zone (HS2-SZF152).
+            if scope.is_none() {
+                let key = hotsheet_ticketing::project_time_zone::TIME_ZONE_SETTING;
+                match settings.get(key, Scope::Shared)? {
+                    Some(value) => map.insert(key.to_owned(), value),
+                    None => map.remove(key),
+                };
+            }
             if map.is_empty() {
                 println!("(no settings)");
             }

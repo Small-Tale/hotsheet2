@@ -1947,6 +1947,11 @@ pub fn app(state: AppState) -> Router {
                 .put(routes::ticket_creation_settings::put_checkout_ticket_creation_settings),
         )
         .route(
+            "/checkouts/{reference}/time-zone-settings",
+            get(routes::time_zone_settings::get_checkout_time_zone_settings)
+                .put(routes::time_zone_settings::put_checkout_time_zone_settings),
+        )
+        .route(
             "/checkouts/{reference}/trash-settings",
             get(get_checkout_trash_settings).put(put_checkout_trash_settings),
         )

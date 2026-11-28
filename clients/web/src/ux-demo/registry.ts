@@ -50,6 +50,7 @@ import { demoModule as projectDialog } from './project-dialog-demo';
 import { demoModule as projectGeneralSettings } from './project-general-settings-demo';
 import { demoModule as projectLiveSection } from './project-live-section-demo';
 import { demoModule as projectSidebar } from './project-sidebar-demo';
+import { demoModule as projectTimeZoneSetting } from './project-time-zone-setting-demo';
 import { demoModule as providerIcon } from './provider-icon-demo';
 import { demoModule as registeredProjectsSettings } from './registered-projects-settings-demo';
 import { demoModule as remoteAuthScreen } from './remote-auth-screen-demo';
@@ -119,6 +120,7 @@ export const demoModules: readonly DemoModule[] = [
   notificationSettings,
   remoteDevicesSettings,
   projectGeneralSettings,
+  projectTimeZoneSetting,
   orchestrationSettings,
   orchestrationPolicySettings,
   orchestrationLimitsHelp,

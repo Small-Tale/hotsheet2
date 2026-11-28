@@ -51,6 +51,7 @@ import {
   parseTicket,
   parseTicketRow,
   parseTicketStoreSyncReport,
+  parseTimeZoneSettings,
   parseTrashPurge,
   parseTrashSettings,
   parseTtsVoices,
@@ -572,6 +573,12 @@ describe('endpoint DTO parsers (HS2-E0AG5E)', () => {
   };
   const valid: Array<[ResponseParser<unknown>, unknown]> = [
     [parseFullTicket, ticket],
+    // HS2-SZF152: the project time zone, with and without a hand-edited invalid value.
+    [parseTimeZoneSettings, { time_zone: 'Europe/Berlin' }],
+    [
+      parseTimeZoneSettings,
+      { time_zone: 'UTC', invalid_value: 5, diagnostic: 'The project time zone 5 is not known.' },
+    ],
     // HS2-AZ15GA: an orchestration ticket carries its target links; a planned link has no native id yet.
     [
       parseFullTicket,
@@ -687,6 +694,8 @@ describe('endpoint DTO parsers (HS2-E0AG5E)', () => {
       },
     ],
     [parseTrashSettings, { trash_cleanup_days: Number.NaN }],
+    [parseTimeZoneSettings, {}],
+    [parseTimeZoneSettings, { time_zone: 'UTC', diagnostic: 5 }],
     [parseCustomView.list, null],
     [parseAiToolDefaults, { tool: 'claude', providers: { claude: 'opus' } }],
   ];

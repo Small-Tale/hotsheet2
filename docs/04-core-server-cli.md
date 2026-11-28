@@ -2311,12 +2311,12 @@ Settings split by **scope**, which maps directly onto the already-decided
 shared-vs-local on-disk model ([README](README.md); [02-ticket-storage.md](02-ticket-storage.md)
 §2.11). Each scope has a clear owner and a clear on-disk home:
 
-| Scope                    | Examples                                                                                                                                                         | On disk                                                                                                                   | Managed by                                              |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
-| **Global**               | cross-project personal defaults (default AI tool, editor) set once per machine                                                                                   | **`${HOTSHEET_HOME}/settings.json`** (machine-wide, not tied to a store)                                                  | core → **CLI + server**                                 |
-| **Shared**               | auto-context guidance (HS2-25), categories, per-category instructions, custom views, `trash_cleanup_days` retention policy, enabled-plugin set for the _project_ | **`<project-root>/.hotsheet2/settings.json`**, committed with the code project and independent of its ticket sources      | core → **CLI + server + client**                        |
-| **Local**                | which tools are enabled _on this machine_, index location, machine paths                                                                                         | **`<project-root>/.hotsheet2/settings.local.json`**, gitignored in the code project (machine-local, not device-app-local) | core → **CLI + server**; client via checkout-scoped API |
-| **Client / device-only** | window geometry, theme, per-viewer PTY size prefs (§6.7)                                                                                                         | the client's own app storage                                                                                              | **client only — never enters core**                     |
+| Scope                    | Examples                                                                                                                                                                                                            | On disk                                                                                                                   | Managed by                                              |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| **Global**               | cross-project personal defaults (default AI tool, editor) set once per machine                                                                                                                                      | **`${HOTSHEET_HOME}/settings.json`** (machine-wide, not tied to a store)                                                  | core → **CLI + server**                                 |
+| **Shared**               | auto-context guidance (HS2-25), categories, per-category instructions, custom views, `trash_cleanup_days` retention policy, the project `time_zone` (shared-only, HS2-SZF152), enabled-plugin set for the _project_ | **`<project-root>/.hotsheet2/settings.json`**, committed with the code project and independent of its ticket sources      | core → **CLI + server + client**                        |
+| **Local**                | which tools are enabled _on this machine_, index location, machine paths                                                                                                                                            | **`<project-root>/.hotsheet2/settings.local.json`**, gitignored in the code project (machine-local, not device-app-local) | core → **CLI + server**; client via checkout-scoped API |
+| **Client / device-only** | window geometry, theme, per-viewer PTY size prefs (§6.7)                                                                                                                                                            | the client's own app storage                                                                                              | **client only — never enters core**                     |
 
 The dividing test: _does a headless CLI or the server ever need this value?_ If yes,
 it's shared or local and lives in core-owned settings. If it only means something to
@@ -2396,6 +2396,19 @@ the lock path, and retries if a prune replaced it. Windows does not prune.
 settings writer rejects any other value. It chooses how a ticket-store sync that cannot
 finish alone asks an AI ([02](02-ticket-storage.md) §2.12.4, HS2-QR1K8R), together with
 the project's `ai.defaults.tool`.
+
+`time_zone` is the project time zone (HS2-SZF152, [38](38-milestones.md) §38.3): an IANA zone
+name from the zone database, or `UTC`, stored **only** in Shared scope so every clone computes
+the same due-date deadline. Unset reads as `UTC`, never the device's zone. A write to the local or
+global scope is refused with `time_zone_shared_only`, and an unknown name with
+`invalid_time_zone`; a written name is stored in the database's own spelling (`utc` becomes
+`UTC`). A value found in another scope is ignored. A hand-edited unknown shared name reads as
+`UTC`: `hotsheet-cli settings get time_zone` prints `UTC` and warns on stderr naming the value,
+and `GET /checkouts/{id}/time-zone-settings` returns it as `invalid_value` with a
+`diagnostic` sentence. `settings set time_zone <zone>` defaults to the shared scope, and
+`PUT /checkouts/{id}/time-zone-settings` (`{ "time_zone": "Europe/Berlin" }`) is its HTTP twin;
+both refusals carry the stable code (the HTTP error's `code`, the CLI message's trailing
+parenthesis).
 
 `trash_cleanup_days` is a positive whole number stored in Shared scope. Its documented and
 runtime default is 30. The server validates checkout-scoped writes, the generic CLI settings

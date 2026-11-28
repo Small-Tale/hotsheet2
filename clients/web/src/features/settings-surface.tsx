@@ -63,6 +63,8 @@ export interface SettingsSurfaceDependencies {
   developmentStrategy?: (projectId: string) => Props['developmentStrategy'];
   /** Project Settings → General: Project Type (HS2-W27N1D). */
   projectGeneral?: (projectId: string) => Props['projectGeneral'];
+  /** Project Settings › General › Time Zone (HS2-SZF152). */
+  projectTimeZone?: (projectId: string) => Props['projectTimeZone'];
   /** Project Settings → Orchestration (HS2-W27N1D). */
   orchestration?: (current: Project) => Props['orchestration'];
   permissionAutomation: (projectId: string) => Props['permissions']['automation'];
@@ -140,6 +142,7 @@ export function createSettingsSurface(dependencies: SettingsSurfaceDependencies)
     registeredProjects,
     developmentStrategy,
     projectGeneral,
+    projectTimeZone,
     orchestration,
     permissionAutomation,
     permissionRules,
@@ -195,6 +198,7 @@ export function createSettingsSurface(dependencies: SettingsSurfaceDependencies)
         category={settingsCategory()}
         developmentStrategy={developmentStrategy?.(current.id)}
         projectGeneral={projectGeneral?.(current.id)}
+        projectTimeZone={projectTimeZone?.(current.id)}
         orchestration={settingsCategory() === 'orchestration' ? orchestration?.(current) : undefined}
         sources={projectSourcesSettings(current)}
         accounts={{

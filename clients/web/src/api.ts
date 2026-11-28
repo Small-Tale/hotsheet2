@@ -132,6 +132,7 @@ import {
   parseTicketRow,
   parseTicketStoreSyncReport,
   parseTicketUsage,
+  parseTimeZoneSettings,
   parseToolConnection,
   parseToolSession,
   parseTrashPurge,
@@ -1719,6 +1720,15 @@ export interface TrashSettings {
 /** Project Settings › General: group each new ticket with the default AI tool (HS2-FN018Q). */
 export interface TicketCreationSettings {
   auto_group_new_tickets: boolean;
+}
+/**
+ * Project Settings › General › Time Zone (HS2-SZF152): the project's shared `time_zone` in effect, `UTC`
+ * when unset; `diagnostic` names a hand-edited shared value that is not a zone (it reads as `UTC`).
+ */
+export interface TimeZoneSettings {
+  time_zone: string;
+  invalid_value?: unknown;
+  diagnostic?: string;
 }
 /** How many Trash tickets a retention of `trash_cleanup_days` would purge right now (HS2-KPD942). */
 export interface TrashPurgePreview {
@@ -3587,6 +3597,13 @@ export class Api {
       parseTrashPurgePreview,
       `/checkouts/${encodeURIComponent(checkoutId)}/trash/purge-preview?days=${encodeURIComponent(days)}`,
     );
+  timeZoneSettings = (checkoutId: string) =>
+    this.parsed(parseTimeZoneSettings, `/checkouts/${encodeURIComponent(checkoutId)}/time-zone-settings`);
+  saveTimeZoneSettings = (checkoutId: string, timeZone: string) =>
+    this.parsed(parseTimeZoneSettings, `/checkouts/${encodeURIComponent(checkoutId)}/time-zone-settings`, {
+      method: 'PUT',
+      body: JSON.stringify({ time_zone: timeZone }),
+    });
   ticketCreationSettings = (checkoutId: string) =>
     this.parsed(parseTicketCreationSettings, `/checkouts/${encodeURIComponent(checkoutId)}/ticket-creation-settings`);
   saveTicketCreationSettings = (checkoutId: string, value: TicketCreationSettings) =>

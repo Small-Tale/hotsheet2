@@ -395,6 +395,7 @@ export const demoCatalog: DemoCategory[] = [
       cataloged('notification-rule-dialog'),
       cataloged('remote-devices-settings', ['list-action-row']),
       cataloged('project-general-settings', ['select']),
+      cataloged('project-time-zone-setting', ['select']),
       cataloged('orchestration-settings', ['list-action-row', 'orchestration-policy-settings']),
       cataloged('orchestration-policy-settings'),
       cataloged('orchestration-project-detail', [

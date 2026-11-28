@@ -937,6 +937,27 @@ describe('checkout Trash transport', () => {
     );
     fetchMock.mockRestore();
   });
+  it('reads and writes the shared project time zone (HS2-SZF152)', async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async () => new Response('{"time_zone":"Europe/Berlin"}', { status: 200 }));
+    const api = new Api('/api');
+    await expect(api.timeZoneSettings('folder with spaces')).resolves.toEqual({ time_zone: 'Europe/Berlin' });
+    await expect(api.saveTimeZoneSettings('folder with spaces', 'Europe/Berlin')).resolves.toEqual({
+      time_zone: 'Europe/Berlin',
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      '/api/checkouts/folder%20with%20spaces/time-zone-settings',
+      expect.any(Object),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/checkouts/folder%20with%20spaces/time-zone-settings',
+      expect.objectContaining({ method: 'PUT', body: '{"time_zone":"Europe/Berlin"}' }),
+    );
+    fetchMock.mockRestore();
+  });
   it('reads and writes the shared Trash retention setting', async () => {
     const fetchMock = vi
       .spyOn(globalThis, 'fetch')

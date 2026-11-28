@@ -1745,6 +1745,21 @@ GitHub repository; never a customer project.
 6. Stop every session as a person with `--force`, unbind both targets, delete the
    scratch repository's workflow runs and remove the temporary directories.
 
+## Project Time Zone setting (HS2-SZF152)
+
+Automated: `clients/web/tests/project-time-zone.spec.ts` (persist, reload, refusal, headless change,
+hand-edited value, captures at 1440, 1100, 390 and 1440 px in both schemes). This checks the parts a
+spec does not: the real desktop app and type-ahead in a long list.
+
+1. In the desktop app, open Project Settings › General. **Time Zone** reads "UTC" in a new project,
+   whatever the computer's own zone is.
+2. Open the select and type "ber": the list moves to Europe/Berlin, labeled with its current offset.
+   Choose it; `.hotsheet2/settings.json` now holds `"time_zone": "Europe/Berlin"` and `git status`
+   shows it as a change to commit.
+3. Run `hotsheet-cli settings set time_zone Asia/Tokyo --scope local`: it is refused
+   (`time_zone_shared_only`) and nothing changes.
+4. Change the computer's time zone and reopen the app: Time Zone still reads Europe/Berlin.
+
 ## Automatic grouping of new tickets with a live AI tool (HS2-FN018Q)
 
 Automated tests drive the grouping turn with a scripted reply; this checks a real default AI tool.

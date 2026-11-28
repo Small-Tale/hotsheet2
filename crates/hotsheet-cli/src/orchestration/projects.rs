@@ -112,7 +112,9 @@ fn settings_error(error: SettingsError) -> OrchestrationError {
         SettingsError::UpgradeRequired { found, .. } => OrchestrationError::UnsupportedVersion {
             found: found.parse().unwrap_or(0),
         },
-        SettingsError::Parse { .. } | SettingsError::Invalid { .. } => OrchestrationError::Corrupt,
+        SettingsError::Parse { .. }
+        | SettingsError::Invalid { .. }
+        | SettingsError::Refused { .. } => OrchestrationError::Corrupt,
     }
 }
 

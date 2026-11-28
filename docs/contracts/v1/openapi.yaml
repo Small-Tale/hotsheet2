@@ -19887,6 +19887,97 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+  /checkouts/{reference}/time-zone-settings:
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: get_checkout_time_zone_settings
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TimeZoneSettings'
+        '400':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '422':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    put:
+      operationId: put_checkout_time_zone_settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TimeZoneSettingsWrite'
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TimeZoneSettings'
+        '400':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '422':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
 components:
   securitySchemes:
     HotsheetSecret:
@@ -35136,6 +35227,28 @@ components:
       properties:
         auto_group_new_tickets:
           type: boolean
+      additionalProperties: false
+    TimeZoneSettings:
+      type: object
+      description: The project time zone in effect (HS2-SZF152); UTC when unset or when the shared value names no zone.
+      required:
+        - time_zone
+      properties:
+        time_zone:
+          type: string
+        invalid_value:
+          description: A hand-edited shared value that names no zone; the project reads as UTC while it stays.
+        diagnostic:
+          type: string
+      additionalProperties: false
+    TimeZoneSettingsWrite:
+      type: object
+      description: An IANA zone name or UTC; anything else is refused with invalid_time_zone.
+      required:
+        - time_zone
+      properties:
+        time_zone:
+          type: string
       additionalProperties: false
     TrashSettings:
       type: object

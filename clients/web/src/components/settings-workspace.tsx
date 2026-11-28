@@ -31,6 +31,7 @@ import { NotificationSettings, type NotificationSettingsProps } from './notifica
 import { OrchestrationSettings, type OrchestrationSettingsProps } from './orchestration-settings';
 import { PermissionRulesSettings, type PermissionRulesSettingsProps } from './permission-rules-settings';
 import { ProjectGeneralSettings, type ProjectGeneralSettingsProps } from './project-general-settings';
+import { ProjectTimeZoneSetting, type ProjectTimeZoneSettingProps } from './project-time-zone-setting';
 import { RegisteredProjectsSettings, type RegisteredProjectsSettingsProps } from './registered-projects-settings';
 import { RemoteDevicesSettings, type RemoteDevicesSettingsProps } from './remote-devices-settings';
 import { type SettingsCategory, settingsCategoryTitle } from './settings-navigation';
@@ -50,6 +51,8 @@ export interface SettingsWorkspaceProps {
   category: SettingsCategory;
   /** Project Settings → General: Project Type (HS2-W27N1D). */
   projectGeneral?: ProjectGeneralSettingsProps;
+  /** Project Settings → General → Time Zone (HS2-SZF152). */
+  projectTimeZone?: ProjectTimeZoneSettingProps;
   /** Project Settings → Orchestration, for an Orchestration project (HS2-W27N1D). */
   orchestration?: OrchestrationSettingsProps;
   sources: TicketSourcesSettingsProps;
@@ -108,6 +111,7 @@ export interface SettingsWorkspaceProps {
 export function SettingsWorkspace({
   category,
   projectGeneral = {},
+  projectTimeZone = {},
   orchestration = {},
   sources,
   groups = {},
@@ -139,7 +143,6 @@ export function SettingsWorkspace({
         <GuidanceSettings {...guidance} />
       ) : (
         <List contentWidth="wide" inset="document">
-          {category === 'project-general' && <ProjectGeneralSettings {...projectGeneral} />}
           {category === 'orchestration' && <OrchestrationSettings {...orchestration} />}
           {category === 'sources' && <TicketSourcesSettings {...sources} />}
           {category === 'groups' && <TicketGroupSettings {...groups} />}
@@ -220,7 +223,10 @@ export function SettingsWorkspace({
             </List>
           )}
           {category === 'project-general' && (
+            // Project Type, Time Zone and the switches are like groups, 16px apart (HS2-SZF152).
             <List gap="m">
+              <ProjectGeneralSettings {...projectGeneral} />
+              <ProjectTimeZoneSetting {...projectTimeZone} />
               {/* Hidden while the Automatic ticket grouping feature is off; the setting keeps its value
                   (HS2-3GJZGG). */}
               {/* Each switch takes the 8px control inset so its track lines up with the text (HS2-9DY7Q8). */}

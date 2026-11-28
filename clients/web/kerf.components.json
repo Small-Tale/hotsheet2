@@ -9764,6 +9764,75 @@
       }
     },
     {
+      "id": "project-time-zone-setting",
+      "name": "ProjectTimeZoneSetting",
+      "kind": "component",
+      "purpose": "Project Settings \u2192 General \u2192 Time Zone: the project's shared time_zone as a Select of UTC and every zone, each labeled with its name and current offset, defaulting to UTC; every due date ends at midnight in this zone (HS2-SZF152).",
+      "source": "src/components/project-time-zone-setting.tsx",
+      "publicExports": [
+        {
+          "name": "ProjectTimeZoneSetting"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/project-time-zone-setting.tsx",
+        "src/project-time-zone.ts",
+        "src/features/project-time-zone-settings.ts"
+      ],
+      "composition": {
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
+        "state": [],
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["controls"],
+          "geometry": {
+            "margin": "none",
+            "border": "child",
+            "padding": "child"
+          }
+        }
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/project-time-zone-setting.tsx",
+        "composition": "src/components/project-time-zone-setting.tsx"
+      },
+      "selection": {
+        "useWhen": ["Hot Sheet needs the project's shared time zone, the zone due dates end in."],
+        "avoidWhen": [
+          "A per-device or per-channel zone, such as notifier quiet hours, which follow their own settings."
+        ],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
       "id": "orchestration-settings",
       "name": "OrchestrationSettings",
       "kind": "component",

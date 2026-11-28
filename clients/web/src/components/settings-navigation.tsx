@@ -111,6 +111,8 @@ export const SETTINGS_STORAGE: Record<SettingsCategory, readonly SettingsStorage
   // HS2-FN018Q: General also holds the former Column view settings.
   'project-general': [
     { control: 'Project type', server: '/checkouts/{project}/orchestration/project-type' },
+    // HS2-SZF152: the shared project time zone due dates end in.
+    { control: 'Time zone', server: '/checkouts/{project}/time-zone-settings' },
     { control: 'Group new tickets automatically', server: '/checkouts/{project}/ticket-creation-settings' },
     { control: 'Hide Verified column', browser: 'hotsheet.project.{project}.hide-verified-column' },
   ],

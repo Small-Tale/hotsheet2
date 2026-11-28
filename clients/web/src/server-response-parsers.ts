@@ -99,6 +99,7 @@ import type {
   TicketStoreSyncHealth,
   TicketStoreSyncReport,
   TicketUsage,
+  TimeZoneSettings,
   ToolConnection,
   ToolSession,
   TrashEmptyResult,
@@ -1724,6 +1725,14 @@ export const parseNotificationChannelRemoval = shape<NotificationChannelRemoval>
 });
 
 export const parseTrashSettings = shape<TrashSettings>('trash settings', { trash_cleanup_days: isNumber });
+/** The project time zone in effect (HS2-SZF152). */
+export const parseTimeZoneSettings: ResponseParser<TimeZoneSettings> = (value) => {
+  const what = 'time zone settings',
+    body = record(value, what);
+  requiredString(body, 'time_zone', what);
+  optionalOf(body, 'diagnostic', what, isString);
+  return body as unknown as TimeZoneSettings;
+};
 export const parseTicketCreationSettings = shape<TicketCreationSettings>('ticket creation settings', {
   auto_group_new_tickets: isBoolean,
 });

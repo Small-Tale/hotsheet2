@@ -1,6 +1,9 @@
 # 38. Milestones and major features
 
-Status: **Design — signed-off answers incorporated** (HS2-8T71YW). Nothing here is built.
+Status: **Design — signed-off answers incorporated** (HS2-8T71YW). Built so far: the project
+`time_zone` setting, its validation, CLI and HTTP surfaces, the Project Settings → General Time Zone
+select and the pure deadline helpers of §38.3 (HS2-SZF152, `hotsheet_ticketing::project_time_zone`);
+the rest is not built.
 The maintainer answered every design question on HS2-8T71YW (notes "Maintainer answers" and
 "Maintainer answers, part 2"); this document records those answers and drops the
 alternatives that were not chosen. Implementation is split in §38.11.
@@ -186,7 +189,9 @@ Rules for the link, whatever the source:
   same control as the notifier quiet-hours zone ([32](32-notifier-plugins.md)), labeled with
   the zone name and its current offset, defaulting to "UTC". Headless:
   `hotsheet-cli settings set time_zone Europe/Berlin` (shared is the default scope) and the
-  checkout-scoped settings route. `milestones --json` and MCP `hotsheet_milestones` `list`
+  checkout-scoped settings route `GET`/`PUT /checkouts/{ref}/time-zone-settings` (HS2-SZF152). A
+  hand-edited unknown name is named by `settings get time_zone` (stderr), the route's
+  `invalid_value` and `diagnostic`, and the select's error text. `milestones --json` and MCP `hotsheet_milestones` `list`
   report the zone in effect.
 - **Not retroactive.** Changing the zone changes no stored date; every deadline instant is
   recomputed when next read.
@@ -201,6 +206,10 @@ long and still ends at local midnight.
 - **Overdue** when `now` is after the deadline instant of the effective due.
 - **"Due within N days"** compares deadline instants, not calendar dates.
 - **Scheduling** uses the deadline instant as `WorkItem.due_at_ms` (§38.8).
+- **Helpers** (HS2-SZF152, `hotsheet_ticketing::project_time_zone`): `deadline_instant_ms`,
+  `is_overdue`, `is_due_within` (not overdue and at most N × 24 hours away), and
+  `due_day_offset` (calendar days from today in the zone: 0 today, 1 tomorrow, negative overdue).
+  A date at the end of the supported range saturates rather than failing.
 - **Display** stays a date ("Due Fri, Dec 4"). Relative words ("today", "tomorrow",
   "3 days overdue") are computed in the project time zone, so every viewer of a project
   reads the same word whatever their device zone.
@@ -309,7 +318,7 @@ checkout the CLI resolves titles through that checkout's registry; elsewhere it 
 | Create into a milestone       | `new --milestone <id or title>`                                                            | `hotsheet_create` `milestone`                               | `POST .../tickets` `milestone`                          |
 | Set / clear a ticket due date | `edit <slug> --due <date>` / `--clear-due`                                                 | `hotsheet_update` `due_on`                                  | `PATCH .../tickets/{id}` `due_on`                       |
 | Filter tickets                | `ls --milestone <id or title>`, `--has-milestone`, `--no-milestone`, `--due-before <date>` | `hotsheet_query` `milestone`, `has_milestone`, `due_before` | `GET .../tickets?milestone=&has_milestone=&due_before=` |
-| Project time zone             | `settings set time_zone <zone>` / `settings get time_zone`                                 | reported by `hotsheet_milestones` `list`                    | checkout-scoped settings route                          |
+| Project time zone             | `settings set time_zone <zone>` / `settings get time_zone`                                 | reported by `hotsheet_milestones` `list`                    | `GET`/`PUT /checkouts/{ref}/time-zone-settings`         |
 
 - Unlike a group name, `edit --milestone <title>` never creates a milestone: an unknown title
   is refused (`milestone_not_found`), because a milestone carries a date and a state a person

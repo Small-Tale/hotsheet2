@@ -8770,6 +8770,108 @@ async fn opening_project_discovers_a_linked_ticket_store_without_a_source_choice
     assert_eq!(tickets.status(), StatusCode::OK);
 }
 
+/// HS2-SZF152: the project time zone route reads UTC by default, saves a canonical shared
+/// value, refuses unknown zones with `invalid_time_zone`, and reports a hand-edited bad name.
+#[tokio::test]
+async fn hs2_szf152_checkout_time_zone_settings_round_trip_and_refuse_unknown_zones() {
+    let (_primary, st) = state();
+    let workspace = tempfile::tempdir().unwrap();
+    let checkout = workspace.path().join("app");
+    std::fs::create_dir(&checkout).unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let application = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
+    let opened = application
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/projects/open",
+            Some(&serde_json::json!({"root":checkout}).to_string()),
+        ))
+        .await
+        .unwrap();
+    let checkout_id = body_json(opened).await["checkout"]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let path = format!("/checkouts/{checkout_id}/time-zone-settings");
+    let get = || async {
+        body_json(
+            application
+                .clone()
+                .oneshot(authed("GET", &path, None))
+                .await
+                .unwrap(),
+        )
+        .await
+    };
+    assert_eq!(get().await, serde_json::json!({"time_zone":"UTC"}));
+    let put = |body: &'static str| {
+        let application = application.clone();
+        let path = path.clone();
+        async move {
+            application
+                .oneshot(authed("PUT", &path, Some(body)))
+                .await
+                .unwrap()
+        }
+    };
+    let saved = put(r#"{"time_zone":"Europe/Berlin"}"#).await;
+    assert_eq!(saved.status(), StatusCode::OK);
+    assert_eq!(
+        body_json(saved).await,
+        serde_json::json!({"time_zone":"Europe/Berlin"})
+    );
+    // Idempotent repeat, then the canonical spelling of `utc`, then back again.
+    assert_eq!(
+        put(r#"{"time_zone":"Europe/Berlin"}"#).await.status(),
+        StatusCode::OK
+    );
+    assert_eq!(
+        body_json(put(r#"{"time_zone":"utc"}"#).await).await["time_zone"],
+        "UTC"
+    );
+    assert_eq!(
+        put(r#"{"time_zone":"America/New_York"}"#).await.status(),
+        StatusCode::OK
+    );
+    let shared: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(checkout.join(".hotsheet2/settings.json")).unwrap())
+            .unwrap();
+    assert_eq!(shared["time_zone"], "America/New_York");
+    for refused in [
+        r#"{"time_zone":"Mars/Olympus_Mons"}"#,
+        r#"{"time_zone":""}"#,
+        r#"{"time_zone":5}"#,
+        r#"{"time_zone":null}"#,
+    ] {
+        let response = put(refused).await;
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{refused}");
+        assert_eq!(body_json(response).await["code"], "invalid_time_zone");
+    }
+    assert!(
+        put(r#"{"time_zone":"UTC","scope":"local"}"#)
+            .await
+            .status()
+            .is_client_error()
+    );
+    assert_eq!(get().await["time_zone"], "America/New_York");
+    // A hand-edited unknown name reads as UTC and is named.
+    std::fs::write(
+        checkout.join(".hotsheet2/settings.json"),
+        r#"{"$hotsheetSchema":1,"time_zone":"Mars/Olympus_Mons"}"#,
+    )
+    .unwrap();
+    let invalid = get().await;
+    assert_eq!(invalid["time_zone"], "UTC");
+    assert_eq!(invalid["invalid_value"], "Mars/Olympus_Mons");
+    assert!(
+        invalid["diagnostic"]
+            .as_str()
+            .unwrap()
+            .contains("Mars/Olympus_Mons")
+    );
+}
+
 #[tokio::test]
 async fn source_free_checkout_settings_round_trip_under_the_project_root() {
     let (primary, st) = state();

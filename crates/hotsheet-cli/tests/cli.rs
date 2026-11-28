@@ -10255,6 +10255,106 @@ fn hs2_qagsjk_headless_permission_automation_is_local_and_validated() {
 }
 
 #[test]
+fn hs2_szf152_headless_project_time_zone_is_shared_validated_and_defaults_to_utc() {
+    let project = tempfile::tempdir().unwrap();
+    let p = project.path();
+    hs(p).args(["init"]).assert().success();
+    // Unset reads as UTC, never the device zone.
+    hs(p)
+        .env("TZ", "Asia/Tokyo")
+        .args(["settings", "get", "time_zone"])
+        .assert()
+        .success()
+        .stdout("UTC\n");
+    hs(p)
+        .args(["settings", "set", "time_zone", "Europe/Berlin"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("shared (committed)"));
+    // Repeating the write is idempotent.
+    hs(p)
+        .args(["settings", "set", "time_zone", "Europe/Berlin"])
+        .assert()
+        .success();
+    hs(p)
+        .args(["settings", "get", "time_zone"])
+        .assert()
+        .success()
+        .stdout("Europe/Berlin\n");
+    let shared: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(p.join(".hotsheet2/settings.json")).unwrap())
+            .unwrap();
+    assert_eq!(shared["time_zone"], "Europe/Berlin");
+    // Local and global scopes are refused with the stable code; nothing is written there.
+    for scope in ["local", "global"] {
+        hs(p)
+            .args([
+                "settings",
+                "set",
+                "time_zone",
+                "America/New_York",
+                "--scope",
+                scope,
+            ])
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("time_zone_shared_only"));
+        hs(p)
+            .args(["settings", "get", "time_zone", "--scope", scope])
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("time_zone_shared_only"));
+    }
+    // Unknown names are refused and leave the stored zone alone.
+    for invalid in ["Mars/Olympus_Mons", "5", "+02:00"] {
+        hs(p)
+            .args(["settings", "set", "time_zone", invalid])
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("invalid_time_zone"));
+    }
+    hs(p)
+        .args(["settings", "get", "time_zone"])
+        .assert()
+        .success()
+        .stdout("Europe/Berlin\n");
+    // A hand-edited local value is ignored by list and get; a hand-edited bad shared value
+    // reads as UTC with a warning naming it.
+    std::fs::write(
+        p.join(".hotsheet2/settings.local.json"),
+        r#"{"$hotsheetSchema":1,"time_zone":"Asia/Tokyo"}"#,
+    )
+    .unwrap();
+    hs(p)
+        .args(["settings", "list"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("time_zone = Europe/Berlin"));
+    std::fs::write(
+        p.join(".hotsheet2/settings.json"),
+        r#"{"$hotsheetSchema":1,"time_zone":"Mars/Olympus_Mons"}"#,
+    )
+    .unwrap();
+    hs(p)
+        .args(["settings", "get", "time_zone"])
+        .assert()
+        .success()
+        .stdout("UTC\n")
+        .stderr(predicate::str::contains("Mars/Olympus_Mons"));
+    // `utc` is stored canonically and clears the warning.
+    hs(p)
+        .args(["settings", "set", "time_zone", "utc"])
+        .assert()
+        .success();
+    hs(p)
+        .args(["settings", "get", "time_zone"])
+        .assert()
+        .success()
+        .stdout("UTC\n")
+        .stderr("");
+}
+
+#[test]
 fn simultaneous_cli_settings_writers_keep_each_key() {
     let project = tempfile::tempdir().unwrap();
     let home = tempfile::tempdir().unwrap();

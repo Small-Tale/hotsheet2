@@ -36,4 +36,5 @@ pub(crate) mod terminals;
 pub(crate) mod ticket_creation_settings;
 pub(crate) mod ticket_writes;
 pub(crate) mod tickets;
+pub(crate) mod time_zone_settings;
 pub(crate) mod transfer;

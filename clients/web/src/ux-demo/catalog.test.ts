@@ -234,6 +234,7 @@ describe('UX demo catalog', () => {
       'notification-rule-dialog',
       'remote-devices-settings',
       'project-general-settings',
+      'project-time-zone-setting',
       'orchestration-settings',
       'orchestration-policy-settings',
       'orchestration-project-detail',

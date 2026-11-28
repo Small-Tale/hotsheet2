@@ -201,6 +201,7 @@ import {
   sameTicketQuery,
 } from '../features/project-refresh';
 import { createProjectTeardown } from '../features/project-teardown';
+import { createProjectTimeZoneSettings } from '../features/project-time-zone-settings';
 import { createReaderLayersSurface } from '../features/reader-layers-surface';
 import { createRegisteredProjects } from '../features/registered-projects';
 import {
@@ -751,6 +752,13 @@ export async function startHotSheetWebClient() {
     autoGroupMessagesByProject = signal<Record<string, string>>({}),
     trashSettingsMessagesByProject = signal<Record<string, string>>({}),
     trashRetentionDraftsByProject = signal<Record<string, TrashRetentionDraft>>({});
+  // Project Settings › General › Time Zone (HS2-SZF152): the open project's shared `time_zone`.
+  const projectTimeZoneSettings = createProjectTimeZoneSettings({
+    client: (projectId, quiet) => {
+      const current = project();
+      return current?.id === projectId ? new Api(current.apiPath, '', { trackBusy: !quiet }) : undefined;
+    },
+  });
   const terminalDashboardSize = signal({ width: 1200, height: 601 }),
     terminalFitAcross = signal(
       Number(localStorage.getItem('hotsheet.terminals.fit-across')) || TERMINAL_GRID_DEFAULT_ACROSS,
@@ -3618,7 +3626,10 @@ export async function startHotSheetWebClient() {
               : category === 'lifecycle'
                 ? refreshTrashSettings(current, settingsQuiet)
                 : category === 'project-general'
-                  ? refreshTicketCreationSettings(current, settingsQuiet)
+                  ? Promise.all([
+                      refreshTicketCreationSettings(current, settingsQuiet),
+                      projectTimeZoneSettings.refresh(current.id, settingsQuiet),
+                    ])
                   : category === 'groups'
                     ? ticketGroupSettings.refresh(current)
                     : Promise.resolve(),
@@ -6157,6 +6168,7 @@ export async function startHotSheetWebClient() {
     trashRetentionDraftsByProject,
     autoGroupNewTicketsByProject,
     autoGroupMessagesByProject,
+    projectTimeZone: (projectId: string) => projectTimeZoneSettings.view(projectId),
     inheritGlobalShellHistory,
     terminalSettingsMessage,
     terminalLimits: terminalLimitsSettings.limits,
@@ -7948,6 +7960,7 @@ export async function startHotSheetWebClient() {
     notificationSettings,
     remoteDevices,
     orchestrationSettings: orchestrationSurface.settings,
+    projectTimeZoneSettings,
     orchestrationTemplates: orchestrationSurface.templates,
     orchestrationTemplateFirstProject: (projectId: string) =>
       orchestrationSurface.declaredProjects(projectId)[0]?.target_id,

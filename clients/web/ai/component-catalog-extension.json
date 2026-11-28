@@ -2116,6 +2116,27 @@
       "documentation": "../../docs/ux-components.md"
     },
     {
+      "id": "project-time-zone-setting",
+      "name": "ProjectTimeZoneSetting",
+      "kind": "component",
+      "purpose": "Project Settings → General → Time Zone: the project's shared time_zone as a Select of UTC and every zone, each labeled with its name and current offset, defaulting to UTC; every due date ends at midnight in this zone (HS2-SZF152).",
+      "useWhen": [
+        "Hot Sheet needs the project's shared time zone, the zone due dates end in."
+      ],
+      "avoidWhen": [
+        "A per-device or per-channel zone, such as notifier quiet hours, which follow their own settings."
+      ],
+      "publicClasses": [],
+      "publicTokens": [],
+      "source": "src/components/project-time-zone-setting.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
       "id": "provider-icon",
       "name": "ProviderIcon",
       "kind": "component",

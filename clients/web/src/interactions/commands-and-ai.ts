@@ -44,6 +44,7 @@ import { syncDesktopWindowTheme } from '../desktop-window-theme';
 import type { createCommandSchedulesController } from '../features/command-schedules';
 import type { OrchestrationSettings } from '../features/orchestration-settings';
 import type { OrchestrationTemplateEditing } from '../features/orchestration-template-editing';
+import { type ProjectTimeZoneSettings, wireProjectTimeZoneSetting } from '../features/project-time-zone-settings';
 import { terminalLimitChoiceValue, type TerminalLimitsSettings } from '../features/terminal-limits-settings';
 import { wireInputDialogs } from '../input-dialog-interactions';
 import { COMMANDS_AND_AI_ACTIONS, COMMANDS_AND_AI_TARGETS } from '../interaction-attrs/commands-and-ai';
@@ -205,6 +206,8 @@ export interface CommandAndAiInteractionsDependencies {
   readonly setSettingsCategory: (_projectId: string, category: SettingsCategory) => void;
   /** Project Type and Settings → Orchestration (HS2-W27N1D). */
   readonly orchestrationSettings?: OrchestrationSettings;
+  /** Project Settings › General › Time Zone (HS2-SZF152). */
+  readonly projectTimeZoneSettings?: ProjectTimeZoneSettings;
   /** HS2-1XCW6N: Settings › Orchestration › Templates and its editor. */
   readonly orchestrationTemplates?: OrchestrationTemplateEditing;
   /** The declared project a new template's first step runs in. */
@@ -381,6 +384,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     refreshProject,
     setSettingsCategory,
     orchestrationSettings,
+    projectTimeZoneSettings,
     orchestrationTemplates,
     orchestrationTemplateFirstProject,
     selectProjectTab,
@@ -1068,6 +1072,9 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
         activateProject: selectProjectTab,
       }),
     );
+  // HS2-SZF152: Project Settings › General › Time Zone shares the demo's wire helper.
+  if (projectTimeZoneSettings)
+    lifetime.add(wireProjectTimeZoneSetting(document.body, projectTimeZoneSettings, () => project()?.id));
   // HS2-1XCW6N: Settings › Orchestration › Templates shares the demo's wire helper too.
   if (orchestrationTemplates)
     lifetime.add(
@@ -1181,7 +1188,10 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
       if (category === 'terminals') void refreshTerminalSettings();
       if (category === 'terminal-memory') void terminalLimitsSettings?.refresh();
       if (category === 'lifecycle') void refreshTrashSettings();
-      if (category === 'project-general') void refreshTicketCreationSettings?.();
+      if (category === 'project-general') {
+        void refreshTicketCreationSettings?.();
+        void projectTimeZoneSettings?.refresh(current.id);
+      }
       if (category === 'groups') void refreshTicketGroupSettings?.();
       if (category === 'ai' || category === 'commands') void refreshAiConfiguration(undefined, true);
     }),

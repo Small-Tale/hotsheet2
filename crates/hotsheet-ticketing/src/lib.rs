@@ -53,6 +53,7 @@ pub mod plugin_digest;
 pub mod ports;
 pub mod pricing;
 pub mod project_gitignore;
+pub mod project_time_zone;
 pub mod provider;
 pub mod provider_outbox;
 pub mod provider_trash;

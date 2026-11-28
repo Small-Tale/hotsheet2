@@ -92,6 +92,20 @@ pub enum SettingsError {
         found: String,
         supported: u64,
     },
+    /// A write refused with a stable machine-readable code, such as `time_zone` outside the
+    /// shared scope (`time_zone_shared_only`) or an unknown zone (`invalid_time_zone`).
+    #[error("{message}")]
+    Refused { code: &'static str, message: String },
+}
+
+impl SettingsError {
+    /// The stable refusal code an automated caller can branch on, when there is one.
+    pub fn code(&self) -> Option<&'static str> {
+        match self {
+            SettingsError::Refused { code, .. } => Some(code),
+            _ => None,
+        }
+    }
 }
 
 /// Which settings file a read/write targets.
@@ -369,6 +383,7 @@ impl Settings {
     /// local file is gitignored.
     pub fn set(&self, key: &str, mut value: Value, scope: Scope) -> Result<(), SettingsError> {
         Self::validate_set_value(key, &value, scope)?;
+        Self::normalize_written_value(key, &mut value, scope)?;
         let _lock = self.lock_scope(scope)?;
         self.stamp_written_value(key, &mut value)?;
         let mut map = self.map(scope)?;
@@ -387,6 +402,7 @@ impl Settings {
         matches: impl FnOnce(Option<&Value>) -> bool,
     ) -> Result<bool, SettingsError> {
         Self::validate_set_value(key, &value, scope)?;
+        Self::normalize_written_value(key, &mut value, scope)?;
         let _global_lock = self.lock_scope(Scope::Global)?;
         let _shared_lock = self.lock_scope(Scope::Shared)?;
         let _local_lock = self.lock_scope(Scope::Local)?;
@@ -418,6 +434,19 @@ impl Settings {
                 value,
                 &crate::command_cleanup::now_rfc3339(),
             );
+        }
+        Ok(())
+    }
+
+    /// Store a value in its canonical form: a `time_zone` keeps the zone database's own
+    /// spelling of the name (HS2-SZF152).
+    fn normalize_written_value(
+        key: &str,
+        value: &mut Value,
+        scope: Scope,
+    ) -> Result<(), SettingsError> {
+        if key == crate::project_time_zone::TIME_ZONE_SETTING {
+            *value = crate::project_time_zone::validate_time_zone_write(value, scope)?;
         }
         Ok(())
     }

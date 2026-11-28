@@ -6407,6 +6407,72 @@
       }
     },
     {
+      "key": "hotsheet-web:project-time-zone-setting",
+      "package": "hotsheet-web",
+      "id": "project-time-zone-setting",
+      "name": "ProjectTimeZoneSetting",
+      "kind": "component",
+      "purpose": "Project Settings → General → Time Zone: the project's shared time_zone as a Select of UTC and every zone, each labeled with its name and current offset, defaulting to UTC; every due date ends at midnight in this zone (HS2-SZF152).",
+      "publicExports": [
+        {
+          "name": "ProjectTimeZoneSetting"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/project-time-zone-setting.tsx",
+        "src/project-time-zone.ts",
+        "src/features/project-time-zone-settings.ts"
+      ],
+      "source": "src/components/project-time-zone-setting.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/project-time-zone-setting.tsx",
+        "composition": "src/components/project-time-zone-setting.tsx"
+      }
+    },
+    {
       "key": "hotsheet-web:provider-icon",
       "package": "hotsheet-web",
       "id": "provider-icon",
