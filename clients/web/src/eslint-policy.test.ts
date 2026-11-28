@@ -366,6 +366,16 @@ describe('web ESLint policy', () => {
     expect(spec.match(/\(\$\{surface\}\) @ci-webkit`/g)).toHaveLength(1);
   });
 
+  it('HS2-SSD28G runs the per-run CI chips regression in the required WebKit route', () => {
+    // The maintainer uses Safari; CI otherwise ran the shipped sidebar's per-run chips only in Chromium.
+    const packageSource = readFileSync(new URL('../package.json', import.meta.url), 'utf8');
+    const script = packageSource.match(/"test:ci:webkit": "([^"]+)"/)?.[1];
+    expect(script).toContain('tests/project-live-section.spec.ts');
+    const spec = readFileSync(new URL('../tests/project-live-section.spec.ts', import.meta.url), 'utf8');
+    expect(spec.match(/its own chip and row @ci-webkit'/g)).toHaveLength(1);
+    expect(spec.match(/@ci-webkit/g)).toHaveLength(1);
+  });
+
   it('HS2-WM3SBV ignores generated web target files globally', () => {
     const config = readFileSync(new URL('../eslint.config.mjs', import.meta.url), 'utf8');
     const globalIgnores = config.match(/ignores: \[([\s\S]*?)\]/)?.[1];

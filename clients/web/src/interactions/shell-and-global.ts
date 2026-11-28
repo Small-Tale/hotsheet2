@@ -496,28 +496,40 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
       }
     }),
   );
+  function overTicketDropTarget(event: Event, target: Element) {
+    const drag = dependencies.draggedTickets;
+    if (!drag) return;
+    const destinationProject = data(target).ticketDropProject;
+    if (destinationProject === drag.source.id) return;
+    event.preventDefault();
+    // Over a group inside a column, the group alone shows as the target (HS2-PRXD39), but only
+    // for tickets already in that column; from another column the whole column is the target.
+    if (columnGroupDropElement(event, target)) {
+      clearDragTarget(target as HTMLElement);
+      return;
+    }
+    markDragTarget(target as HTMLElement);
+    if ((event as DragEvent).dataTransfer)
+      (event as DragEvent).dataTransfer!.dropEffect =
+        destinationProject || data(target).ticketDropAction ? 'copy' : 'move';
+  }
+  // WebKit sends only `dragenter` for a move that crosses onto a new element and takes that move's
+  // drop operation from it, so a target that cancels only `dragover` refuses a release right after
+  // the pointer crosses onto one of its children, such as a group label in a board column (HS2-SSD28G).
+  lifetime.add(
+    delegate(
+      document.body,
+      'dragenter',
+      '[data-ticket-drop-status], [data-ticket-drop-action], [data-ticket-drop-project]',
+      overTicketDropTarget,
+    ),
+  );
   lifetime.add(
     delegate(
       document.body,
       'dragover',
       '[data-ticket-drop-status], [data-ticket-drop-action], [data-ticket-drop-project]',
-      (event, target) => {
-        const drag = dependencies.draggedTickets;
-        if (!drag) return;
-        const destinationProject = data(target).ticketDropProject;
-        if (destinationProject === drag.source.id) return;
-        event.preventDefault();
-        // Over a group inside a column, the group alone shows as the target (HS2-PRXD39), but only
-        // for tickets already in that column; from another column the whole column is the target.
-        if (columnGroupDropElement(event, target)) {
-          clearDragTarget(target as HTMLElement);
-          return;
-        }
-        markDragTarget(target as HTMLElement);
-        if ((event as DragEvent).dataTransfer)
-          (event as DragEvent).dataTransfer!.dropEffect =
-            destinationProject || data(target).ticketDropAction ? 'copy' : 'move';
-      },
+      overTicketDropTarget,
     ),
   );
   lifetime.add(
@@ -605,14 +617,17 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
     }),
   );
   // Dropping a grouped ticket on the list outside every group removes its group.
+  function overUngroupDropZone(event: Event) {
+    const drag = groupableDrag();
+    if (!drag || groupDropElement(event) || !draggedRows(drag.slugs).some(ticketGroupValue)) return;
+    event.preventDefault();
+    if ((event as DragEvent).dataTransfer) (event as DragEvent).dataTransfer!.dropEffect = 'move';
+  }
+  // Entering accepts the drop as well, for WebKit's enter-only move (HS2-SSD28G).
   lifetime.add(
-    delegate(document.body, 'dragover', TICKET_GROUP_TARGETS.ungroupDropZone.selector, (event) => {
-      const drag = groupableDrag();
-      if (!drag || groupDropElement(event) || !draggedRows(drag.slugs).some(ticketGroupValue)) return;
-      event.preventDefault();
-      if ((event as DragEvent).dataTransfer) (event as DragEvent).dataTransfer!.dropEffect = 'move';
-    }),
+    delegate(document.body, 'dragenter', TICKET_GROUP_TARGETS.ungroupDropZone.selector, overUngroupDropZone),
   );
+  lifetime.add(delegate(document.body, 'dragover', TICKET_GROUP_TARGETS.ungroupDropZone.selector, overUngroupDropZone));
   lifetime.add(
     delegate(document.body, 'drop', TICKET_GROUP_TARGETS.ungroupDropZone.selector, (event) => {
       const drag = groupableDrag();

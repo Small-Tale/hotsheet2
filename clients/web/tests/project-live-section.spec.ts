@@ -406,7 +406,7 @@ test('HS2-D3JJ49 shows nothing for a running CI report that can no longer be ver
 // HS2-D3JJ49: several runs in flight (two workflows of one push) each get their own chip and expanded row in the
 // shipped sidebar, named by their workflow, and each ticks. Captured wide, medium, narrow and wide again, light
 // and dark, in Chromium and WebKit.
-test('HS2-D3JJ49 shows each running CI run as its own chip and row', async ({ page, browserName }) => {
+test('HS2-D3JJ49 shows each running CI run as its own chip and row @ci-webkit', async ({ page, browserName }) => {
   test.setTimeout(150_000);
   const server = await realTicketServer();
   try {
