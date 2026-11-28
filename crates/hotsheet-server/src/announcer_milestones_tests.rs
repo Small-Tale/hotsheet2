@@ -355,18 +355,29 @@ async fn hs2_g3hjzh_switches_off_never_ask_the_model() {
     assert!(fake.prompts.lock().unwrap().is_empty());
 }
 
-/// HS2-G3HJZH: the live call's arguments ask for no tools, MCP servers, hooks, or saved session,
-/// and for the small model's structured JSON.
+/// HS2-G3HJZH, HS2-17NWC1: the live call's arguments come from the Claude plugin's declared
+/// structured call and ask for no tools, MCP servers, hooks, or saved session, and for the small
+/// model's structured JSON.
 #[test]
 fn hs2_g3hjzh_cli_arguments_are_bounded() {
-    let args = cli_args(AiTask::Classify, "PROMPT");
+    let template = hotsheet_plugins::builtin_plugins()
+        .into_iter()
+        .filter_map(|plugin| plugin.manifest.drive)
+        .find(|drive| !drive.structured_call_args.is_empty())
+        .expect("a built-in plugin declares a structured call")
+        .structured_call_args;
+    let args = cli_args(&template, AiTask::Classify, "PROMPT");
     let after = |flag: &str| {
         args.iter()
             .position(|arg| arg == flag)
             .map(|at| args[at + 1].as_str())
     };
     assert_eq!(after("-p"), Some("PROMPT"));
-    assert_eq!(after("--model"), Some(CLASSIFIER_MODEL));
+    assert_eq!(after("--model"), Some("claude-haiku-5-5"));
+    assert_eq!(
+        after("--system-prompt"),
+        Some(AiTask::Classify.system_prompt())
+    );
     assert_eq!(after("--output-format"), Some("json"));
     assert_eq!(after("--json-schema"), Some(AiTask::Classify.schema()));
     assert_eq!(after("--tools"), Some(""));
@@ -379,7 +390,7 @@ fn hs2_g3hjzh_cli_arguments_are_bounded() {
         assert!(args.iter().any(|arg| arg == flag), "{flag}");
     }
     // A test process never runs the installed tool.
-    let live = ClaudeCliAi {
+    let live = PluginCliAi {
         plugin_dirs: Vec::new(),
     };
     assert!(live.ask(AiTask::Classify, "x").is_err());

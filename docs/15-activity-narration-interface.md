@@ -250,8 +250,9 @@ Those milestones live in ticket writes, so the server produces them
   live narration share it. `summary` is the shown line; `detail` carries `milestone`, `slug`,
   `title`, `note_summary`, `follow_ups`, `spoken`, `speak`, `score`, `scored_by` (`ai` or `rules`),
   and `worded_by` (`ai` or `template`).
-- **The model call.** The person's signed-in `claude` CLI (found through its installed plugin, no
-  API key), the same way `npm run commit:msg` reaches signed-in Claude: `claude -p <prompt> --model
+- **The model call.** The person's signed-in AI CLI (no API key): the first installed tool plugin
+  that declares a structured call (`drive.structured_call_args`, docs/05 §5.1; HS2-17NWC1). Claude
+  declares it, the same way `npm run commit:msg` reaches signed-in Claude: `claude -p <prompt> --model
 claude-haiku-5-5 --output-format json --json-schema <schema>` with a short system prompt, no
   tools, no MCP servers, hooks disabled, slash commands off, and no saved session, in a private empty
   directory with Hot Sheet's server and worker variables removed. Each call is killed with its

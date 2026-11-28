@@ -344,6 +344,15 @@ pub struct DriveSpec {
     /// tool's sign-in state is unreported.
     #[serde(default)]
     pub auth_status_args: Vec<String>,
+    /// HS2-17NWC1: arguments for one bounded, structured-JSON call of `program` with no tools,
+    /// MCP servers, hooks, or saved session, on the tool's own small model (the announcer's
+    /// importance score and wording, HS2-G3HJZH). An argument that is exactly `{prompt}`,
+    /// `{schema}`, or `{system_prompt}` is replaced by that value; nothing else is
+    /// substituted. The reply is one JSON object on stdout: the object itself, or an
+    /// envelope carrying it as `structured_output` or as `result` text. Empty: the tool
+    /// serves no such call.
+    #[serde(default)]
+    pub structured_call_args: Vec<String>,
     /// Plugin-owned model catalog. Clients consume this declaration rather than
     /// hard-coding provider/model names.
     #[serde(default)]
@@ -1225,6 +1234,36 @@ pub fn detected_drivable_plugins(search_dirs: &[PathBuf]) -> Vec<Plugin> {
     all_plugins(search_dirs)
         .into_iter()
         .filter(|plugin| plugin.manifest.drive.is_some() && setup::is_detected(plugin))
+        .collect()
+}
+
+/// HS2-17NWC1: the program and argument template of the first detected plugin, in registry
+/// order, that declares `drive.structured_call_args`; `None` when no installed tool does.
+pub fn detected_structured_call(search_dirs: &[PathBuf]) -> Option<(String, Vec<String>)> {
+    detected_drivable_plugins(search_dirs)
+        .into_iter()
+        .filter_map(|plugin| plugin.manifest.drive)
+        .find(|drive| !drive.structured_call_args.is_empty())
+        .map(|drive| (drive.program, drive.structured_call_args))
+}
+
+/// HS2-17NWC1: `template` with each argument that is exactly `{prompt}`, `{schema}`, or
+/// `{system_prompt}` replaced by its value. Other arguments pass through unchanged, so a
+/// value containing a placeholder is never expanded twice.
+pub fn structured_call_args(
+    template: &[String],
+    prompt: &str,
+    schema: &str,
+    system_prompt: &str,
+) -> Vec<String> {
+    template
+        .iter()
+        .map(|arg| match arg.as_str() {
+            "{prompt}" => prompt.to_owned(),
+            "{schema}" => schema.to_owned(),
+            "{system_prompt}" => system_prompt.to_owned(),
+            _ => arg.clone(),
+        })
         .collect()
 }
 

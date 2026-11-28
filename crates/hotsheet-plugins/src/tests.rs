@@ -2303,3 +2303,75 @@ fn hs2_ahg7hw_a_capacity_section_is_strictly_validated() {
         }
     }
 }
+
+// ---- structured call (HS2-17NWC1) ------------------------------------------------
+
+/// HS2-17NWC1: only whole-argument placeholders are replaced, each once, so a prompt that
+/// itself contains a placeholder is never expanded again.
+#[test]
+fn hs2_17nwc1_structured_call_args_replace_whole_placeholders_only() {
+    let template: Vec<String> = [
+        "-p",
+        "{prompt}",
+        "--json-schema",
+        "{schema}",
+        "--system-prompt",
+        "{system_prompt}",
+        "x{prompt}",
+        "",
+    ]
+    .map(str::to_owned)
+    .to_vec();
+    assert_eq!(
+        structured_call_args(&template, "say {schema}", "S", "SYS"),
+        [
+            "-p",
+            "say {schema}",
+            "--json-schema",
+            "S",
+            "--system-prompt",
+            "SYS",
+            "x{prompt}",
+            ""
+        ]
+    );
+    assert!(structured_call_args(&[], "p", "s", "y").is_empty());
+}
+
+/// HS2-17NWC1: Claude declares the announcer's bounded structured call; the other built-in
+/// tools declare none, so no core code picks a tool by id.
+#[test]
+fn hs2_17nwc1_only_claude_declares_a_structured_call() {
+    let declaring: Vec<String> = builtin_plugins()
+        .into_iter()
+        .filter(|plugin| {
+            plugin
+                .manifest
+                .drive
+                .as_ref()
+                .is_some_and(|drive| !drive.structured_call_args.is_empty())
+        })
+        .map(|plugin| plugin.id().to_owned())
+        .collect();
+    assert_eq!(declaring, ["claude"]);
+    let args = find_in("claude", &[])
+        .unwrap()
+        .manifest
+        .drive
+        .unwrap()
+        .structured_call_args;
+    for placeholder in ["{prompt}", "{schema}", "{system_prompt}"] {
+        assert_eq!(
+            args.iter().filter(|arg| *arg == placeholder).count(),
+            1,
+            "{placeholder}"
+        );
+    }
+    for flag in [
+        "--strict-mcp-config",
+        "--no-session-persistence",
+        "--disable-slash-commands",
+    ] {
+        assert!(args.iter().any(|arg| arg == flag), "{flag}");
+    }
+}

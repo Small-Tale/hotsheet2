@@ -70,6 +70,21 @@ session_options = ["model", "effort", "permission_mode"]
 # HS2-S1FEYY: `claude auth status` exits 0 signed in and 1 signed out. Systems reads
 # only the exit status, never the output, so no account name leaves the tool.
 auth_status_args = ["auth", "status"]
+# HS2-17NWC1: one bounded structured-JSON call (the announcer's importance score and wording,
+# HS2-G3HJZH) on the smallest model, with no tools, MCP servers, hooks, slash commands, or
+# saved session. `{prompt}`, `{schema}`, and `{system_prompt}` are whole-argument placeholders.
+structured_call_args = [
+  "-p", "{prompt}",
+  "--model", "claude-haiku-5-5",
+  "--output-format", "json",
+  "--json-schema", "{schema}",
+  "--system-prompt", "{system_prompt}",
+  "--tools", "",
+  "--strict-mcp-config",
+  "--no-session-persistence",
+  "--disable-slash-commands",
+  "--settings", '{"disableAllHooks":true}',
+]
 # `--permission-mode` values a chat can run under (docs/05 §5.7, HS2-NHRDMW). Tool calls the
 # mode does not pre-approve reach the Hot Sheet permission popup through the appropriate hook.
 # `auto` lets Claude classify routine work; native PermissionRequest asks reach Hot Sheet.
