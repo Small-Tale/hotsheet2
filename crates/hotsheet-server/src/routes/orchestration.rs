@@ -1005,6 +1005,7 @@ impl AppState {
             .machine_home()
             .join(hotsheet_cli::orchestration::HOSTED_SESSION_SIGNAL_DIRECTORY);
         let seen = hotsheet_cli::orchestration::signal_token(&directory);
+        let tasks = self.orchestration_tasks().threads().clone();
         // HS2-H1CSSN: kept by this server's orchestration tasks and joined at shutdown.
         let _ = self.orchestration_tasks().threads().spawn(
             "orchestration-hosted-session-signal",
@@ -1014,8 +1015,9 @@ impl AppState {
                 else {
                     return;
                 };
+                let _stop = tasks.on_stop(waiter.cancel_handle());
                 while !watcher.is_stopping() {
-                    if waiter.wait(FOLLOWER_RECHECK) {
+                    if waiter.wait(FOLLOWER_RECHECK) && !watcher.is_stopping() {
                         announce_terminal_orchestrator(&watcher, "");
                     }
                 }
@@ -1061,6 +1063,9 @@ impl AppState {
                     .ok(),
                     _ => None,
                 };
+                let _stop = waiter
+                    .as_ref()
+                    .map(|waiter| tasks.on_stop(waiter.cancel_handle()));
                 let mut pushed = hotsheet_cli::orchestration::LinePushState::default();
                 let mut remembered = false;
                 while !state.is_stopping() {
@@ -1111,6 +1116,9 @@ impl AppState {
                 .threads()
                 .spawn("orchestration-scheduler-wake", move || {
                     let waiter = hotsheet_jobs::ChangeWaiter::starting(&[directory.as_path()]).ok();
+                    let _stop = waiter
+                        .as_ref()
+                        .map(|waiter| tasks.on_stop(waiter.cancel_handle()));
                     while !state.is_stopping() {
                         match &waiter {
                             Some(waiter) => {
@@ -1119,6 +1127,9 @@ impl AppState {
                             None => {
                                 tasks.wait_stop(FOLLOWER_RECHECK);
                             }
+                        }
+                        if state.is_stopping() {
+                            break;
                         }
                         let current = std::fs::read_to_string(&token).ok();
                         if current == seen {
@@ -1138,8 +1149,8 @@ impl AppState {
 }
 
 /// HS2-H1CSSN: the longest a follower thread waits for a file event before it reads its
-/// local records again (the change waiters' own safety re-check) and sees a stop. Where
-/// the platform watcher could not start it waits this long on the stop token instead.
+/// local records again. A stop interrupts the file wait. Where the platform watcher
+/// could not start, the follower waits directly on the stop token.
 const FOLLOWER_RECHECK: std::time::Duration = std::time::Duration::from_secs(1);
 
 /// HS2-6MNMVB: a person took over, paused or stopped an orchestrator session hosted

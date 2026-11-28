@@ -13,7 +13,7 @@ use crate::AppState;
 use hotsheet_cli::orchestration::{AutomationMemory, OrchestrationRuntime};
 
 /// The longest the thread waits before it reads its local records again: the change
-/// waiters' safety re-check, and how soon a stop is seen.
+/// waiters' safety re-check. A stop interrupts the file wait.
 const AUTOMATION_RECHECK: std::time::Duration = std::time::Duration::from_secs(1);
 
 impl AppState {
@@ -46,6 +46,9 @@ impl AppState {
                     .map(std::path::PathBuf::as_path)
                     .collect();
                 let waiter = hotsheet_jobs::ChangeWaiter::starting(&paths).ok();
+                let _stop = waiter
+                    .as_ref()
+                    .map(|waiter| tasks.on_stop(waiter.cancel_handle()));
                 let mut memory = AutomationMemory::default();
                 while !state.is_stopping() {
                     let report = OrchestrationRuntime::automation_pass_now(&shared, &mut memory);

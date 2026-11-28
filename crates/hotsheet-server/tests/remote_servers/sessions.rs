@@ -1143,6 +1143,33 @@ async fn terminal_orchestrator_within(
     .unwrap_or(false)
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn hs2_492nhe_shutdown_interrupts_idle_orchestration_followers() {
+    use std::time::Duration;
+
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let host = state(&root.path().join("store"), &home);
+    let mut events = host.subscribe();
+    host.spawn_hosted_session_follower();
+    host.spawn_target_line_push();
+    host.spawn_scheduler_wake_follower();
+    host.spawn_orchestration_automation();
+
+    // Confirm the hosted-session follower is running before measuring shutdown.
+    let signal = home.join(hotsheet_cli::orchestration::HOSTED_SESSION_SIGNAL_DIRECTORY);
+    std::fs::create_dir_all(&signal).unwrap();
+    std::fs::write(signal.join("token"), "synthetic-start").unwrap();
+    assert!(terminal_orchestrator_within(&mut events, Duration::from_secs(15)).await);
+    assert_eq!(host.orchestration_tasks().threads().running(), 4);
+
+    let report = host
+        .shutdown_orchestration(Duration::from_millis(650))
+        .await;
+    assert!(report.is_complete(), "{report:?}");
+    assert_eq!(report.threads.joined, 4);
+}
+
 /// HS2-R0HSNK: the orchestrator starting a session on this machine is announced to its
 /// clients once, as a takeover, pause or stop is, so every drawer lists the new terminal
 /// without waiting for the tool to connect to Hot Sheet. The fake idle tool never

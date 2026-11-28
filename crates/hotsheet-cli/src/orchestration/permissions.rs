@@ -192,11 +192,16 @@ impl SignalWaiter {
         })
     }
 
+    /// HS2-492NHE: stop waiting for changes from a runtime stop hook.
+    pub fn cancel_handle(&self) -> impl Fn() + Send + Sync + use<> {
+        self.waiter.cancel_handle()
+    }
+
     /// Wait at most `timeout` for the signal to change since the last change seen.
-    /// Returns whether it changed.
+    /// Returns whether it changed. Cancellation ends the wait without a change.
     pub fn wait(&mut self, timeout: std::time::Duration) -> bool {
         let deadline = std::time::Instant::now() + timeout;
-        loop {
+        while !self.waiter.is_cancelled() {
             let token = signal_token(&self.directory);
             if token != self.seen {
                 self.seen = token;
@@ -208,6 +213,7 @@ impl SignalWaiter {
             }
             self.waiter.wait(remaining);
         }
+        false
     }
 }
 

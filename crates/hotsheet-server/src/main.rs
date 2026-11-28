@@ -715,7 +715,9 @@ async fn main() -> Result<()> {
     // And every queued group registry commit (HS2-9EGWC4).
     hotsheet_ticketing::groups::git_sync::flush_background();
     // A write's worklist refresh runs after its response (HS2-Z99TJN); land the last one.
-    state.wait_for_worklists(std::time::Duration::from_secs(2));
+    if !state.wait_for_worklists(std::time::Duration::from_secs(2)) {
+        shutdown_log("shutdown: worklist refresh still running after the grace");
+    }
     state.release_instances();
     drop(writer_lock);
     match outcome {

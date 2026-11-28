@@ -15,16 +15,32 @@ use crate::watch::{BackgroundWatcher, Event, EventKind, RecursiveMode, WatchStat
 /// often. The re-check is a local file read, never a network request.
 const SAFETY_RECHECK: Duration = Duration::from_secs(1);
 
-/// Whether something changed since the last wait, and the signal that it did.
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+enum WaitState {
+    #[default]
+    Idle,
+    Changed,
+    Cancelled,
+}
+
+/// Whether a file changed or the waiter was cancelled, and the signal that it did.
 #[derive(Default)]
 struct Changed {
-    seen: Mutex<bool>,
+    state: Mutex<WaitState>,
     woke: Condvar,
 }
 
 impl Changed {
     fn wake(&self) {
-        *self.seen.lock().unwrap_or_else(PoisonError::into_inner) = true;
+        let mut state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
+        if *state == WaitState::Idle {
+            *state = WaitState::Changed;
+        }
+        self.woke.notify_all();
+    }
+
+    fn cancel(&self) {
+        *self.state.lock().unwrap_or_else(PoisonError::into_inner) = WaitState::Cancelled;
         self.woke.notify_all();
     }
 }
@@ -109,22 +125,45 @@ impl ChangeWaiter {
         Ok(Self { changed, watcher })
     }
 
-    /// Block until something changed or `timeout` passed, whichever is first, and never
-    /// longer than the safety re-check. Returns whether a change was seen. A change
+    /// Block until a change, cancellation, or timeout, and never longer than the
+    /// safety re-check. Returns whether a change was seen. A change
     /// that arrived between two waits ends the next one at once, and several events of
     /// one write are one wake.
     pub fn wait(&self, timeout: Duration) -> bool {
-        let seen = self
+        let state = self
             .changed
-            .seen
+            .state
             .lock()
             .unwrap_or_else(PoisonError::into_inner);
-        let (mut seen, _) = self
+        let (mut state, _) = self
             .changed
             .woke
-            .wait_timeout_while(seen, timeout.min(SAFETY_RECHECK), |seen| !*seen)
+            .wait_timeout_while(state, timeout.min(SAFETY_RECHECK), |state| {
+                *state == WaitState::Idle
+            })
             .unwrap_or_else(PoisonError::into_inner);
-        std::mem::take(&mut *seen)
+        if *state == WaitState::Changed {
+            *state = WaitState::Idle;
+            return true;
+        }
+        false
+    }
+
+    /// HS2-492NHE: cancel this waiter's current and future waits from a stop hook.
+    /// The hook holds only the signal and does not extend the file watcher's lifetime.
+    pub fn cancel_handle(&self) -> impl Fn() + Send + Sync + use<> {
+        let changed = Arc::clone(&self.changed);
+        move || changed.cancel()
+    }
+
+    /// Whether this waiter has been permanently cancelled.
+    pub fn is_cancelled(&self) -> bool {
+        *self
+            .changed
+            .state
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            == WaitState::Cancelled
     }
 
     /// How many times the platform watcher was started for this waiter; zero when it
@@ -335,8 +374,20 @@ mod tests {
     }
 
     fn signal(waiter: &ChangeWaiter) {
-        *waiter.changed.seen.lock().unwrap() = true;
-        waiter.changed.woke.notify_all();
+        waiter.changed.wake();
+    }
+
+    #[test]
+    fn hs2_492nhe_cancellation_outlives_file_changes_and_waits() {
+        let waiter = unwatched();
+        let cancel = waiter.cancel_handle();
+        signal(&waiter);
+        cancel();
+        signal(&waiter);
+        assert!(waiter.is_cancelled());
+        assert!(!waiter.wait(Duration::ZERO));
+        cancel();
+        assert!(!waiter.wait(Duration::ZERO));
     }
 
     #[test]

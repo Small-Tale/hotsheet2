@@ -4223,9 +4223,9 @@ machine's local claim backend is cancelled by the stop token and joined at once
 at once too (HS2-K0RSCQ): a hosted wait served by this runtime (`hosted_capacity_wait`,
 `hosted_resource_wait`) answers as soon as its owner stops, and a long poll over the
 remote transport, which cannot be interrupted, is left to end within its own bounded
-wait with its answer dropped while the follow thread is joined. Followers that wait on
-a file watch (`ChangeWaiter`) see the stop at their 1 s safety re-check; measured on a
-real server they joined within 1.01 s with none reported still running, so they keep it.
+wait with its answer dropped while the follow thread is joined. A stop interrupts the
+hosted-session, line-push, scheduler-wake and automation followers' idle file waits
+(HS2-492NHE). While serving, they keep their 1 s safety re-check.
 A scheduling, target or gate loop's blocking step already in flight
 ends within its own bounded wait and does nothing more. Every loop uses one backoff
 (`Backoff`: 1 s doubling to 60 s, reset by progress). A step that returns in under
